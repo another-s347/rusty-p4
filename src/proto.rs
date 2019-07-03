@@ -7,4 +7,5 @@ pub use rust_out::p4types as p4types;
 pub use rust_out::p4runtime as p4runtime;
 pub use rust_out::p4info as p4info;
 pub use rust_out::p4data as p4data;
+pub use rust_out::p4config as p4config;
 pub use rust_out::code as code;
