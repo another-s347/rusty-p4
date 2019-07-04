@@ -1,7 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use byteorder::ByteOrder;
+use hex;
 
 pub struct Value;
+
+pub struct MACString(pub String);
 
 impl Value {
     pub fn EXACT<T:Encode>(v:T) -> InnerValue {
@@ -23,6 +26,10 @@ pub enum InnerValue {
 pub struct ParamValue;
 
 impl ParamValue {
+    pub fn with(v:Vec<u8>) -> InnerParamValue {
+        v
+    }
+
     pub fn of<T:Encode>(v:T) -> InnerParamValue {
         v.encode()
     }
@@ -36,7 +43,8 @@ pub trait Encode {
 
 impl Encode for Ipv4Addr {
     fn encode(&self) -> Vec<u8> {
-        self.octets().to_vec()
+        let b = self.octets();
+        b.to_vec()
     }
 }
 
@@ -66,5 +74,17 @@ impl Encode for u32 {
         let mut vec = vec![0u8;4];
         byteorder::BigEndian::write_u32(&mut vec, *self);
         vec
+    }
+}
+
+impl Encode for u8 {
+    fn encode(&self) -> Vec<u8> {
+        vec![*self]
+    }
+}
+
+impl Encode for MACString {
+    fn encode(&self) -> Vec<u8> {
+        hex::decode(self.0.replace(':',"")).unwrap()
     }
 }

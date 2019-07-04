@@ -4,6 +4,7 @@ use protobuf::Message;
 use crate::proto::p4info::{P4Info, Table, MatchField, MatchField_MatchType, Action, Action_Param};
 use crate::proto::p4runtime::{FieldMatch, TableEntry};
 use crate::value::{InnerValue, InnerParamValue};
+use std::io::Read;
 
 pub struct P4InfoHelper {
     pub p4info:P4Info
@@ -13,8 +14,7 @@ impl P4InfoHelper {
     pub fn new(p4info_file_path:&Path) -> P4InfoHelper {
         let mut file = std::fs::File::open(p4info_file_path).unwrap();
         let mut is = protobuf::CodedInputStream::new(&mut file);
-        let mut p4info = proto::p4info::P4Info::new();
-        p4info.merge_from(&mut is);
+        let p4info = protobuf::parse_from_reader(&mut is).unwrap();
         P4InfoHelper {
             p4info
         }
@@ -59,6 +59,9 @@ impl P4InfoHelper {
     }
 
     pub fn get_table_id(&self, name:&str) -> Option<u32> {
+        self.p4info.tables.iter().for_each(|t|{
+            println!("{}",t.preamble.as_ref().unwrap().name);
+        });
         self.get_table(name).map(|table| {
             table.preamble.as_ref().unwrap().id
         })
@@ -110,13 +113,16 @@ impl P4InfoHelper {
     pub fn get_match_field_pb(&self, table_name:&str, match_field_name:&str, value: &InnerValue) -> Option<FieldMatch> {
         let p4info_match = self.get_match_field_by_name(table_name, match_field_name).unwrap();
         let bitwidth = p4info_match.bitwidth;
-        let byte_len = (bitwidth / 8) as usize;
+        let byte_len = (bitwidth as f32 / 8.0).ceil() as usize;;
+        println!("{}", bitwidth);
+        let byte_len = byte_len as usize;
         let mut p4runtime_match = crate::proto::p4runtime::FieldMatch::new();
         p4runtime_match.set_field_id(p4info_match.id);
         match (p4info_match.get_match_type(),value) {
             (MatchField_MatchType::EXACT, InnerValue::EXACT(v))=>{
-                assert_eq!(byte_len, v.len());
-                p4runtime_match.mut_exact().value = v.clone();
+//                assert_eq!(byte_len, v.len());
+                let v = Self::adjust_value(v.clone(),byte_len);
+                p4runtime_match.mut_exact().value = v;
             }
             (MatchField_MatchType::LPM, InnerValue::LPM(v, l))=>{
                 assert_eq!(byte_len, v.len());
@@ -136,7 +142,7 @@ impl P4InfoHelper {
                 p4runtime_match.mut_range().high = high.clone();
             }
             _=>{
-
+                panic!("what")
             }
         }
         return Some(p4runtime_match);
@@ -156,8 +162,24 @@ impl P4InfoHelper {
     pub fn get_action_param_pb(&self, action_name:&str, param_name:&str, value: &InnerParamValue) -> crate::proto::p4runtime::Action_Param {
         let p4info_param = self.get_action_param_by_name(action_name, param_name).unwrap();
         let mut p4runtime_param = crate::proto::p4runtime::Action_Param::new();
+        let mut value = value.clone();
+        let bytes_len = (p4info_param.bitwidth as f32 / 8.0).ceil() as usize;
+        println!("adjust value: action:{}, param:{}, value:{:?}, bitwidth:{}",action_name,param_name,value,p4info_param.bitwidth);
+        let value = Self::adjust_value(value,bytes_len);
         p4runtime_param.set_param_id(p4info_param.id);
         p4runtime_param.set_value(value.clone());
         return p4runtime_param;
+    }
+
+    pub fn adjust_value(value:Vec<u8>, bytes_len:usize) -> Vec<u8> {
+        let mut value = value.clone();
+        if bytes_len < value.len() {
+            let (_, v2)=value.split_at(value.len()-bytes_len);
+            v2.to_vec()
+        }
+        else {
+            value.extend(vec![0u8;bytes_len-value.len()]);
+            value
+        }
     }
 }

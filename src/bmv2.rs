@@ -57,10 +57,9 @@ impl Bmv2SwitchConnection {
         let mut device_config = crate::proto::p4config::P4DeviceConfig::new();
         device_config.set_reassign(true);
         let mut file = File::open(bmv2_json_file_path).unwrap();
-        let len = file.metadata().unwrap().len() as usize;
-        let mut buffer = vec![0u8;len];
-        file.read_to_end(&mut buffer);
-        device_config.set_device_data(buffer);
+        let mut buffer = String::new();
+        file.read_to_string(&mut buffer).unwrap();
+        device_config.set_device_data(buffer.into_bytes());
         device_config
     }
 
@@ -90,6 +89,6 @@ impl Bmv2SwitchConnection {
         }
         update.mut_entity().mut_table_entry().clone_from(&table_entry);
         request.updates.push(update);
-        self.client.write(&request).unwrap();
+        self.client.write(dbg!(&request)).unwrap();
     }
 }
