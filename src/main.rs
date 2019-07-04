@@ -1,7 +1,9 @@
 use std::path::Path;
 use crate::bmv2::Bmv2SwitchConnection;
 use crate::helper::P4InfoHelper;
+use crate::value::*;
 
+mod value;
 mod proto;
 mod mycontroller;
 mod helper;
@@ -21,5 +23,18 @@ fn main() {
 fn write_tunnel_rules(p4info_helper:P4InfoHelper, ingress_sw:Bmv2SwitchConnection, egress_sw:Bmv2SwitchConnection,
                       tunnel_id:u32, dst_eth_addr:&str, dst_ip_addr:&str)
 {
-//    let table_entry = p4info_helper.
+    let table_entry = p4info_helper.build_table_entry(
+        "MyIngress.ipv4_lpm",
+        &[
+            ("hdr.ipv4.dstAddr", Value::LPM(dst_ip_addr, 32))
+        ],
+        false,
+        "MyIngress.myTunnel_ingress",
+        &[
+            ("dst_id", ParamValue::of(tunnel_id))
+        ],
+        0
+    );
+
+    ingress_sw.write_table_entry(table_entry);
 }
