@@ -11,3 +11,4 @@ futures = "^0.1.15"
 byteorder = "1.3.2"
 libc = "0.2"
 hex = "0.3"
+tokio = { git="https://github.com/tokio-rs/tokio.git" }
