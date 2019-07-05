@@ -8,3 +8,7 @@ rust_grpc_out/
 rust_out/
 Cargo.lock
 .idea/
+build/
+logs/
+pcaps/
+.vscode/
