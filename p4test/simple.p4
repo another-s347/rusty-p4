@@ -1,7 +1,7 @@
 /* -*- P4_16 -*- */
 #include <core.p4>
 #include <v1model.p4>
-
+#define CPU_PORT 255
 const bit<16> TYPE_MYTUNNEL = 0x1212;
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<32> MAX_TUNNEL_ID = 1 << 16;
@@ -13,6 +13,19 @@ const bit<32> MAX_TUNNEL_ID = 1 << 16;
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
+typedef bit<9> port_num_t;
+
+@controller_header("packet_in")
+header packet_in_header_t {
+    port_num_t ingress_port;
+    bit<7> _pad;
+}
+
+@controller_header("packet_out")
+header packet_out_header_t {
+    port_num_t egress_port;
+    bit<7> _pad;
+}
 
 header ethernet_t {
     macAddr_t dstAddr;
@@ -48,6 +61,8 @@ struct headers {
     ethernet_t   ethernet;
     myTunnel_t   myTunnel;
     ipv4_t       ipv4;
+    packet_out_header_t packet_out;
+    packet_in_header_t packet_in;
 }
 
 /*************************************************************************
@@ -60,6 +75,14 @@ parser MyParser(packet_in packet,
                 inout standard_metadata_t standard_metadata) {
 
     state start {
+        transition select(standard_metadata.ingress_port) {
+            CPU_PORT: parse_packet_out;
+            default: parse_ethernet;
+        }
+    }
+
+    state parse_packet_out {
+        packet.extract(hdr.packet_out);
         transition parse_ethernet;
     }
 
@@ -111,6 +134,12 @@ control MyIngress(inout headers hdr,
         mark_to_drop(standard_metadata);
     }
 
+    action send_to_cpu() {
+        standard_metadata.egress_spec = CPU_PORT;
+        hdr.packet_in.setValid();
+        hdr.packet_in.ingress_port = standard_metadata.ingress_port;
+    }
+
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
@@ -147,9 +176,10 @@ control MyIngress(inout headers hdr,
             myTunnel_ingress;
             drop;
             NoAction;
+            send_to_cpu;
         }
         size = 1024;
-        default_action = NoAction();
+        default_action = send_to_cpu();
     }
 
     table myTunnel_exact {
@@ -160,15 +190,19 @@ control MyIngress(inout headers hdr,
             myTunnel_forward;
             myTunnel_egress;
             drop;
+            send_to_cpu;
         }
         size = 1024;
-        default_action = drop();
+        default_action = send_to_cpu();
     }
 
     apply {
         if (hdr.ipv4.isValid() && !hdr.myTunnel.isValid()) {
             // Process only non-tunneled IPv4 packets.
             ipv4_lpm.apply();
+        }
+        else {
+            send_to_cpu();
         }
 
         if (hdr.myTunnel.isValid()) {
@@ -218,6 +252,7 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
 
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
+        packet.emit(hdr.packet_in);
         packet.emit(hdr.ethernet);
         packet.emit(hdr.myTunnel);
         packet.emit(hdr.ipv4);

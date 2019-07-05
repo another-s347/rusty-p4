@@ -141,6 +141,7 @@ class P4Switch(Switch):
             args.extend(['--thrift-port', str(self.thrift_port)])
         if self.nanomsg:
             args.extend(['--nanolog', self.nanomsg])
+        args.extend(['--cpu-port', '255'])
         args.extend(['--device-id', str(self.device_id)])
         P4Switch.device_id += 1
         args.append(self.json_path)
@@ -273,6 +274,7 @@ class P4RuntimeSwitch(P4Switch):
             args.append('--thrift-port ' + str(self.thrift_port))
         if self.grpc_port:
             args.append("-- --grpc-server-addr 0.0.0.0:" + str(self.grpc_port))
+            args.extend(['--cpu-port', '255'])
         cmd = ' '.join(args)
         info(cmd + "\n")
 
@@ -635,7 +637,7 @@ def get_args():
 
 if __name__ == '__main__':
     # from mininet.log import setLogLevel
-    # setLogLevel("info")
+    setLogLevel("debug")
 
     args = get_args()
     exercise = ExerciseRunner(args.topo, args.log_dir, args.pcap_dir,
