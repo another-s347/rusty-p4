@@ -11,7 +11,7 @@ impl Packet for Data {
         Some(Data(b))
     }
 
-    fn to_bytes(self) -> Bytes {
+    fn into_bytes(self) -> Bytes {
         self.0
     }
 }

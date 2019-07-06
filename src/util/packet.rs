@@ -13,7 +13,7 @@ pub trait Packet
 
     fn from_bytes(b:Bytes) -> Option<Self>;
 
-    fn to_bytes(self) -> Bytes;
+    fn into_bytes(self) -> Bytes;
 }
 
 impl Packet for () {
@@ -23,7 +23,7 @@ impl Packet for () {
         Some(())
     }
 
-    fn to_bytes(self) -> Bytes {
+    fn into_bytes(self) -> Bytes {
         Bytes::new()
     }
 }

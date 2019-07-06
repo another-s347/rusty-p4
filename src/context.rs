@@ -25,10 +25,8 @@ mod driver;
 
 #[derive(Clone)]
 pub struct Context {
-    //    p4runtime_client:P4RuntimeClient,
     p4info_helper: Arc<P4InfoHelper>,
     pipeconf: String,
-    //    sink: Arc<StreamingCallSink<StreamMessageRequest>>,
     core_channel_sender: UnboundedSender<i32>,
     packet_sender: UnboundedSender<PacketReceived>,
     handle: Handle,

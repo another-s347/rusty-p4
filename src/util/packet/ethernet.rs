@@ -36,7 +36,7 @@ impl<P> Packet for Ethernet<P>
         })
     }
 
-    fn to_bytes(self) -> Bytes {
+    fn into_bytes(self) -> Bytes {
         unimplemented!()
     }
 }

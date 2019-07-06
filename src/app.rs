@@ -8,7 +8,6 @@ use crate::util::packet::Ethernet;
 use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
 
-
 pub trait p4App {
     fn on_start(self:&mut Self, ctx:&ContextHandle) {}
 
@@ -16,7 +15,7 @@ pub trait p4App {
 }
 
 pub struct Example {
-
+    pub counter:u32
 }
 
 impl p4App for Example {
@@ -24,7 +23,8 @@ impl p4App for Example {
         let packet = Bytes::from(packet.packet.payload);
         let parsed:Option<Ethernet<Data>> = Ethernet::from_bytes(packet);
         if let Some(ethernet) = parsed {
-            println!("ethernet type == {:x}", ethernet.ether_type);
+            self.counter+=1;
+            println!("Counter == {}, ethernet type == {:x}", self.counter, ethernet.ether_type);
         }
         else {
             println!("packet parse fail");
