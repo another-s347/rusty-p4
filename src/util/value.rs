@@ -1,10 +1,26 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use byteorder::ByteOrder;
 use hex;
+use bytes::Bytes;
 
 pub struct Value;
 
 pub struct MACString(pub String);
+pub struct MAC([u8;6]);
+
+impl From<Bytes> for MAC {
+    fn from(b: Bytes) -> Self {
+        let mut s = [0u8;6];
+        s.copy_from_slice(b.as_ref());
+        MAC(s)
+    }
+}
+
+impl MAC {
+    pub fn of(s:String)-> MAC {
+        unimplemented!()
+    }
+}
 
 impl Value {
     pub fn EXACT<T:Encode>(v:T) -> InnerValue {

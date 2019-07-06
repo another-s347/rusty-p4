@@ -12,4 +12,5 @@ byteorder = "1.3.2"
 libc = "0.2"
 hex = "0.3"
 tokio = { git="https://github.com/tokio-rs/tokio.git" }
+bytes = "0.4.12"
 futures03 = { package="futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "compat"]}

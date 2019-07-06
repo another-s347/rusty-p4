@@ -2,23 +2,28 @@ pub mod ethernet;
 pub mod ip;
 pub mod data;
 pub use ethernet::Ethernet as Ethernet;
+pub mod packet_in_header;
 
-pub trait Packet {
+use bytes::Bytes;
+
+pub trait Packet
+    where Self: std::marker::Sized
+{
     type Payload;
 
-    fn from_bytes(b:Vec<u8>) -> Option<Self>;
+    fn from_bytes(b:Bytes) -> Option<Self>;
 
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(self) -> Bytes;
 }
 
 impl Packet for () {
     type Payload = ();
 
-    fn from_bytes(b: Vec<u8>) -> Option<Self> {
+    fn from_bytes(b: Bytes) -> Option<Self> {
         Some(())
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        Vec::new()
+    fn to_bytes(self) -> Bytes {
+        Bytes::new()
     }
 }

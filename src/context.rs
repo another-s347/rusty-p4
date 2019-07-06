@@ -85,7 +85,7 @@ impl Context
 
         let name = connection.name.clone();
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
-            if let Some(update) = dbg!(x).update {
+            if let Some(update) = x.update {
                 match update {
                     StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {}
                     StreamMessageResponse_oneof_update::packet(packet) => {
@@ -113,7 +113,7 @@ impl Context
     }
 }
 
-struct Connection {
+pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
     pub sink: Arc<StreamingCallSink<StreamMessageRequest>>,
 }

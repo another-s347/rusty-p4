@@ -1,17 +1,17 @@
 use crate::util::packet::Packet;
+use bytes::Bytes;
 
-pub struct Data {
-
-}
+#[derive(Clone)]
+pub struct Data(pub Bytes);
 
 impl Packet for Data {
     type Payload = ();
 
-    fn from_bytes(b: Vec<u8>) -> Option<Self> {
-        unimplemented!()
+    fn from_bytes(b: Bytes) -> Option<Self> {
+        Some(Data(b))
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        unimplemented!()
+    fn to_bytes(self) -> Bytes {
+        self.0
     }
 }
