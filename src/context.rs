@@ -1,73 +1,57 @@
-use crate::p4runtime::bmv2::Bmv2SwitchConnection;
-use crate::p4runtime::helper::P4InfoHelper;
+use std::collections::HashMap;
 use std::path::Path;
-use crate::app::p4App;
-use futures::stream::Stream;
-use futures::future::Future;
-use futures03::stream::StreamExt;
+use std::sync::{Arc, Mutex, RwLock};
+
+use futures03::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures03::sink::SinkExt;
+use futures03::stream::StreamExt;
+use futures::future::Future;
 use futures::sink::Sink;
-use crate::error::*;
-use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use futures::stream::Stream;
 use grpcio::StreamingCallSink;
-use crate::proto::p4runtime::{StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update};
-use std::sync::{Arc, Mutex};
-use tokio::runtime::{Runtime};
-use futures03::channel::mpsc::{UnboundedSender,UnboundedReceiver};
+use tokio::runtime::Runtime;
 use tokio::runtime::current_thread::Handle;
+
+use crate::app::p4App;
+use crate::error::*;
+use crate::p4rt::bmv2::Bmv2SwitchConnection;
+use crate::p4rt::helper::P4InfoHelper;
+use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update};
+use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use crate::event::PacketReceived;
+use crate::util::flow::Flow;
 
 mod driver;
 
 #[derive(Clone)]
 pub struct Context {
-    p4runtime_client:P4RuntimeClient,
+    //    p4runtime_client:P4RuntimeClient,
     p4info_helper: Arc<P4InfoHelper>,
-    sink: Arc<StreamingCallSink<StreamMessageRequest>>,
-    sender: UnboundedSender<i32>,
-    handle: Handle
+    pipeconf: String,
+    //    sink: Arc<StreamingCallSink<StreamMessageRequest>>,
+    core_channel_sender: UnboundedSender<i32>,
+    packet_sender: UnboundedSender<PacketReceived>,
+    handle: Handle,
+    connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
 impl Context
 {
-    pub fn try_new<T>(mut connection: Bmv2SwitchConnection, p4info_helper: P4InfoHelper, pipeconfig: &Path, mut app:T) -> Result<(Context,Runtime)>
-        where T:p4App + Send + 'static
+    pub fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<(Context, Runtime)>
+        where T: p4App + Send + 'static
     {
-        connection.set_forwarding_pipeline_config(&p4info_helper.p4info, pipeconfig);
-        connection.master_arbitration_update_async();
+        let (packet_s, packet_r) = futures03::channel::mpsc::unbounded();
 
-        let (packet_s,packet_r) = futures03::channel::mpsc::unbounded();
-        let mut packet_s = packet_s.compat().sink_map_err(|e|{
-            dbg!(e);
-        });
-
-        connection.client.spawn(connection.stream_channel_receiver.for_each(move |x|{
-            if let Some(update) = x.update {
-                match update {
-                    StreamMessageResponse_oneof_update::arbitration(masterUpdate)=>{
-
-                    }
-                    StreamMessageResponse_oneof_update::packet(packet) => {
-                        packet_s.start_send(packet).unwrap();
-                    }
-                    StreamMessageResponse_oneof_update::digest(_) => {}
-                    StreamMessageResponse_oneof_update::idle_timeout_notification(_) => {}
-                    StreamMessageResponse_oneof_update::other(_) => {}
-                }
-            }
-            Ok(())
-        }).map_err(|e|{
-            dbg!(e);
-        }));
-
-        let mut rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new().unwrap();
-        let (s,r):(_,UnboundedReceiver<i32>) = futures03::channel::mpsc::unbounded();
+        let mut rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new()?;
+        let (s, r): (_, UnboundedReceiver<i32>) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
-            p4runtime_client:connection.client,
-            p4info_helper:Arc::new(p4info_helper),
-            sink: Arc::new(connection.stream_channel_sink),
-            sender: s,
-            handle: rt.handle()
+            p4info_helper: Arc::new(p4info_helper),
+            pipeconf: pipeconfig,
+            core_channel_sender: s,
+            packet_sender: packet_s,
+            handle: rt.handle(),
+            connections: Arc::new(RwLock::new(HashMap::new())),
         };
         let context_handle = obj.get_handle();
 
@@ -79,7 +63,7 @@ impl Context
 
         app.on_start(&context_handle);
         rt.spawn(task);
-        rt.spawn(packet_r.for_each(move|x|{
+        rt.spawn(packet_r.for_each(move |x| {
             app.on_packet(x, &context_handle);
             futures03::future::ready(())
         }));
@@ -88,21 +72,69 @@ impl Context
     }
 
     pub fn get_handle(&mut self) -> ContextHandle {
-        ContextHandle::new(self.sender.clone(), self.handle.clone())
+        ContextHandle::new(self.core_channel_sender.clone(), self.handle.clone(), self.connections.clone())
     }
+
+    pub fn add_connection(&mut self, mut connection: Bmv2SwitchConnection) -> Result<()> {
+        connection.master_arbitration_update_async()?;
+        connection.set_forwarding_pipeline_config(&self.p4info_helper.p4info, Path::new(&self.pipeconf))?;
+
+        let mut packet_s = self.packet_sender.clone().compat().sink_map_err(|e| {
+            dbg!(e);
+        });
+
+        let name = connection.name.clone();
+        connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
+            if let Some(update) = dbg!(x).update {
+                match update {
+                    StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {}
+                    StreamMessageResponse_oneof_update::packet(packet) => {
+                        packet_s.start_send(PacketReceived {
+                            packet,
+                            from: name.clone()
+                        }).unwrap();
+                    }
+                    StreamMessageResponse_oneof_update::digest(_) => {}
+                    StreamMessageResponse_oneof_update::idle_timeout_notification(_) => {}
+                    StreamMessageResponse_oneof_update::other(_) => {}
+                }
+            }
+            Ok(())
+        }).map_err(|e| {
+            dbg!(e);
+        }));
+
+        self.connections.write().unwrap().insert(connection.name, Connection {
+            p4runtime_client: connection.client,
+            sink: Arc::new(connection.stream_channel_sink),
+        });
+
+        Ok(())
+    }
+}
+
+struct Connection {
+    pub p4runtime_client: P4RuntimeClient,
+    pub sink: Arc<StreamingCallSink<StreamMessageRequest>>,
 }
 
 pub struct ContextHandle {
     sender: UnboundedSender<i32>,
-    handle: Handle
+    pub handle: Handle,
+    connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
 impl ContextHandle {
-    pub fn new(sender: UnboundedSender<i32>, handle:Handle) -> ContextHandle {
+    pub fn new(sender: UnboundedSender<i32>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle {
         ContextHandle {
             sender,
-            handle
+            handle,
+            connections
         }
+    }
+
+    pub fn insert_flow(&self, flow:Flow) {
+
     }
 }
 
