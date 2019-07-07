@@ -8,6 +8,9 @@ use crate::util::packet::Ethernet;
 use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
 
+mod netconfig;
+mod extended;
+
 pub trait p4App {
     fn on_start(self:&mut Self, ctx:&ContextHandle) {}
 
