@@ -18,6 +18,7 @@ mod app;
 mod context;
 mod error;
 mod event;
+mod representation;
 
 fn main() {
     let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));

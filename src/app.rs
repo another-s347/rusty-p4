@@ -10,6 +10,7 @@ use crate::util::packet::Packet;
 
 mod netconfig;
 mod extended;
+mod common;
 
 pub trait p4App {
     fn on_start(self:&mut Self, ctx:&ContextHandle) {}

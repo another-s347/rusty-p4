@@ -4,3 +4,6 @@ pub struct NetconfigState {
 
 }
 
+pub trait NetconfigService {
+
+}
