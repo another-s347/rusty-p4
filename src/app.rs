@@ -15,6 +15,8 @@ pub trait p4App {
     fn on_start(self:&mut Self, ctx:&ContextHandle) {}
 
     fn on_packet(self:&mut Self, packet:PacketReceived, ctx: &ContextHandle) {}
+
+    fn on_device(self:&mut Self, device:String, ctx:&ContextHandle) {}
 }
 
 pub struct Example {

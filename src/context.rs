@@ -18,7 +18,7 @@ use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
 use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::event::PacketReceived;
+use crate::event::{PacketReceived, CoreEvent};
 use crate::util::flow::Flow;
 
 mod driver;
@@ -28,7 +28,7 @@ pub struct Context {
     p4info_helper: Arc<P4InfoHelper>,
     pipeconf: String,
     core_channel_sender: UnboundedSender<i32>,
-    packet_sender: UnboundedSender<PacketReceived>,
+    event_sender: UnboundedSender<CoreEvent>,
     handle: Handle,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
@@ -38,7 +38,7 @@ impl Context
     pub fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<(Context, Runtime)>
         where T: p4App + Send + 'static
     {
-        let (packet_s, packet_r) = futures03::channel::mpsc::unbounded();
+        let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
         let mut rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new()?;
         let (s, r): (_, UnboundedReceiver<i32>) = futures03::channel::mpsc::unbounded();
@@ -47,7 +47,7 @@ impl Context
             p4info_helper: Arc::new(p4info_helper),
             pipeconf: pipeconfig,
             core_channel_sender: s,
-            packet_sender: packet_s,
+            event_sender: app_s,
             handle: rt.handle(),
             connections: Arc::new(RwLock::new(HashMap::new())),
         };
@@ -61,8 +61,15 @@ impl Context
 
         app.on_start(&context_handle);
         rt.spawn(task);
-        rt.spawn(packet_r.for_each(move |x| {
-            app.on_packet(x, &context_handle);
+        rt.spawn(app_r.for_each(move |x| {
+            match x {
+                CoreEvent::PacketReceived(packet)=>{
+                    app.on_packet(packet, &context_handle);
+                }
+                CoreEvent::DeviceAdded(s) => {
+                    app.on_device(s, &context_handle);
+                }
+            }
             futures03::future::ready(())
         }));
 
@@ -77,7 +84,7 @@ impl Context
         connection.master_arbitration_update_async()?;
         connection.set_forwarding_pipeline_config(&self.p4info_helper.p4info, Path::new(&self.pipeconf))?;
 
-        let mut packet_s = self.packet_sender.clone().compat().sink_map_err(|e| {
+        let mut packet_s = self.event_sender.clone().compat().sink_map_err(|e| {
             dbg!(e);
         });
 
@@ -87,10 +94,11 @@ impl Context
                 match update {
                     StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {}
                     StreamMessageResponse_oneof_update::packet(packet) => {
-                        packet_s.start_send(PacketReceived {
+                        let x = PacketReceived {
                             packet,
                             from: name.clone()
-                        }).unwrap();
+                        };
+                        packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
                     StreamMessageResponse_oneof_update::digest(_) => {}
                     StreamMessageResponse_oneof_update::idle_timeout_notification(_) => {}
@@ -102,10 +110,12 @@ impl Context
             dbg!(e);
         }));
 
-        self.connections.write().unwrap().insert(connection.name, Connection {
+        self.connections.write().unwrap().insert(connection.name.clone(), Connection {
             p4runtime_client: connection.client,
             sink: Arc::new(connection.stream_channel_sink),
         });
+
+        self.event_sender.start_send(CoreEvent::DeviceAdded(connection.name));
 
         Ok(())
     }
