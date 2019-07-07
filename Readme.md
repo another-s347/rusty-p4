@@ -18,7 +18,7 @@ $ cargo install grpcio-compiler
 2. Run bootstrap.sh.  
 It will clone the stable release of P4Runtime Proto and compiles them to Rust code.
 
-3. Reference it in your own project.
+3. Add dependency to your own project.
 
 ## Examples
 
@@ -84,10 +84,12 @@ impl p4App for Example {
 ## TODO
 1. Complete P4Runtime API (read/write table, counter...).
 2. More packet parser.
-3. Multi-App static loader.
-4. Rich-App and app collection for high-level API.
-5. Logging and error handling.
-6. Maybe more.
+3. Composable App.
+4. Extended-App and app collection for high-level API.
+5. Logging and error handling and config.
+6. Network-object configuration.
+7. More API.
+8. Maybe more.
 
 ## Built With
 
