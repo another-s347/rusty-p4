@@ -4,14 +4,14 @@ pub mod data;
 pub use ethernet::Ethernet as Ethernet;
 pub mod packet_in_header;
 
-use bytes::Bytes;
+use bytes::{BytesMut, Bytes};
 
 pub trait Packet
     where Self: std::marker::Sized
 {
     type Payload;
 
-    fn from_bytes(b:Bytes) -> Option<Self>;
+    fn from_bytes(b:BytesMut) -> Option<Self>;
 
     fn into_bytes(self) -> Bytes;
 }
@@ -19,7 +19,7 @@ pub trait Packet
 impl Packet for () {
     type Payload = ();
 
-    fn from_bytes(b: Bytes) -> Option<Self> {
+    fn from_bytes(b: BytesMut) -> Option<Self> {
         Some(())
     }
 

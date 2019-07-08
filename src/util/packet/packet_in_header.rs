@@ -1,5 +1,5 @@
 use super::Packet;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use byteorder::ByteOrder;
 
 pub struct PacketInHeader<P> {
@@ -12,7 +12,7 @@ impl<P> Packet for PacketInHeader<P>
 {
     type Payload = ();
 
-    fn from_bytes(mut b: Bytes) -> Option<Self> {
+    fn from_bytes(mut b: BytesMut) -> Option<Self> {
         let todo = bytes::BigEndian::read_u16(b.split_to(2).as_ref());
         let payload = P::from_bytes(b);
         if payload.is_none() {

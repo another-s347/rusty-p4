@@ -1,5 +1,7 @@
 #![allow(warnings)]
 
+#[macro_use]
+extern crate bitfield;
 use std::path::Path;
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use futures::stream::Stream;
@@ -21,6 +23,8 @@ mod event;
 mod representation;
 
 fn main() {
+    flexi_logger::Logger::with_str("trace").start().unwrap();
+
     let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));
     let bmv2_file = "/home/skye/rusty-p4/p4test/build/simple.json";
     let mut s1 = Bmv2SwitchConnection::new("s1","127.0.0.1:50051",0);

@@ -1,5 +1,5 @@
 use crate::util::packet::Packet;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use crate::util::value::MAC;
 use byteorder::ByteOrder;
 
@@ -17,7 +17,7 @@ impl<P> Packet for Ethernet<P>
 {
     type Payload = P;
 
-    fn from_bytes(mut b: Bytes) -> Option<Self> {
+    fn from_bytes(mut b: BytesMut) -> Option<Self> {
         if b.len() < 14 {
             return None;
         }

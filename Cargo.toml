@@ -14,3 +14,7 @@ hex = "0.3"
 tokio = { git="https://github.com/tokio-rs/tokio.git" }
 bytes = "0.4.12"
 futures03 = { package="futures-preview", version = "=0.3.0-alpha.17", features = ["async-await", "nightly", "compat"]}
+hyper = "0.12"
+log = "0.4"
+flexi_logger = "0.13.2"
+bitfield = "0.13"
