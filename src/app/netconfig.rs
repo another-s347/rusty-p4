@@ -1,9 +1,30 @@
 use crate::context::Context;
+use crate::app::common::CommonOperation;
+use hyper::{Server as HyperServer, Request, Body, Response};
+use hyper::server::Builder as HyperBuilder;
+use hyper::server::conn::AddrIncoming;
+use hyper::service::service_fn_ok;
+use hyper::rt::{self, Future};
 
-pub struct NetconfigState {
-
+pub struct NetconfigServer {
+    http_builder: HyperBuilder<AddrIncoming>
 }
 
-pub trait NetconfigService {
+impl NetconfigServer {
+    pub fn new() {
 
+    }
+}
+
+pub fn run_netconfig<T:CommonOperation>(server: NetconfigServer, state: &mut T)
+{
+    let server = server.http_builder.serve(||{
+        service_fn_ok(move |req:Request<Body>|{
+            Response::new(Body::from("Hello World!"))
+        })
+    }).map_err(|e|{
+        eprintln!("server error: {}", e);
+    });
+
+    rt::spawn(server);
 }
