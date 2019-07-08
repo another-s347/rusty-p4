@@ -158,7 +158,7 @@ impl ContextHandle {
             write_table_entry(&connection.p4runtime_client,connection.device_id,table_entry)
         }
         else {
-            Ok(())
+            Err(Box::new(ContextError::DeviceNotConnected(device.clone())))
         }
     }
 }

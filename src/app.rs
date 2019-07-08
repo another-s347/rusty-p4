@@ -16,6 +16,7 @@ use std::str::FromStr;
 mod netconfig;
 mod extended;
 mod common;
+mod statistic;
 
 pub trait p4App {
     fn on_start(self:&mut Self, ctx:&ContextHandle) {}

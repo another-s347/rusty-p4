@@ -1,0 +1,60 @@
+{
+    "ports": {
+        "device:bmv2:s1/2": {
+            "interfaces": [
+                {
+                    "mac": "52:91:34:b3:dd:5f", 
+                    "name": "s1-eth2"
+                }
+            ]
+        }, 
+        "device:bmv2:s1/3": {
+            "interfaces": [
+                {
+                    "mac": "02:00:00:00:00:00", 
+                    "name": "sta1-wlan0"
+                }
+            ]
+        }, 
+        "device:bmv2:s1/1": {
+            "interfaces": [
+                {
+                    "mac": "7e:29:a5:4a:21:9e", 
+                    "name": "s1-eth1"
+                }
+            ]
+        }
+    }, 
+    "devices": {
+        "device:bmv2:s1": {
+            "ports": {
+                "of:device:bmv2:s1/2": {
+                    "type": "copper", 
+                    "removed": false, 
+                    "enabled": true, 
+                    "number": 2, 
+                    "speed": 10000
+                }, 
+                "of:device:bmv2:s1/3": {
+                    "type": "copper", 
+                    "removed": false, 
+                    "enabled": true, 
+                    "number": 3, 
+                    "speed": 10000
+                }, 
+                "of:device:bmv2:s1/1": {
+                    "type": "copper", 
+                    "removed": false, 
+                    "enabled": true, 
+                    "number": 1, 
+                    "speed": 10000
+                }
+            }, 
+            "basic": {
+                "managementAddress": "grpc://172.17.0.1:53313?device_id=1", 
+                "driver": "bmv2", 
+                "pipeconf": "p4adhocproject.pipeconf"
+            }
+        }
+    }
+}
