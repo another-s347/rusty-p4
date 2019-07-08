@@ -1,10 +1,11 @@
+use bytes::{Bytes, BytesMut};
+
+pub use ethernet::Ethernet as Ethernet;
+
 pub mod ethernet;
 pub mod ip;
 pub mod data;
-pub use ethernet::Ethernet as Ethernet;
 pub mod packet_in_header;
-
-use bytes::{BytesMut, Bytes};
 
 pub trait Packet
     where Self: std::marker::Sized

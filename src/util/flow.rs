@@ -1,6 +1,6 @@
-use crate::util::value::{Value, ParamValue, InnerValue};
 use crate::p4rt::helper::P4InfoHelper;
 use crate::proto::p4runtime::TableEntry;
+use crate::util::value::{InnerValue, ParamValue, Value};
 
 pub struct Flow<'a> {
     pub device: String,

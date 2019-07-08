@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate bitfield;
+#[macro_use]
+extern crate serde_json;
 use std::path::Path;
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use futures::stream::Stream;

@@ -1,7 +1,8 @@
-use crate::proto::p4runtime::TableEntry;
+use log::{debug, error, info, trace, warn};
+
 use crate::error::*;
+use crate::proto::p4runtime::TableEntry;
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use log::{info, trace, warn, debug, error};
 
 pub fn write_table_entry(client:&P4RuntimeClient, device_id:u64, table_entry: TableEntry) -> Result<()> {
     let mut request = crate::proto::p4runtime::WriteRequest::new();

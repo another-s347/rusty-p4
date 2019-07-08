@@ -1,9 +1,11 @@
+use std::net::Ipv4Addr;
 use std::path::Path;
+use std::str::FromStr;
+
+use crate::util::value::*;
+
 use super::bmv2::Bmv2SwitchConnection;
 use super::helper::P4InfoHelper;
-use crate::util::value::*;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
 
 pub fn run() {
     let p4info_helper = P4InfoHelper::new(&Path::new("/home/skye/tutorials/exercises/p4runtime/build/advanced_tunnel.p4.p4info.bin"));

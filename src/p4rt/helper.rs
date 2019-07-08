@@ -1,11 +1,13 @@
-use std::path::Path;
-use crate::proto;
-use protobuf::Message;
-use crate::proto::p4info::{P4Info, Table, MatchField, MatchField_MatchType, Action, Action_Param};
-use crate::proto::p4runtime::{FieldMatch, TableEntry};
-use crate::util::value::{InnerValue, InnerParamValue};
 use std::io::Read;
+use std::path::Path;
+
+use protobuf::Message;
+
 use crate::error::*;
+use crate::proto;
+use crate::proto::p4info::{Action, Action_Param, MatchField, MatchField_MatchType, P4Info, Table};
+use crate::proto::p4runtime::{FieldMatch, TableEntry};
+use crate::util::value::{InnerParamValue, InnerValue};
 
 pub struct P4InfoHelper {
     pub p4info:P4Info

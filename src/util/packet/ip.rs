@@ -1,7 +1,9 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
-use crate::util::packet::Packet;
-use bytes::{Bytes, BytesMut};
+
 use bitfield;
+use bytes::{Bytes, BytesMut};
+
+use crate::util::packet::Packet;
 
 #[derive(Debug)]
 pub struct Ipv4<P>

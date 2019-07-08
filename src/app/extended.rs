@@ -1,5 +1,5 @@
+use crate::app::common::{CommonOperation, CommonState, MergeResult};
 use crate::app::p4App;
-use crate::app::common::{CommonState, CommonOperation, MergeResult};
 use crate::representation::Device;
 
 pub trait p4AppExtended {

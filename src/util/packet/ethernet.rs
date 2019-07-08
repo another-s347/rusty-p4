@@ -1,7 +1,8 @@
-use crate::util::packet::Packet;
-use bytes::{Bytes, BytesMut};
-use crate::util::value::MAC;
 use byteorder::ByteOrder;
+use bytes::{Bytes, BytesMut};
+
+use crate::util::packet::Packet;
+use crate::util::value::MAC;
 
 pub struct Ethernet<P>
     where P:Packet

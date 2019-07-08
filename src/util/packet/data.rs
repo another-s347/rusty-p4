@@ -1,5 +1,6 @@
-use crate::util::packet::Packet;
 use bytes::{Bytes, BytesMut};
+
+use crate::util::packet::Packet;
 
 #[derive(Clone)]
 pub struct Data(pub Bytes);

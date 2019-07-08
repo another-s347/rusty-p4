@@ -1,21 +1,46 @@
-use crate::context::Context;
-use crate::app::common::CommonOperation;
-use hyper::{Server as HyperServer, Request, Body, Response};
+use std::net::SocketAddr;
+
+use futures::prelude::*;
+use hyper::{Body, Request, Response, Server as HyperServer};
+use hyper::rt::{self, spawn};
 use hyper::server::Builder as HyperBuilder;
 use hyper::server::conn::AddrIncoming;
 use hyper::service::service_fn_ok;
-use hyper::rt::{self, spawn};
-use std::net::SocketAddr;
-use futures::prelude::*;
 
+use crate::app::common::CommonOperation;
+use crate::context::Context;
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Debug)]
 pub struct Netconfig {
-
+    devices: HashMap<String, NetconfigDevice>,
+    ports: HashMap<String, NetconfigDeviceInterface>
 }
 
-impl Netconfig {
-    pub fn from_json() -> Netconfig {
-        unimplemented!()
-    }
+#[derive(Deserialize, Debug)]
+pub struct NetconfigDevice {
+    basic: NetconfigDeviceBasic,
+    ports: HashMap<String, NetconfigDevicePort>
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NetconfigDeviceBasic {
+    managementAddress: String,
+    driver: String,
+    pipeconf: String
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NetconfigDevicePort {
+    number: u32,
+    enabled: bool
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NetconfigDeviceInterface {
+    mac: String,
+    name: String,
 }
 
 pub struct NetconfigServer {
@@ -34,7 +59,7 @@ pub fn run_netconfig<T:CommonOperation>(server: NetconfigServer, state: &mut T)
         service_fn_ok(move |req:Request<Body>|{
             rt::spawn(
                 req.into_body().concat2().map(|x|{
-                    let json_body:serde_json::Value = serde_json::from_slice(x.as_ref()).unwrap();
+                    let config:Netconfig = serde_json::from_slice(x.as_ref()).unwrap();
                 }).map_err(|err|{
                     dbg!(err);
                 })

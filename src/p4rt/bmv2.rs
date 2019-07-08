@@ -1,18 +1,21 @@
+use std::fs::File;
+use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use grpcio::{Channel, StreamingCallSink, ClientDuplexReceiver, WriteFlags};
-use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::proto::p4runtime::{StreamMessageRequest, StreamMessageResponse, TableEntry};
+
 use futures::sink::Sink;
 use futures::stream::Stream;
-use super::helper::P4InfoHelper;
-use crate::proto::p4info::P4Info;
-use std::fs::File;
-use std::io::Read;
-use crate::proto::p4config::P4DeviceConfig;
+use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 use protobuf::Message;
+
 use crate::error::*;
+use crate::proto::p4config::P4DeviceConfig;
+use crate::proto::p4info::P4Info;
+use crate::proto::p4runtime::{StreamMessageRequest, StreamMessageResponse, TableEntry};
+use crate::proto::p4runtime_grpc::P4RuntimeClient;
+
+use super::helper::P4InfoHelper;
 
 pub struct Bmv2SwitchConnection {
     pub name:String,

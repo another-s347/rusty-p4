@@ -1,6 +1,7 @@
-use super::Packet;
-use bytes::{Bytes, BytesMut};
 use byteorder::ByteOrder;
+use bytes::{Bytes, BytesMut};
+
+use super::Packet;
 
 pub struct PacketInHeader<P> {
     todo: u16,

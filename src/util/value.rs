@@ -1,7 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
 use byteorder::ByteOrder;
-use hex;
 use bytes::{Bytes, BytesMut};
+use hex;
 
 pub struct Value;
 
