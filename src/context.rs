@@ -20,6 +20,9 @@ use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageRespo
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::event::{PacketReceived, CoreEvent};
 use crate::util::flow::Flow;
+use crate::p4rt::pure::write_table_entry;
+use crate::error::*;
+use log::{info, trace, warn, debug, error};
 
 mod driver;
 
@@ -77,7 +80,7 @@ impl Context
     }
 
     pub fn get_handle(&mut self) -> ContextHandle {
-        ContextHandle::new(self.core_channel_sender.clone(), self.handle.clone(), self.connections.clone())
+        ContextHandle::new(self.p4info_helper.clone(),self.core_channel_sender.clone(), self.handle.clone(), self.connections.clone())
     }
 
     pub fn add_connection(&mut self, mut connection: Bmv2SwitchConnection) -> Result<()> {
@@ -90,6 +93,7 @@ impl Context
 
         let name = connection.name.clone();
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
+            debug!(target:"context", "StreaMessageResponse: {:#?}", x);
             if let Some(update) = x.update {
                 match update {
                     StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {}
@@ -113,6 +117,7 @@ impl Context
         self.connections.write().unwrap().insert(connection.name.clone(), Connection {
             p4runtime_client: connection.client,
             sink: Arc::new(connection.stream_channel_sink),
+            device_id: connection.device_id
         });
 
         self.event_sender.start_send(CoreEvent::DeviceAdded(connection.name));
@@ -124,25 +129,37 @@ impl Context
 pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
     pub sink: Arc<StreamingCallSink<StreamMessageRequest>>,
+    pub device_id: u64
 }
 
 pub struct ContextHandle {
+    p4info_helper: Arc<P4InfoHelper>,
     sender: UnboundedSender<i32>,
     pub handle: Handle,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
 impl ContextHandle {
-    pub fn new(sender: UnboundedSender<i32>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle {
+    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<i32>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle {
         ContextHandle {
+            p4info_helper,
             sender,
             handle,
             connections
         }
     }
 
-    pub fn insert_flow(&self, flow:Flow) {
-
+    pub fn insert_flow(&self, flow:Flow) -> Result<()> {
+        let device = &flow.device;
+        let connections = self.connections.read().unwrap();
+        let device_client = connections.get(device);
+        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref());
+        if let Some(connection) = device_client {
+            write_table_entry(&connection.p4runtime_client,connection.device_id,table_entry)
+        }
+        else {
+            Ok(())
+        }
     }
 }
 
