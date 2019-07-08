@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::representation::Device;
+use crate::util::flow::{Flow, FlowOwned};
 
 pub struct CommonState {
-    devices: HashMap<String, Device>
+    devices: HashMap<String, Device>,
+    flows: HashMap<String, HashSet<FlowOwned>>
 }
 
 pub trait CommonOperation {
