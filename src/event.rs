@@ -1,13 +1,48 @@
 use crate::proto::p4runtime::PacketIn;
 use std::sync::Arc;
 
-pub enum CoreEvent {
+pub enum CoreEvent<E> {
     PacketReceived(PacketReceived),
-    DeviceAdded(String)
+    Event(E)
 }
 
 #[derive(Debug, Clone)]
 pub struct PacketReceived {
     pub packet: PacketIn,
     pub from: String
+}
+
+pub enum CoreRequest<E> {
+    AddDevice {
+        name: String,
+        address: String,
+        device_id: u64,
+        reply: Option<()>
+    },
+    Event(E)
+}
+
+pub trait Event {
+    fn to_common(&self)->CommonEvents;
+
+    fn from_common(e:CommonEvents)->Self;
+}
+
+impl Event for CommonEvents {
+    fn to_common(&self) -> CommonEvents {
+        self.clone()
+    }
+
+    fn from_common(e: CommonEvents) -> Self {
+        e
+    }
+}
+
+#[derive(Clone)]
+pub enum CommonEvents {
+    DeviceAdded(String),
+    DeviceUpdate(),
+    Other {
+
+    }
 }

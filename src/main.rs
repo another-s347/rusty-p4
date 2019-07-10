@@ -14,6 +14,8 @@ use futures::sink::Sink;
 use crate::proto::p4runtime::StreamMessageResponse;
 use crate::context::Context;
 use crate::app::Example;
+use crate::app::extended::{extend, ExampleExtended};
+use crate::event::CommonEvents;
 
 mod p4rt;
 mod util;
@@ -32,9 +34,9 @@ fn main() {
     let mut s1 = Bmv2SwitchConnection::new("s1","127.0.0.1:50051",0);
     let mut s2 = Bmv2SwitchConnection::new("s2","127.0.0.1:50052",1);
 
-    let (mut context,mut runtime) = Context::try_new(p4info_helper, bmv2_file.to_owned(), Example {
-        counter: 0
-    }).unwrap();
+    let (mut context,mut runtime) = Context::try_new(p4info_helper, bmv2_file.to_owned(), extend(ExampleExtended {
+
+    })).unwrap();
 
     context.add_connection(s1).unwrap();
     context.add_connection(s2).unwrap();

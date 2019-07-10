@@ -7,6 +7,7 @@ use hex;
 pub struct Value;
 
 pub struct MACString(pub String);
+#[derive(Eq,Hash,PartialEq)]
 pub struct MAC([u8;6]);
 
 impl From<BytesMut> for MAC {

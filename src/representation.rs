@@ -3,25 +3,43 @@ use std::net::IpAddr;
 use crate::util::value::MAC;
 
 pub struct Device {
-    name: String,
-    ports: HashSet<Port>,
-    typ: DeviceType
+    pub name: String,
+    pub ports: HashSet<Port>,
+    pub typ: DeviceType,
+    pub device_id: u64,
+    pub index: usize
 }
 
 pub enum DeviceType {
-    MASTER,
+    MASTER {
+        management_address:String
+    },
     VIRTUAL
 }
 
+#[derive(Eq,Hash)]
 pub struct Port {
-    number: u32,
-    interface: Option<Interface>
+    pub number: u32,
+    pub interface: Option<Interface>
 }
 
+impl PartialEq for Port {
+    fn eq(&self, other: &Self) -> bool {
+        self.number==other.number && self.interface==other.interface
+    }
+}
+
+#[derive(Eq,Hash)]
 pub struct Interface {
-    name: String,
-    ip: Option<IpAddr>,
-    mac: Option<MAC>
+    pub name: String,
+    pub ip: Option<IpAddr>,
+    pub mac: Option<MAC>
+}
+
+impl PartialEq for Interface {
+    fn eq(&self, other: &Self) -> bool {
+        self.mac==other.mac && self.ip==other.ip && self.name==other.name
+    }
 }
 
 pub struct ConnectPoint {

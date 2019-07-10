@@ -18,33 +18,35 @@ use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
 use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::event::{PacketReceived, CoreEvent};
+use crate::event::{PacketReceived, CoreEvent, CoreRequest, Event, CommonEvents};
 use crate::util::flow::Flow;
 use crate::p4rt::pure::write_table_entry;
 use crate::error::*;
 use log::{info, trace, warn, debug, error};
 
 mod driver;
+mod netconfiguration;
 
 #[derive(Clone)]
-pub struct Context {
+pub struct Context<E>
+{
     p4info_helper: Arc<P4InfoHelper>,
     pipeconf: String,
-    core_channel_sender: UnboundedSender<i32>,
-    event_sender: UnboundedSender<CoreEvent>,
+    core_channel_sender: UnboundedSender<CoreRequest<E>>,
+    event_sender: UnboundedSender<CoreEvent<E>>,
     handle: Handle,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
-impl Context
+impl<E> Context<E> where E:Event + Clone + 'static + Send
 {
-    pub fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<(Context, Runtime)>
-        where T: p4App + Send + 'static
+    pub fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<(Context<E>, Runtime)>
+        where T: p4App<E> + Send + 'static
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
         let mut rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new()?;
-        let (s, r): (_, UnboundedReceiver<i32>) = futures03::channel::mpsc::unbounded();
+        let (s, r) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
             p4info_helper: Arc::new(p4info_helper),
@@ -57,8 +59,21 @@ impl Context
         let context_handle = obj.get_handle();
 
         let result = obj.clone();
-        let task = r.for_each(move |_| {
-            let handle = obj.get_handle();
+        let task = r.for_each(move |request| {
+            match request {
+                CoreRequest::AddDevice {
+                    name,
+                    address,
+                    device_id,
+                    reply
+                } => {
+                    let bmv2connection = Bmv2SwitchConnection::new(&name, &address, device_id);
+                    obj.add_connection(bmv2connection).unwrap();
+                }
+                CoreRequest::Event(e) => {
+                    obj.event_sender.unbounded_send(CoreEvent::Event(e)).unwrap();
+                }
+            }
             futures03::future::ready(())
         });
 
@@ -69,17 +84,20 @@ impl Context
                 CoreEvent::PacketReceived(packet)=>{
                     app.on_packet(packet, &context_handle);
                 }
-                CoreEvent::DeviceAdded(s) => {
-                    app.on_device(s, &context_handle);
+                CoreEvent::Event(e) => {
+                    app.on_event(e, &context_handle);
                 }
             }
             futures03::future::ready(())
         }));
 
+        let netconfiguration_server = netconfiguration::NetconfigServer::new();
+        netconfiguration::run_netconfig(netconfiguration_server, result.core_channel_sender.clone());
+
         Ok((result, rt))
     }
 
-    pub fn get_handle(&mut self) -> ContextHandle {
+    pub fn get_handle(&mut self) -> ContextHandle<E> {
         ContextHandle::new(self.p4info_helper.clone(),self.core_channel_sender.clone(), self.handle.clone(), self.connections.clone())
     }
 
@@ -120,7 +138,7 @@ impl Context
             device_id: connection.device_id
         });
 
-        self.event_sender.start_send(CoreEvent::DeviceAdded(connection.name));
+        self.event_sender.start_send(CoreEvent::Event(E::from_common(CommonEvents::DeviceAdded(connection.name))));
 
         Ok(())
     }
@@ -132,19 +150,19 @@ pub struct Connection {
     pub device_id: u64
 }
 
-pub struct ContextHandle {
+pub struct ContextHandle<E> {
     p4info_helper: Arc<P4InfoHelper>,
-    sender: UnboundedSender<i32>,
-    pub handle: Handle,
+    sender: UnboundedSender<CoreRequest<E>>,
+    pub handle: Arc<Handle>,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
-impl ContextHandle {
-    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<i32>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle {
+impl<E> ContextHandle<E> {
+    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<CoreRequest<E>>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle<E> {
         ContextHandle {
             p4info_helper,
             sender,
-            handle,
+            handle: Arc::new(handle),
             connections
         }
     }
@@ -160,6 +178,19 @@ impl ContextHandle {
         else {
             Err(Box::new(ContextError::DeviceNotConnected(device.clone())))
         }
+    }
+
+    pub fn add_device(&self, name:String, address:String, device_id:u64) {
+        self.sender.unbounded_send(CoreRequest::AddDevice {
+            name,
+            address,
+            device_id,
+            reply:None
+        }).unwrap()
+    }
+
+    pub fn send_event(&self, event:E) {
+
     }
 }
 
