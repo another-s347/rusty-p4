@@ -1,16 +1,18 @@
 use std::io::Read;
 use std::path::Path;
 
-use protobuf::Message;
+use protobuf::{Message, SingularPtrField};
 
 use crate::error::*;
 use crate::proto;
 use crate::proto::p4info::{Action, Action_Param, MatchField, MatchField_MatchType, P4Info, Table};
 use crate::proto::p4runtime::{FieldMatch, TableEntry};
 use crate::util::value::{InnerParamValue, InnerValue};
+use crate::p4rt::pure::adjust_value;
 
 pub struct P4InfoHelper {
-    pub p4info:P4Info
+    pub p4info:P4Info,
+    pub packetout_egress_id: u32
 }
 
 impl P4InfoHelper {
@@ -18,8 +20,10 @@ impl P4InfoHelper {
         let mut file = std::fs::File::open(p4info_file_path).unwrap();
         let mut is = protobuf::CodedInputStream::new(&mut file);
         let p4info = protobuf::parse_from_reader(&mut is).unwrap();
+        let packetout_id = Self::get_packout_egress_port_metaid(&p4info).unwrap();
         P4InfoHelper {
-            p4info
+            p4info,
+            packetout_egress_id:packetout_id
         }
     }
 
@@ -124,7 +128,7 @@ impl P4InfoHelper {
         match (p4info_match.get_match_type(),value) {
             (MatchField_MatchType::EXACT, InnerValue::EXACT(v))=>{
 //                assert_eq!(byte_len, v.len());
-                let v = Self::adjust_value(v.clone(),byte_len);
+                let v = adjust_value(v.clone(),byte_len);
                 p4runtime_match.mut_exact().value = v;
             }
             (MatchField_MatchType::LPM, InnerValue::LPM(v, l))=>{
@@ -162,27 +166,28 @@ impl P4InfoHelper {
         })
     }
 
+    pub fn get_packout_egress_port_metaid(p4info:&P4Info) -> Option<u32> {
+        p4info.get_controller_packet_metadata().iter().find(|p|{
+            let pre = p.preamble.as_ref().unwrap();
+            pre.name=="packet_out"
+        }).map(|x|{
+            x.metadata.iter().find(|meta|{
+                meta.name=="egress_port"
+            }).map(|x|{
+                x.id
+            })
+        }).flatten()
+    }
+
     pub fn get_action_param_pb(&self, action_name:&str, param_name:&str, value: &InnerParamValue) -> crate::proto::p4runtime::Action_Param {
         let p4info_param = self.get_action_param_by_name(action_name, param_name).unwrap();
         let mut p4runtime_param = crate::proto::p4runtime::Action_Param::new();
         let mut value = value.clone();
         let bytes_len = (p4info_param.bitwidth as f32 / 8.0).ceil() as usize;
         println!("adjust value: action:{}, param:{}, value:{:?}, bitwidth:{}",action_name,param_name,value,p4info_param.bitwidth);
-        let value = Self::adjust_value(value,bytes_len);
+        let value = adjust_value(value,bytes_len);
         p4runtime_param.set_param_id(p4info_param.id);
         p4runtime_param.set_value(value.clone());
         return p4runtime_param;
-    }
-
-    pub fn adjust_value(value:Vec<u8>, bytes_len:usize) -> Vec<u8> {
-        let mut value = value.clone();
-        if bytes_len < value.len() {
-            let (_, v2)=value.split_at(value.len()-bytes_len);
-            v2.to_vec()
-        }
-        else {
-            value.extend(vec![0u8;bytes_len-value.len()]);
-            value
-        }
     }
 }

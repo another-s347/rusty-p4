@@ -1,4 +1,5 @@
 #![allow(warnings)]
+#![feature(option_flattening)]
 
 #[macro_use]
 extern crate bitfield;
@@ -17,16 +18,17 @@ use crate::app::Example;
 use crate::app::extended::{extend, ExampleExtended};
 use crate::event::CommonEvents;
 
-mod p4rt;
-mod util;
-mod proto;
-mod app;
-mod context;
-mod error;
-mod event;
-mod representation;
+pub mod p4rt;
+pub mod util;
+pub mod proto;
+pub mod app;
+pub mod context;
+pub mod error;
+pub mod event;
+pub mod representation;
 
-fn main() {
+#[test]
+fn test() {
     flexi_logger::Logger::with_str("trace").start().unwrap();
 
     let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));

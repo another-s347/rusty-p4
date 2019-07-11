@@ -19,7 +19,12 @@ pub enum CoreRequest<E> {
         device_id: u64,
         reply: Option<()>
     },
-    Event(E)
+    Event(E),
+    PacketOut {
+        device: String,
+        port: u32,
+        packet: Vec<u8>
+    }
 }
 
 pub trait Event {

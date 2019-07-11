@@ -12,10 +12,13 @@ use protobuf::Message;
 use crate::error::*;
 use crate::proto::p4config::P4DeviceConfig;
 use crate::proto::p4info::P4Info;
-use crate::proto::p4runtime::{StreamMessageRequest, StreamMessageResponse, TableEntry};
+use crate::proto::p4runtime::{StreamMessageRequest, StreamMessageResponse, TableEntry, PacketMetadata};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 
 use super::helper::P4InfoHelper;
+use byteorder::BigEndian;
+use crate::p4rt::pure::adjust_value;
+use byteorder::ByteOrder;
 
 pub struct Bmv2SwitchConnection {
     pub name:String,
@@ -53,6 +56,20 @@ impl Bmv2SwitchConnection {
         request.mut_arbitration().device_id = self.device_id;
         request.mut_arbitration().mut_election_id().high = 0;
         request.mut_arbitration().mut_election_id().low = 1;
+        self.stream_channel_sink.start_send((request,WriteFlags::default()));
+
+        Ok(())
+    }
+
+    pub fn packet_out(&mut self, p4info:&P4InfoHelper, egress_port:u32, packet:Vec<u8>) -> Result<()> {
+        let mut request = StreamMessageRequest::new();
+        request.mut_packet().set_payload(packet);
+        let mut packetout_metadata = PacketMetadata::new();
+        packetout_metadata.set_metadata_id(p4info.packetout_egress_id);
+        let mut v = vec![];
+        BigEndian::write_u32(&mut v, egress_port);
+        packetout_metadata.set_value(adjust_value(v, 9));
+        request.mut_packet().mut_metadata().push(packetout_metadata);
         self.stream_channel_sink.start_send((request,WriteFlags::default()));
 
         Ok(())

@@ -8,7 +8,7 @@ use futures03::stream::StreamExt;
 use futures::future::Future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use grpcio::StreamingCallSink;
+use grpcio::{StreamingCallSink, WriteFlags};
 use tokio::runtime::Runtime;
 use tokio::runtime::current_thread::Handle;
 
@@ -20,7 +20,8 @@ use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageRespo
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::event::{PacketReceived, CoreEvent, CoreRequest, Event, CommonEvents};
 use crate::util::flow::Flow;
-use crate::p4rt::pure::write_table_entry;
+
+use crate::p4rt::pure::{write_table_entry, packet_out_request};
 use crate::error::*;
 use log::{info, trace, warn, debug, error};
 
@@ -72,6 +73,15 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
                 }
                 CoreRequest::Event(e) => {
                     obj.event_sender.unbounded_send(CoreEvent::Event(e)).unwrap();
+                }
+                CoreRequest::PacketOut {
+                    device,
+                    port,
+                    packet
+                } => {
+                    if let Some(c) = obj.connections.write().unwrap().get_mut(&device) {
+                        c.pack_out(&obj.p4info_helper, port, packet);
+                    }
                 }
             }
             futures03::future::ready(())
@@ -132,9 +142,14 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
             dbg!(e);
         }));
 
+        let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
+        connection.client.spawn(sink_receiver.forward(connection.stream_channel_sink.sink_map_err(|e|{
+            dbg!(e);
+        })).map(|_|()));
+
         self.connections.write().unwrap().insert(connection.name.clone(), Connection {
             p4runtime_client: connection.client,
-            sink: Arc::new(connection.stream_channel_sink),
+            sink: sink_sender,
             device_id: connection.device_id
         });
 
@@ -146,8 +161,15 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
 
 pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
-    pub sink: Arc<StreamingCallSink<StreamMessageRequest>>,
+    pub sink: futures::sync::mpsc::UnboundedSender<(StreamMessageRequest,WriteFlags)>,
     pub device_id: u64
+}
+
+impl Connection {
+    pub fn pack_out(&self, p4infoHelper:&P4InfoHelper, port:u32, packet:Vec<u8>) {
+        let request = packet_out_request(p4infoHelper, port, packet).unwrap();
+        self.sink.unbounded_send(request).unwrap();
+    }
 }
 
 pub struct ContextHandle<E> {
@@ -190,7 +212,15 @@ impl<E> ContextHandle<E> {
     }
 
     pub fn send_event(&self, event:E) {
+        self.sender.unbounded_send(CoreRequest::Event(event)).unwrap();
+    }
 
+    pub fn send_packet(&self, device:String, port:u32, packet:Vec<u8>) {
+        self.sender.unbounded_send(CoreRequest::PacketOut {
+            device,
+            port,
+            packet
+        }).unwrap();
     }
 }
 

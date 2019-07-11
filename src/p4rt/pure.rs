@@ -1,8 +1,13 @@
 use log::{debug, error, info, trace, warn};
 
 use crate::error::*;
-use crate::proto::p4runtime::TableEntry;
+use crate::proto::p4runtime::{TableEntry, StreamMessageRequest, PacketMetadata};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use crate::p4rt::helper::P4InfoHelper;
+use byteorder::BigEndian;
+use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
+use futures::{Sink, Future};
+use byteorder::ByteOrder;
 
 pub fn write_table_entry(client:&P4RuntimeClient, device_id:u64, table_entry: TableEntry) -> Result<()> {
     let mut request = crate::proto::p4runtime::WriteRequest::new();
@@ -21,4 +26,29 @@ pub fn write_table_entry(client:&P4RuntimeClient, device_id:u64, table_entry: Ta
     client.write(&request)?;
 
     Ok(())
+}
+
+pub fn adjust_value(value:Vec<u8>, bytes_len:usize) -> Vec<u8> {
+    let mut value = value.clone();
+    if bytes_len < value.len() {
+        let (_, v2)=value.split_at(value.len()-bytes_len);
+        v2.to_vec()
+    }
+    else {
+        value.extend(vec![0u8;bytes_len-value.len()]);
+        value
+    }
+}
+
+pub fn packet_out_request(p4info:&P4InfoHelper, egress_port:u32, packet:Vec<u8>) -> Result<(StreamMessageRequest,WriteFlags)> {
+    let mut request = StreamMessageRequest::new();
+    request.mut_packet().set_payload(packet);
+    let mut packetout_metadata = PacketMetadata::new();
+    packetout_metadata.set_metadata_id(p4info.packetout_egress_id);
+    let mut v = vec![];
+    BigEndian::write_u32(&mut v, egress_port);
+    packetout_metadata.set_value(adjust_value(v, 9));
+    request.mut_packet().mut_metadata().push(packetout_metadata);
+
+    Ok((request, WriteFlags::default()))
 }
