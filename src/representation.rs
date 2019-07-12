@@ -12,7 +12,8 @@ pub struct Device {
 
 pub enum DeviceType {
     MASTER {
-        management_address:String
+        socket_addr:String,
+        device_id: u64
     },
     VIRTUAL
 }

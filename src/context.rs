@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use futures03::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures03::sink::SinkExt;
 use futures03::stream::StreamExt;
-use futures::future::Future;
+use futures::future::{Future, result};
 use futures::sink::Sink;
 use futures::stream::Stream;
 use grpcio::{StreamingCallSink, WriteFlags};
@@ -20,10 +20,12 @@ use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageRespo
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::event::{PacketReceived, CoreEvent, CoreRequest, Event, CommonEvents};
 use crate::util::flow::Flow;
-
+use futures03::future::FutureExt;
 use crate::p4rt::pure::{write_table_entry, packet_out_request};
 use crate::error::*;
 use log::{info, trace, warn, debug, error};
+use futures03::compat::*;
+use bitfield::fmt::Debug;
 
 mod driver;
 mod netconfiguration;
@@ -35,18 +37,16 @@ pub struct Context<E>
     pipeconf: String,
     core_channel_sender: UnboundedSender<CoreRequest<E>>,
     event_sender: UnboundedSender<CoreEvent<E>>,
-    handle: Handle,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
 impl<E> Context<E> where E:Event + Clone + 'static + Send
 {
-    pub fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<(Context<E>, Runtime)>
+    pub async fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<Context<E>>
         where T: p4App<E> + Send + 'static
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
-        let mut rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new()?;
         let (s, r) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
@@ -54,13 +54,13 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
             pipeconf: pipeconfig,
             core_channel_sender: s,
             event_sender: app_s,
-            handle: rt.handle(),
             connections: Arc::new(RwLock::new(HashMap::new())),
         };
         let context_handle = obj.get_handle();
 
         let result = obj.clone();
         let task = r.for_each(move |request| {
+            debug!(target:"context","{:#?}",request);
             match request {
                 CoreRequest::AddDevice {
                     name,
@@ -88,8 +88,8 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         });
 
         app.on_start(&context_handle);
-        rt.spawn(task);
-        rt.spawn(app_r.for_each(move |x| {
+        tokio::spawn(task);
+        tokio::spawn(app_r.for_each(move |x| {
             match x {
                 CoreEvent::PacketReceived(packet)=>{
                     app.on_packet(packet, &context_handle);
@@ -102,13 +102,15 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         }));
 
         let netconfiguration_server = netconfiguration::NetconfigServer::new();
-        netconfiguration::run_netconfig(netconfiguration_server, result.core_channel_sender.clone());
+        let core_sender = result.core_channel_sender.clone();
 
-        Ok((result, rt))
+        netconfiguration::build_netconfig_server(netconfiguration_server, core_sender).await;
+
+        Ok(result)
     }
 
-    pub fn get_handle(&mut self) -> ContextHandle<E> {
-        ContextHandle::new(self.p4info_helper.clone(),self.core_channel_sender.clone(), self.handle.clone(), self.connections.clone())
+    pub fn get_handle(&mut self) -> ContextHandle<E> where E: Event {
+        ContextHandle::new(self.p4info_helper.clone(),self.core_channel_sender.clone(), self.connections.clone())
     }
 
     pub fn add_connection(&mut self, mut connection: Bmv2SwitchConnection) -> Result<()> {
@@ -175,16 +177,14 @@ impl Connection {
 pub struct ContextHandle<E> {
     p4info_helper: Arc<P4InfoHelper>,
     sender: UnboundedSender<CoreRequest<E>>,
-    pub handle: Arc<Handle>,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
-impl<E> ContextHandle<E> {
-    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<CoreRequest<E>>, handle: Handle, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle<E> {
+impl<E> ContextHandle<E> where E:Debug {
+    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<CoreRequest<E>>, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle<E> {
         ContextHandle {
             p4info_helper,
             sender,
-            handle: Arc::new(handle),
             connections
         }
     }

@@ -26,25 +26,26 @@ pub trait CommonOperation<E> where E:Event {
 impl<E> CommonOperation<E> for CommonState where E:Event {
     fn merge_device(&mut self, mut info: Device, ctx:&ContextHandle<E>) -> MergeResult
     {
-        if let Some(pre) = self.devices.get_mut(&info.name) {
-            // merge ports
-            unimplemented!()
-        }
-        else { // add device
-            match &info.typ {
-                DeviceType::MASTER {
-                    management_address
-                } => {
-                    ctx.add_device(info.name.clone(), management_address.clone(), info.device_id);
-                    info.index = self.devices.len();
-                    self.devices.insert(info.name.clone(), info);
-                },
-                DeviceType::VIRTUAL => {
-                    self.devices.insert(info.name.clone(), info);
-                },
-            }
-        }
-        MergeResult::ADDED
+        unimplemented!()
+//        if let Some(pre) = self.devices.get_mut(&info.name) {
+//            // merge ports
+//            unimplemented!()
+//        }
+//        else { // add device
+//            match &info.typ {
+//                DeviceType::MASTER {
+//                    management_address
+//                } => {
+//                    ctx.add_device(info.name.clone(), management_address.clone(), info.device_id);
+//                    info.index = self.devices.len();
+//                    self.devices.insert(info.name.clone(), info);
+//                },
+//                DeviceType::VIRTUAL => {
+//                    self.devices.insert(info.name.clone(), info);
+//                },
+//            }
+//        }
+//        MergeResult::ADDED
     }
 }
 

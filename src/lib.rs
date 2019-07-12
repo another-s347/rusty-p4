@@ -1,5 +1,6 @@
 #![allow(warnings)]
 #![feature(option_flattening)]
+#![feature(async_await)]
 
 #[macro_use]
 extern crate bitfield;
@@ -17,6 +18,7 @@ use crate::context::Context;
 use crate::app::Example;
 use crate::app::extended::{extend, ExampleExtended};
 use crate::event::CommonEvents;
+use log::{info, trace, warn, debug, error};
 
 pub mod p4rt;
 pub mod util;
@@ -27,21 +29,21 @@ pub mod error;
 pub mod event;
 pub mod representation;
 
+use tokio;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+
+#[tokio::main]
 #[test]
-fn test() {
-    flexi_logger::Logger::with_str("trace").start().unwrap();
+pub async fn main() {
+    flexi_logger::Logger::with_str("debug").start().unwrap();
 
     let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));
     let bmv2_file = "/home/skye/rusty-p4/p4test/build/simple.json";
-    let mut s1 = Bmv2SwitchConnection::new("s1","127.0.0.1:50051",0);
-    let mut s2 = Bmv2SwitchConnection::new("s2","127.0.0.1:50052",1);
 
-    let (mut context,mut runtime) = Context::try_new(p4info_helper, bmv2_file.to_owned(), extend(ExampleExtended {
+    let mut context = Context::try_new(p4info_helper, bmv2_file.to_owned(), extend(ExampleExtended {
 
-    })).unwrap();
+    })).await.unwrap();
 
-    context.add_connection(s1).unwrap();
-    context.add_connection(s2).unwrap();
-
-    runtime.run();
+//    context.get_handle().add_device("s1".to_string(),"1".to_string(),1);
 }

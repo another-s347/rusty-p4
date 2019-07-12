@@ -1,11 +1,10 @@
 use std::net::SocketAddr;
 
-use futures::prelude::*;
-use hyper::{Body, Request, Response, Server as HyperServer};
+use hyper::{Body, Request, Response, Server as HyperServer, Server};
 use hyper::rt::{self, spawn};
 use hyper::server::Builder as HyperBuilder;
-use hyper::server::conn::AddrIncoming;
-use hyper::service::service_fn_ok;
+use hyper::server::conn::{AddrIncoming, AddrStream};
+use hyper::service::{service_fn, make_service_fn, MakeService};
 use crate::app::common::CommonOperation;
 use crate::context::{Context, ContextHandle};
 use std::collections::{HashMap, HashSet};
@@ -15,6 +14,15 @@ use crate::util::value::MAC;
 use crate::event::{Event, CoreRequest};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use futures03::channel::mpsc::UnboundedSender;
+use futures03::task::SpawnExt;
+use futures03::compat::*;
+use futures03::FutureExt;
+use futures03::prelude::*;
+use log::{info, trace, warn, debug, error};
+use futures03::stream::Stream;
+use futures::future::ok;
+use bytes::{BytesMut, BufMut};
+use hyper::body::Payload;
 
 #[derive(Deserialize, Debug)]
 pub struct Netconfig {
@@ -66,7 +74,8 @@ impl Netconfig {
                 name: name.clone(),
                 ports,
                 typ: DeviceType::MASTER {
-                    management_address: device_config.basic.socket_addr.clone()
+                    socket_addr: device_config.basic.socket_addr.clone(),
+                    device_id: device_config.basic.device_id
                 },
                 device_id: device_config.basic.device_id,
                 index: 0
@@ -81,38 +90,57 @@ pub struct NetconfigServer {
 
 impl NetconfigServer {
     pub fn new() -> NetconfigServer {
-        unimplemented!()
+        let http_builder = Server::bind(&([127, 0, 0, 1], 1818).into());
+        NetconfigServer {
+            http_builder
+        }
     }
 }
 
-pub fn run_netconfig<E>(server: NetconfigServer, core_event_sender:UnboundedSender<CoreRequest<E>>)
+async fn hello(_: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    Ok(Response::new(Body::from("Hello World!")))
+}
+
+pub async fn build_netconfig_server<E>(server: NetconfigServer, core_event_sender:UnboundedSender<CoreRequest<E>>)
     where E:Event+Clone+Send+'static
 {
-    let server = server.http_builder.serve(move||{
-        let s= core_event_sender.clone();
-        service_fn_ok(move|req:Request<Body>|{
-            let s= s.clone();
-            rt::spawn(
-                req.into_body().concat2().map(move|x|{
+    let server = server.http_builder.serve(make_service_fn(move|_|{
+        let s = core_event_sender.clone();
+        async move {
+            let p = s.clone();
+            Ok::<_, hyper::Error>(service_fn(move |req:Request<Body>| {
+                let body = req.into_body();
+                let len = body.content_length().unwrap();
+                let buffer = BytesMut::with_capacity(len as usize);
+                let y = p.clone();
+                rt::spawn(body.fold(buffer,|mut x,y|{
+                    let mut c=y.unwrap().into_bytes();
+                    x.put(c);
+                    futures03::future::ready(x)
+                }).map(move|x|{
                     let config:Netconfig = serde_json::from_slice(x.as_ref()).unwrap();
                     for device in config.to_devices() {
-                        // TODO
-                        s.unbounded_send(CoreRequest::AddDevice {
-                            name: device.name,
-                            address: "".to_string(),
-                            device_id: 0,
-                            reply: None
-                        });
+                        match device.typ {
+                            DeviceType::MASTER {
+                                socket_addr,
+                                device_id
+                            } => {
+                                debug!(target: "netcfg", "send adddevice request");
+                                y.unbounded_send(CoreRequest::AddDevice {
+                                    name: device.name,
+                                    address: socket_addr,
+                                    device_id,
+                                    reply: None,
+                                }).unwrap();
+                            }
+                            _ => {}
+                        }
                     }
-                }).map_err(|err|{
-                    dbg!(err);
-                })
-            );
-            Response::new(Body::from("Hello World!"))
-        })
-    }).map_err(|e|{
-        eprintln!("server error: {}", e);
-    });
+                }));
+                futures03::future::ok::<Response<Body>, hyper::Error>(Response::new(Body::from("Hello World!")))
+            }))
+        }
+    }));
 
-    rt::spawn(server);
+    server.await.unwrap();
 }

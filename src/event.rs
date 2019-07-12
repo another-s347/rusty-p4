@@ -1,5 +1,6 @@
 use crate::proto::p4runtime::PacketIn;
 use std::sync::Arc;
+use bitfield::fmt::Debug;
 
 pub enum CoreEvent<E> {
     PacketReceived(PacketReceived),
@@ -12,7 +13,9 @@ pub struct PacketReceived {
     pub from: String
 }
 
-pub enum CoreRequest<E> {
+#[derive(Debug)]
+pub enum CoreRequest<E>
+{
     AddDevice {
         name: String,
         address: String,
@@ -27,7 +30,7 @@ pub enum CoreRequest<E> {
     }
 }
 
-pub trait Event {
+pub trait Event: Debug {
     fn to_common(&self)->CommonEvents;
 
     fn from_common(e:CommonEvents)->Self;
@@ -43,7 +46,7 @@ impl Event for CommonEvents {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum CommonEvents {
     DeviceAdded(String),
     DeviceUpdate(),
