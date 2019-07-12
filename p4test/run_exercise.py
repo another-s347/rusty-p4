@@ -30,6 +30,7 @@ from mininet.moduledeps import pathCheck
 from mininet.log import setLogLevel, info, error, debug
 import psutil
 import tempfile
+from rusty_bmv2 import RustyBmv2Switch
 
 SWITCH_START_TIMEOUT = 10 # seconds
 
@@ -511,16 +512,10 @@ class ExerciseRunner:
 
         self.topo = ExerciseTopo(self.hosts, self.switches.keys(), self.links, self.log_dir)
 
-        switchClass = configureP4Switch(
-                sw_path=self.bmv2_exe,
-                json_path=self.switch_json,
-                log_console=True,
-                pcap_dump=self.pcap_dir)
-
         self.net = Mininet(topo = self.topo,
                       link = TCLink,
                       host = P4Host,
-                      switch = switchClass,
+                      switch = RustyBmv2Switch,
                       controller = None)
 
     def program_switch_cli(self, sw_name, sw_dict):
