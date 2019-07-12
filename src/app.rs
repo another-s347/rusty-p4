@@ -18,6 +18,7 @@ use crate::util::value::{ParamValue, Value};
 pub mod extended;
 pub mod common;
 pub mod statistic;
+pub mod graph;
 
 pub trait p4App<E>
     where E:Event
