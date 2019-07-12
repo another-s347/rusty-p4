@@ -20,8 +20,15 @@ impl From<BytesMut> for MAC {
 
 impl MAC {
     pub fn of(s:String)-> MAC {
-        unimplemented!()
+        let vec = hex::decode(s.replace(':',"")).unwrap();
+        MAC(vec_to_mac(vec))
     }
+}
+
+fn vec_to_mac(vec:Vec<u8>) -> [u8;6] {
+    let mut mac = [0u8;6];
+    mac.copy_from_slice(&vec);
+    mac
 }
 
 impl Value {
