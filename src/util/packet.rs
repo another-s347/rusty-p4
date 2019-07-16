@@ -1,6 +1,7 @@
 use bytes::{Bytes, BytesMut};
 
 pub use ethernet::Ethernet as Ethernet;
+pub use arp::Arp as Arp;
 
 pub mod ethernet;
 pub mod ip;

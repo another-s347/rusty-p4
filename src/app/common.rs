@@ -1,56 +1,59 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::representation::{Device, DeviceType};
+use crate::representation::{Device, DeviceType, Host};
 use crate::util::flow::{Flow, FlowOwned};
 use crate::context::ContextHandle;
 use crate::event::Event;
 
 pub struct CommonState {
-    devices: HashMap<String, Device>,
-    flows: HashMap<String, HashSet<FlowOwned>>
+    pub devices: HashMap<String, Device>,
+    pub flows: HashMap<String, HashSet<FlowOwned>>,
+    pub hosts: HashSet<Host>
 }
 
 impl CommonState {
     pub fn new() -> CommonState {
         CommonState {
             devices: HashMap::new(),
-            flows: HashMap::new()
+            flows: HashMap::new(),
+            hosts: HashSet::new()
         }
     }
 }
 
-pub trait CommonOperation<E> where E:Event {
-    fn merge_device(&mut self, info:Device, ctx:&ContextHandle<E>) -> MergeResult;
-}
-
-impl<E> CommonOperation<E> for CommonState where E:Event {
-    fn merge_device(&mut self, mut info: Device, ctx:&ContextHandle<E>) -> MergeResult
+impl CommonState {
+    pub fn merge_device(&mut self, mut info: Device) -> MergeResult<String>
     {
-        unimplemented!()
-//        if let Some(pre) = self.devices.get_mut(&info.name) {
-//            // merge ports
-//            unimplemented!()
-//        }
-//        else { // add device
-//            match &info.typ {
-//                DeviceType::MASTER {
-//                    management_address
-//                } => {
-//                    ctx.add_device(info.name.clone(), management_address.clone(), info.device_id);
-//                    info.index = self.devices.len();
-//                    self.devices.insert(info.name.clone(), info);
-//                },
-//                DeviceType::VIRTUAL => {
-//                    self.devices.insert(info.name.clone(), info);
-//                },
-//            }
-//        }
-//        MergeResult::ADDED
+        let name = info.name.clone();
+        if let Some(pre) = self.devices.get_mut(&name) {
+            // merge ports
+            unimplemented!()
+        }
+        else { // add device
+            self.devices.insert(info.name.clone(), info);
+        }
+        MergeResult::ADDED(name)
+    }
+
+    pub fn merge_host(&mut self, info:Host) -> MergeResult<Host> {
+        if let Some(other) = self.hosts.get(&info) {
+            if other.location!=info.location {
+                MergeResult::CONFLICT
+            }
+            else {
+                MergeResult::MERGED
+            }
+        }
+        else {
+            let result = info.clone();
+            self.hosts.insert(info);
+            MergeResult::ADDED(result)
+        }
     }
 }
 
-pub enum MergeResult {
-    ADDED,
+pub enum MergeResult<T> {
+    ADDED(T),
     MERGED,
     CONFLICT
 }

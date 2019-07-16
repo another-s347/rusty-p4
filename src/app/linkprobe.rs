@@ -10,49 +10,51 @@ use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use bytes::Bytes;
 use crate::util::packet::data::Data;
+use crate::representation::{Device, ConnectPoint, ConnectPointRef};
 
-pub fn on_probe_received<E>(device_name:String, data:Data ,ctx:&ContextHandle<E>) where E:Event {
-    let probe:Result<serde_json::Value,serde_json::Error> = serde_json::from_slice(&data.0);
-    let from:Option<&str> = probe.iter()
-        .flat_map(|x|x.as_object())
-        .flat_map(|x|x.get("device"))
-        .flat_map(|x|x.as_str())
-        .next();
-    if let Some(from) = from {
-        // info!(target:"linkprobe","link detect {}<->{}",device_name,from);
-        ctx.send_event(CommonEvents::LinkDetected(device_name,from.to_owned()).into());
+pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHandle<E>) where E:Event {
+    let probe:Result<ConnectPointRef,serde_json::Error> = serde_json::from_slice(&data.0);
+    let device_name = device.name.as_str().to_owned();
+    if let Ok(from) = probe {
+        let this = ConnectPoint {
+            device: device_name,
+            port
+        };
+//        info!(target:"linkprobe","link detect {:?}<->{:?}",this,from);
+        let from = from.to_owned();
+        ctx.send_event(CommonEvents::LinkDetected(this,from).into());
     }
     else {
         error!(target:"linkprobe","invalid probe == {:?}",probe);
     }
 }
 
-pub fn on_device_added<E>(device_name:String,ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
 {
-    let mut task = tokio::timer::Interval::new_interval(Duration::new(3,0));
+    let device_name = device.name.as_str();
     new_probe_interceptor(&device_name,ctx);
-    let probe = new_probe(&device_name).to_vec();
-    let my_sender = ctx.sender.clone();
-    tokio::spawn(async move {
-        while let Some(s) = task.next().await {
-            trace!(target:"linkprobe","device probe {}", &device_name);
-            my_sender.unbounded_send(CoreRequest::PacketOut {
-                device: device_name.clone(),
-                port: 1,
-                packet: probe.clone()
-            });
-            my_sender.unbounded_send(CoreRequest::PacketOut {
-                device: device_name.clone(),
-                port: 2,
-                packet: probe.clone()
-            });
-            my_sender.unbounded_send(CoreRequest::PacketOut {
-                device: device_name.clone(),
-                port: 3,
-                packet: probe.clone()
-            });
-        }
-    });
+    let mut linkprobe_per_ports = Vec::new();
+    for port in device.ports.iter().map(|x|x.number) {
+        let cp = ConnectPointRef {
+            device: &device_name,
+            port
+        };
+        let mut my_sender = ctx.sender.clone();
+        let probe = new_probe(&cp);
+        let mut interval = tokio::timer::Interval::new_interval(Duration::new(3,0));
+        let name = device_name.to_owned();
+        let task = tokio::spawn(async move {
+            while let Some(s) = interval.next().await {
+//                trace!(target:"linkprobe","device probe {}", &name);
+                my_sender.send(CoreRequest::PacketOut {
+                    device: name.clone(),
+                    port,
+                    packet: probe.clone()
+                }).await.unwrap();
+            }
+        });
+        linkprobe_per_ports.push(task);
+    }
 }
 
 pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:Event {
@@ -72,15 +74,13 @@ pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:
     ctx.insert_flow(flow);
 }
 
-pub fn new_probe(device_name:&str) -> Bytes
+pub fn new_probe(cp:&ConnectPointRef) -> Bytes
 {
-    let probe = json!({
-        "device": device_name,
-    });
+    let probe = serde_json::to_vec(cp).unwrap();
     Ethernet {
         src: MAC([0x12,0x34,0x56,0x12,0x34,0x56]),
         dst: MAC::broadcast(),
         ether_type: 0x861,
-        payload: Data(Bytes::from(serde_json::to_vec(&probe).unwrap()))
+        payload: Data(Bytes::from(probe))
     }.into_bytes()
 }

@@ -1,14 +1,16 @@
-use crate::app::common::{CommonOperation, CommonState, MergeResult};
+use crate::app::common::{CommonState, MergeResult};
 use crate::app::p4App;
 use crate::representation::Device;
 use crate::context::ContextHandle;
 use crate::event::{Event, CommonEvents, PacketReceived};
 use serde::export::PhantomData;
-use super::linkprobe;
+use super::{linkprobe, proxyarp};
+use crate::util::packet::arp;
 use crate::util::packet::Ethernet;
 use bytes::BytesMut;
 use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
+use log::{info, trace, warn, debug, error};
 
 pub trait p4AppExtended<E> {
 
@@ -20,31 +22,33 @@ pub struct p4AppExtendedCore<A, E> {
     phantom:PhantomData<E>
 }
 
-impl<A, E> CommonOperation<E> for p4AppExtendedCore<A, E> where E:Event {
-    fn merge_device(&mut self, info: Device, ctx:&ContextHandle<E>) -> MergeResult {
-        let result = self.common.merge_device(info, ctx);
-        result
-    }
-}
-
 impl<A, E> p4App<E> for p4AppExtendedCore<A, E>
     where A:p4AppExtended<E>, E:Event
 {
     fn on_packet(self:&mut Self, packet:PacketReceived, ctx: &ContextHandle<E>) {
         let bytes = BytesMut::from(packet.packet.payload);
-        let ethernet:Option<Ethernet<Data>> = Ethernet::from_bytes(bytes);
-        if let Some(eth) = ethernet {
-            match eth.ether_type {
-                0x865 => {
+        let device = self.common.devices.get(&packet.from);
+        if let Some(device) = device {
+            let ethernet:Option<Ethernet<Data>> = Ethernet::from_bytes(bytes);
+            if let Some(eth) = ethernet {
+                match eth.ether_type {
+                    0x865 => {
 
-                }
-                0x861 => {
-                    linkprobe::on_probe_received(packet.from,eth.payload,ctx);
-                }
-                _=>{
-                    dbg!(eth);
+                    }
+                    0x861 => {
+                        linkprobe::on_probe_received(device,packet.port,eth.payload,ctx);
+                    }
+                    arp::ETHERNET_TYPE_ARP=>{
+                        proxyarp::on_arp_received(device,packet.port,eth.payload,&self.common,ctx)
+                    }
+                    _=>{
+                        dbg!(eth);
+                    }
                 }
             }
+        }
+        else {
+            error!(target:"extend","device not found with name: {}", packet.from);
         }
     }
 
@@ -52,9 +56,33 @@ impl<A, E> p4App<E> for p4AppExtendedCore<A, E>
         let common:CommonEvents = event.into();
         match common {
             CommonEvents::DeviceAdded(device)=>{
-                linkprobe::on_device_added(device,ctx);
+                let result = self.common.merge_device(device);
+                match result {
+                    MergeResult::ADDED(name)=>{
+                        let device = self.common.devices.get(&name).unwrap();
+                        linkprobe::on_device_added(&device,ctx);
+                        proxyarp::on_device_added(&device,ctx);
+                    }
+                    _=>{
+                        unimplemented!()
+                    }
+                }
             }
-            _=>{}
+            CommonEvents::HostDetected(host)=>{
+                let result = self.common.merge_host(host);
+                match result {
+                    MergeResult::ADDED(host)=>{
+                        info!(target:"extend","host detected {:?}",host);
+                    }
+                    MergeResult::CONFLICT=>{}
+                    MergeResult::MERGED=>{
+
+                    }
+                }
+            }
+            _=>{
+
+            }
         }
     }
 }
