@@ -60,7 +60,7 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
 
         let result = obj.clone();
         let task = r.for_each(move |request| {
-            debug!(target:"context","{:#?}",request);
+            trace!(target:"context","{:#?}",request);
             match request {
                 CoreRequest::AddDevice {
                     name,
@@ -81,6 +81,9 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
                 } => {
                     if let Some(c) = obj.connections.write().unwrap().get_mut(&device) {
                         c.pack_out(&obj.p4info_helper, port, packet);
+                    }
+                    else {
+                        error!(target:"context","connection not found for device {}",device);
                     }
                 }
             }
@@ -123,10 +126,11 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
 
         let name = connection.name.clone();
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
-            debug!(target:"context", "StreaMessageResponse: {:#?}", x);
             if let Some(update) = x.update {
                 match update {
-                    StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {}
+                    StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {
+                        debug!(target:"context", "StreaMessageResponse: {:#?}", masterUpdate);
+                    }
                     StreamMessageResponse_oneof_update::packet(packet) => {
                         let x = PacketReceived {
                             packet,
@@ -134,10 +138,16 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
                         };
                         packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
-                    StreamMessageResponse_oneof_update::digest(_) => {}
-                    StreamMessageResponse_oneof_update::idle_timeout_notification(_) => {}
-                    StreamMessageResponse_oneof_update::other(_) => {}
+                    StreamMessageResponse_oneof_update::digest(p) => {
+                        debug!(target:"context", "StreaMessageResponse: {:#?}", p);
+                    }
+                    StreamMessageResponse_oneof_update::idle_timeout_notification(n) => {
+                        debug!(target:"context", "StreaMessageResponse: {:#?}", n);
+                    }
+                    StreamMessageResponse_oneof_update::other(what) => {
+                        debug!(target:"context", "StreaMessageResponse: {:#?}", what);
                 }
+            }
             }
             Ok(())
         }).map_err(|e| {
@@ -155,7 +165,7 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
             device_id: connection.device_id
         });
 
-        self.event_sender.start_send(CoreEvent::Event(E::from_common(CommonEvents::DeviceAdded(connection.name))));
+        self.event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceAdded(connection.name).into()));
 
         Ok(())
     }
@@ -176,7 +186,7 @@ impl Connection {
 
 pub struct ContextHandle<E> {
     p4info_helper: Arc<P4InfoHelper>,
-    sender: UnboundedSender<CoreRequest<E>>,
+    pub sender: UnboundedSender<CoreRequest<E>>,
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 

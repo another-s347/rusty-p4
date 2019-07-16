@@ -1,14 +1,16 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use byteorder::ByteOrder;
+use byteorder::{ByteOrder, BigEndian};
 use bytes::{Bytes, BytesMut};
 use hex;
+use bitfield::fmt::Debug;
+use std::fmt::Formatter;
 
 pub struct Value;
 
 pub struct MACString(pub String);
 #[derive(Eq,Hash,PartialEq)]
-pub struct MAC([u8;6]);
+pub struct MAC(pub [u8;6]);
 
 impl From<BytesMut> for MAC {
     fn from(b: BytesMut) -> Self {
@@ -22,6 +24,16 @@ impl MAC {
     pub fn of(s:String)-> MAC {
         let vec = hex::decode(s.replace(':',"")).unwrap();
         MAC(vec_to_mac(vec))
+    }
+
+    pub fn broadcast() -> MAC {
+        MAC([0xff;6])
+    }
+}
+
+impl Debug for MAC {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f,"{:x}:{:x}:{:x}:{:x}:{:x}:{:x}", self.0[0],self.0[1],self.0[2],self.0[3],self.0[4],self.0[5])
     }
 }
 
@@ -38,6 +50,11 @@ impl Value {
 
     pub fn LPM<T:Encode>(v:T, prefix_len:i32) -> InnerValue {
         InnerValue::LPM(v.encode(), prefix_len)
+    }
+
+    pub fn TERNARY<T:Encode>(v:T, mask:Vec<u8>) -> InnerValue {
+
+        InnerValue::TERNARY(v.encode(), mask)
     }
 }
 
@@ -106,6 +123,14 @@ impl Encode for u32 {
 impl Encode for u8 {
     fn encode(&self) -> Vec<u8> {
         vec![*self]
+    }
+}
+
+impl Encode for u16 {
+    fn encode(&self) -> Vec<u8> {
+        let mut buffer = vec![0u8;2];
+        BigEndian::write_u16(&mut buffer, *self);
+        buffer
     }
 }
 

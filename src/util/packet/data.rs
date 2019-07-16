@@ -2,7 +2,7 @@ use bytes::{Bytes, BytesMut};
 
 use crate::util::packet::Packet;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Data(pub Bytes);
 
 impl Packet for Data {

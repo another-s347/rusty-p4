@@ -19,6 +19,8 @@ pub mod extended;
 pub mod common;
 pub mod statistic;
 pub mod graph;
+pub mod linkprobe;
+pub mod proxyarp;
 
 pub trait p4App<E>
     where E:Event

@@ -1,16 +1,23 @@
 use byteorder::ByteOrder;
-use bytes::{Bytes, BytesMut};
+use bytes::{Bytes, BytesMut, BufMut};
 
 use crate::util::packet::Packet;
 use crate::util::value::MAC;
+use bitfield::fmt::Debug;
+use std::fmt::Formatter;
 
 pub struct Ethernet<P>
-    where P:Packet
 {
     pub src: MAC,
     pub dst: MAC,
     pub ether_type: u16,
     pub payload: P
+}
+
+impl<P> Debug for Ethernet<P>{
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "\nsrc: {:?}\ndst: {:?}\ntype: {:x}",self.src,self.dst,self.ether_type)
+    }
 }
 
 impl<P> Packet for Ethernet<P>
@@ -38,6 +45,13 @@ impl<P> Packet for Ethernet<P>
     }
 
     fn into_bytes(self) -> Bytes {
-        unimplemented!()
+        let mut buf = BytesMut::new();
+        let payload = self.payload.into_bytes();
+        buf.reserve(14+payload.len());
+        buf.put_slice(&self.dst.0);
+        buf.put_slice(&self.src.0);
+        buf.put_u16_be(self.ether_type);
+        buf.put(payload);
+        buf.freeze()
     }
 }

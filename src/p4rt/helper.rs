@@ -138,9 +138,10 @@ impl P4InfoHelper {
             }
             (MatchField_MatchType::TERNARY, InnerValue::TERNARY(v, mask))=>{
                 assert_eq!(byte_len, v.len());
-                assert_eq!(byte_len, mask.len());
+//                assert_eq!(byte_len, mask.len());
+                let mask = adjust_value(mask.clone(),byte_len);
                 p4runtime_match.mut_ternary().value = v.clone();
-                p4runtime_match.mut_ternary().mask = mask.clone();
+                p4runtime_match.mut_ternary().mask = mask;
             }
             (MatchField_MatchType::RANGE, InnerValue::RANGE(low, high))=>{
                 assert_eq!(byte_len, low.len());

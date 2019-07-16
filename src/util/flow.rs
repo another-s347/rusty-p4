@@ -26,7 +26,7 @@ impl<'a> Flow<'a> {
             false,
             self.action.name,
             self.action.params,
-            0
+            self.priority
         );
         table_entry
     }
