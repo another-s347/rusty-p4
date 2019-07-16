@@ -565,7 +565,7 @@ class ExerciseRunner:
             # mininet cannot shutdown gracefully
             h.defaultIntf().rename('%s-eth0' % host_name)
             # static arp entries and default routes
-            h.cmd('arp -i %s -s %s %s' % (h_iface.name, sw_ip, sw_iface.mac))
+            # h.cmd('arp -i %s -s %s %s' % (h_iface.name, sw_ip, sw_iface.mac))
             h.cmd('ethtool --offload %s rx off tx off' % h_iface.name)
             h.cmd('ip route add %s dev %s' % (sw_ip, h_iface.name))
             h.setDefaultRoute("via %s" % sw_ip)
