@@ -16,17 +16,17 @@ use crate::app::p4App;
 use crate::error::*;
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
-use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update};
+use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update, WriteRequest, Update, Uint128, Update_Type, Entity, MeterEntry, Index};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::event::{PacketReceived, CoreEvent, CoreRequest, Event, CommonEvents};
 use crate::util::flow::Flow;
 use futures03::future::FutureExt;
-use crate::p4rt::pure::{write_table_entry, packet_out_request};
+use crate::p4rt::pure::{write_table_entry, packet_out_request, set_meter_request};
 use crate::error::*;
 use log::{info, trace, warn, debug, error};
 use futures03::compat::*;
 use bitfield::fmt::Debug;
-use crate::representation::{Device, DeviceType};
+use crate::representation::{Device, DeviceType, Meter};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
@@ -98,6 +98,15 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
                     }
                     else {
                         error!(target:"context","connection not found for device {}",device);
+                    }
+                }
+                CoreRequest::SetMeter(meter) => {
+                    if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
+                        let request = set_meter_request(&obj.p4info_helper,1,&meter).unwrap();
+                        c.p4runtime_client.write(&request);
+                    }
+                    else {
+                        error!(target:"context","connection not found for device {}",&meter.device);
                     }
                 }
             }
@@ -258,6 +267,10 @@ impl<E> ContextHandle<E> where E:Debug {
             port,
             packet
         }).unwrap();
+    }
+
+    pub fn set_meter(&self, meter:Meter) {
+
     }
 }
 

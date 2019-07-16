@@ -86,3 +86,14 @@ impl<'a> ConnectPointRef<'a> {
         }
     }
 }
+
+#[derive(Clone,Debug)]
+pub struct Meter {
+    pub device: String,
+    pub name: String,
+    pub index: i64,
+    pub cburst: i64,
+    pub cir: i64,
+    pub pburst: i64,
+    pub pir: i64
+}

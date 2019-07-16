@@ -5,7 +5,7 @@ use protobuf::{Message, SingularPtrField};
 
 use crate::error::*;
 use crate::proto;
-use crate::proto::p4info::{Action, Action_Param, MatchField, MatchField_MatchType, P4Info, Table};
+use crate::proto::p4info::{Action, Action_Param, MatchField, MatchField_MatchType, P4Info, Table, Meter};
 use crate::proto::p4runtime::{FieldMatch, TableEntry};
 use crate::util::value::{InnerParamValue, InnerValue};
 use crate::p4rt::pure::adjust_value;
@@ -112,6 +112,24 @@ impl P4InfoHelper {
                 let pre = t.preamble.as_ref().unwrap();
                 &pre.name==name || &pre.alias==name
             })
+    }
+
+    pub fn get_meter(&self, name:&str) -> Option<&Meter> {
+        self.p4info.meters.iter()
+            .filter(|t|t.preamble.is_some())
+            .find(|t|{
+                let pre = t.preamble.as_ref().unwrap();
+                &pre.name==name || &pre.alias==name
+            })
+    }
+
+    pub fn get_meter_id(&self, name:&str) -> Option<u32> {
+        self.p4info.meters.iter().for_each(|t|{
+            println!("{}",t.preamble.as_ref().unwrap().name);
+        });
+        self.get_meter(name).map(|table| {
+            table.preamble.as_ref().unwrap().id
+        })
     }
 
     pub fn get_actions_id(&self, action_name:&str) -> Option<u32> {

@@ -1,7 +1,7 @@
 use crate::proto::p4runtime::PacketIn;
 use std::sync::Arc;
 use bitfield::fmt::Debug;
-use crate::representation::{Device, ConnectPoint, Host};
+use crate::representation::{Device, ConnectPoint, Host, Meter};
 use bytes::{BytesMut, Bytes};
 
 pub enum CoreEvent<E> {
@@ -29,6 +29,7 @@ pub enum CoreRequest<E>
         port: u32,
         packet: Bytes,
     },
+    SetMeter(Meter)
 }
 
 pub trait Event: Debug + Send + 'static + From<CommonEvents> + Into<CommonEvents> {}

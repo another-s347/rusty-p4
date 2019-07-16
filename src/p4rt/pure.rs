@@ -1,7 +1,7 @@
 use log::{debug, error, info, trace, warn};
 
 use crate::error::*;
-use crate::proto::p4runtime::{TableEntry, StreamMessageRequest,StreamMessageRequest_oneof_update, PacketMetadata, PacketOut};
+use crate::proto::p4runtime::{TableEntry, StreamMessageRequest, StreamMessageRequest_oneof_update, PacketMetadata, PacketOut, WriteRequest, Update, Update_Type, Entity, MeterEntry};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::p4rt::helper::P4InfoHelper;
 use byteorder::BigEndian;
@@ -9,6 +9,8 @@ use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 use futures::{Sink, Future};
 use byteorder::ByteOrder;
 use bytes::Bytes;
+use crate::representation::Meter as MeterRep;
+use crate::proto::p4info::Meter;
 
 pub fn write_table_entry(client:&P4RuntimeClient, device_id:u64, table_entry: TableEntry) -> Result<()> {
     let mut request = crate::proto::p4runtime::WriteRequest::new();
@@ -53,4 +55,25 @@ pub fn packet_out_request(p4info:&P4InfoHelper, egress_port:u32, packet:Bytes) -
     packetOut.mut_metadata().push(packetout_metadata);
     request.set_packet(packetOut);
     Ok((request, WriteFlags::default()))
+}
+
+pub fn set_meter_request(p4info:&P4InfoHelper,device_id:u64, meter: &MeterRep) -> Result<WriteRequest> {
+    let mut write_request = WriteRequest::new();
+    write_request.set_device_id(device_id);
+    write_request.mut_election_id().set_low(1);
+    let mut update = Update::new();
+    update.set_field_type(Update_Type::MODIFY);
+    let mut entity = Entity::new();
+    let mut meter_entry = MeterEntry::new();
+    let meter_id = p4info.get_meter_id(&meter.name).unwrap();
+    meter_entry.set_meter_id(meter_id);
+    meter_entry.mut_index().set_index(meter.index);
+    meter_entry.mut_config().set_cburst(meter.cburst);
+    meter_entry.mut_config().set_cir(meter.cir);
+    meter_entry.mut_config().set_pburst(meter.pburst);
+    meter_entry.mut_config().set_pir(meter.pir);
+    entity.set_meter_entry(meter_entry);
+    update.set_entity(entity);
+    write_request.mut_updates().push(update);
+    Ok(write_request)
 }
