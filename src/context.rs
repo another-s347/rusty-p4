@@ -26,6 +26,10 @@ use crate::error::*;
 use log::{info, trace, warn, debug, error};
 use futures03::compat::*;
 use bitfield::fmt::Debug;
+use crate::representation::{Device, DeviceType};
+use byteorder::BigEndian;
+use byteorder::ByteOrder;
+use bytes::Bytes;
 
 mod driver;
 mod netconfiguration;
@@ -63,13 +67,23 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
             trace!(target:"context","{:#?}",request);
             match request {
                 CoreRequest::AddDevice {
-                    name,
-                    address,
-                    device_id,
+                    device,
                     reply
                 } => {
-                    let bmv2connection = Bmv2SwitchConnection::new(&name, &address, device_id);
-                    obj.add_connection(bmv2connection).unwrap();
+                    let name = &device.name;
+                    match device.typ {
+                        DeviceType::MASTER {
+                            ref socket_addr,
+                            device_id
+                        } => {
+                            let bmv2connection = Bmv2SwitchConnection::new(name, socket_addr, device_id);
+                            obj.add_connection(bmv2connection).unwrap();
+                        },
+                        DeviceType::VIRTUAL {
+
+                        } => {}
+                    }
+                    obj.event_sender.unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device).into()));
                 }
                 CoreRequest::Event(e) => {
                     obj.event_sender.unbounded_send(CoreEvent::Event(e)).unwrap();
@@ -125,6 +139,7 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         });
 
         let name = connection.name.clone();
+        let packet_in_metaid = self.p4info_helper.packetin_ingress_id;
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
                 match update {
@@ -132,9 +147,13 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
                         debug!(target:"context", "StreaMessageResponse: {:#?}", masterUpdate);
                     }
                     StreamMessageResponse_oneof_update::packet(packet) => {
+                        let port = packet.metadata.iter()
+                            .find(|x|x.metadata_id==packet_in_metaid)
+                            .map(|x|BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
                         let x = PacketReceived {
                             packet,
-                            from: name.clone()
+                            from: name.clone(),
+                            port
                         };
                         packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
@@ -165,7 +184,7 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
             device_id: connection.device_id
         });
 
-        self.event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceAdded(connection.name).into()));
+        //self.event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceAdded(connection.name).into()));
 
         Ok(())
     }
@@ -178,7 +197,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn pack_out(&self, p4infoHelper:&P4InfoHelper, port:u32, packet:Vec<u8>) {
+    pub fn pack_out(&self, p4infoHelper:&P4InfoHelper, port:u32, packet:Bytes) {
         let request = packet_out_request(p4infoHelper, port, packet).unwrap();
         self.sink.unbounded_send(request).unwrap();
     }
@@ -213,10 +232,18 @@ impl<E> ContextHandle<E> where E:Debug {
     }
 
     pub fn add_device(&self, name:String, address:String, device_id:u64) {
-        self.sender.unbounded_send(CoreRequest::AddDevice {
+        let device = Device {
             name,
-            address,
+            ports: Default::default(),
+            typ: DeviceType::MASTER {
+                socket_addr: address,
+                device_id
+            },
             device_id,
+            index: 0
+        };
+        self.sender.unbounded_send(CoreRequest::AddDevice {
+            device,
             reply:None
         }).unwrap()
     }
@@ -225,7 +252,7 @@ impl<E> ContextHandle<E> where E:Debug {
         self.sender.unbounded_send(CoreRequest::Event(event)).unwrap();
     }
 
-    pub fn send_packet(&self, device:String, port:u32, packet:Vec<u8>) {
+    pub fn send_packet(&self, device:String, port:u32, packet:Bytes) {
         self.sender.unbounded_send(CoreRequest::PacketOut {
             device,
             port,

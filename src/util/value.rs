@@ -9,7 +9,7 @@ use std::fmt::Formatter;
 pub struct Value;
 
 pub struct MACString(pub String);
-#[derive(Eq,Hash,PartialEq)]
+#[derive(Eq,Hash,PartialEq,Clone,Copy)]
 pub struct MAC(pub [u8;6]);
 
 impl From<BytesMut> for MAC {

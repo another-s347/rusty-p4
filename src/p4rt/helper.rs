@@ -12,7 +12,8 @@ use crate::p4rt::pure::adjust_value;
 
 pub struct P4InfoHelper {
     pub p4info:P4Info,
-    pub packetout_egress_id: u32
+    pub packetout_egress_id: u32,
+    pub packetin_ingress_id: u32
 }
 
 impl P4InfoHelper {
@@ -21,9 +22,11 @@ impl P4InfoHelper {
         let mut is = protobuf::CodedInputStream::new(&mut file);
         let p4info = protobuf::parse_from_reader(&mut is).unwrap();
         let packetout_id = Self::get_packout_egress_port_metaid(&p4info).unwrap();
+        let packetin_id = Self::get_packin_egress_port_metaid(&p4info).unwrap();
         P4InfoHelper {
             p4info,
-            packetout_egress_id:packetout_id
+            packetout_egress_id:packetout_id,
+            packetin_ingress_id:packetin_id
         }
     }
 
@@ -174,6 +177,19 @@ impl P4InfoHelper {
         }).map(|x|{
             x.metadata.iter().find(|meta|{
                 meta.name=="egress_port"
+            }).map(|x|{
+                x.id
+            })
+        }).flatten()
+    }
+
+    pub fn get_packin_egress_port_metaid(p4info:&P4Info) -> Option<u32> {
+        p4info.get_controller_packet_metadata().iter().find(|p|{
+            let pre = p.preamble.as_ref().unwrap();
+            pre.name=="packet_in"
+        }).map(|x|{
+            x.metadata.iter().find(|meta|{
+                meta.name=="ingress_port"
             }).map(|x|{
                 x.id
             })

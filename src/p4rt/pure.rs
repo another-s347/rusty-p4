@@ -8,6 +8,7 @@ use byteorder::BigEndian;
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 use futures::{Sink, Future};
 use byteorder::ByteOrder;
+use bytes::Bytes;
 
 pub fn write_table_entry(client:&P4RuntimeClient, device_id:u64, table_entry: TableEntry) -> Result<()> {
     let mut request = crate::proto::p4runtime::WriteRequest::new();
@@ -40,10 +41,10 @@ pub fn adjust_value(value:Vec<u8>, bytes_len:usize) -> Vec<u8> {
     }
 }
 
-pub fn packet_out_request(p4info:&P4InfoHelper, egress_port:u32, packet:Vec<u8>) -> Result<(StreamMessageRequest,WriteFlags)> {
+pub fn packet_out_request(p4info:&P4InfoHelper, egress_port:u32, packet:Bytes) -> Result<(StreamMessageRequest,WriteFlags)> {
     let mut request = StreamMessageRequest::new();
     let mut packetOut = PacketOut::new();
-    packetOut.set_payload(packet);
+    packetOut.set_payload(packet.to_vec());
     let mut packetout_metadata = PacketMetadata::new();
     packetout_metadata.set_metadata_id(p4info.packetout_egress_id);
     let mut v = vec![0u8;4];

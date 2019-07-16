@@ -1,28 +1,28 @@
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 
-use hyper::{Body, Request, Response, Server as HyperServer, Server};
-use hyper::rt::{self, spawn};
-use hyper::server::Builder as HyperBuilder;
-use hyper::server::conn::{AddrIncoming, AddrStream};
-use hyper::service::{service_fn, make_service_fn, MakeService};
-use crate::app::common::CommonOperation;
-use crate::context::{Context, ContextHandle};
-use std::collections::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
-use crate::representation::{Device, DeviceType, Port, Interface};
-use crate::util::value::MAC;
-use crate::event::{Event, CoreRequest};
-use crate::p4rt::bmv2::Bmv2SwitchConnection;
+use bytes::{BufMut, BytesMut};
 use futures03::channel::mpsc::UnboundedSender;
-use futures03::task::SpawnExt;
 use futures03::compat::*;
 use futures03::FutureExt;
 use futures03::prelude::*;
-use log::{info, trace, warn, debug, error};
 use futures03::stream::Stream;
+use futures03::task::SpawnExt;
 use futures::future::ok;
-use bytes::{BytesMut, BufMut};
+use hyper::{Body, Request, Response, Server as HyperServer, Server};
 use hyper::body::Payload;
+use hyper::rt::{self, spawn};
+use hyper::server::Builder as HyperBuilder;
+use hyper::server::conn::{AddrIncoming, AddrStream};
+use hyper::service::{make_service_fn, MakeService, service_fn};
+use log::{debug, error, info, trace, warn};
+use serde::{Deserialize, Serialize};
+
+use crate::context::{Context, ContextHandle};
+use crate::event::{CoreRequest, Event, CommonEvents};
+use crate::p4rt::bmv2::Bmv2SwitchConnection;
+use crate::representation::{Device, DeviceType, Interface, Port};
+use crate::util::value::MAC;
 
 #[derive(Deserialize, Debug)]
 pub struct Netconfig {
@@ -120,21 +120,10 @@ pub async fn build_netconfig_server<E>(server: NetconfigServer, core_event_sende
                 }).map(move|x|{
                     let config:Netconfig = serde_json::from_slice(x.as_ref()).unwrap();
                     for device in config.to_devices() {
-                        match device.typ {
-                            DeviceType::MASTER {
-                                socket_addr,
-                                device_id
-                            } => {
-                                debug!(target: "netcfg", "send adddevice request");
-                                y.unbounded_send(CoreRequest::AddDevice {
-                                    name: device.name,
-                                    address: socket_addr,
-                                    device_id,
-                                    reply: None,
-                                }).unwrap();
-                            }
-                            _ => {}
-                        }
+                        y.unbounded_send(CoreRequest::AddDevice {
+                            device,
+                            reply: None,
+                        }).unwrap();
                     }
                 }));
                 futures03::future::ok::<Response<Body>, hyper::Error>(Response::new(Body::from("Hello World!")))

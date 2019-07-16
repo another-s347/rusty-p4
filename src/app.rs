@@ -51,8 +51,8 @@ impl p4App<CommonEvents> for Example {
 
     fn on_event(self:&mut Self, event:CommonEvents, ctx:&ContextHandle<CommonEvents>) {
         match event {
-            CommonEvents::DeviceAdded(device)=>{
-                info!(target:"Example App","device up {}", device);
+            CommonEvents::DeviceAdded(ref device)=>{
+                info!(target:"Example App","device up {:?}", device);
                 let flow_table = FlowTable {
                     name: "MyIngress.ipv4_lpm",
                     matches: &[
@@ -66,7 +66,7 @@ impl p4App<CommonEvents> for Example {
                     ]
                 };
                 let flow = Flow {
-                    device,
+                    device:device.name.to_string(),
                     table: flow_table,
                     action: flow_action,
                     priority: 0,
