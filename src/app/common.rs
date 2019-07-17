@@ -1,14 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::representation::{Device, DeviceType, Host};
-use crate::util::flow::{Flow, FlowOwned};
+use crate::app::graph::DefaultGraph;
 use crate::context::ContextHandle;
 use crate::event::Event;
+use crate::representation::{Device, DeviceType, Host, Link};
+use crate::util::flow::{Flow, FlowOwned};
 
 pub struct CommonState {
     pub devices: HashMap<String, Device>,
     pub flows: HashMap<String, HashSet<FlowOwned>>,
-    pub hosts: HashSet<Host>
+    pub hosts: HashSet<Host>,
+    pub graph: DefaultGraph,
+    pub links: HashSet<Link>,
 }
 
 impl CommonState {
@@ -16,44 +19,56 @@ impl CommonState {
         CommonState {
             devices: HashMap::new(),
             flows: HashMap::new(),
-            hosts: HashSet::new()
+            hosts: HashSet::new(),
+            graph: DefaultGraph::new(),
+            links: HashSet::new(),
         }
     }
 }
 
 impl CommonState {
-    pub fn merge_device(&mut self, mut info: Device) -> MergeResult<String>
-    {
+    pub fn merge_device(&mut self, mut info: Device) -> MergeResult<String> {
         let name = info.name.clone();
         if let Some(pre) = self.devices.get_mut(&name) {
             // merge ports
             unimplemented!()
-        }
-        else { // add device
+        } else {
+            // add device
+            self.graph.add_device(&info);
             self.devices.insert(info.name.clone(), info);
         }
         MergeResult::ADDED(name)
     }
 
-    pub fn merge_host(&mut self, info:Host) -> MergeResult<Host> {
+    pub fn merge_host(&mut self, info: Host) -> MergeResult<Host> {
         if let Some(other) = self.hosts.get(&info) {
-            if other.location!=info.location {
+            if other.location != info.location {
                 MergeResult::CONFLICT
-            }
-            else {
+            } else {
                 MergeResult::MERGED
             }
-        }
-        else {
+        } else {
             let result = info.clone();
             self.hosts.insert(info);
             MergeResult::ADDED(result)
         }
+    }
+
+    pub fn add_link(&mut self, link: Link, cost: u8) -> MergeResult<()> {
+        let result = self.graph.add_link(&link, cost);
+        match result {
+            MergeResult::CONFLICT => {}
+            MergeResult::ADDED(()) => {
+                self.links.insert(link);
+            }
+            MergeResult::MERGED => {}
+        }
+        result
     }
 }
 
 pub enum MergeResult<T> {
     ADDED(T),
     MERGED,
-    CONFLICT
+    CONFLICT,
 }

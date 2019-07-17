@@ -1,3 +1,4 @@
+use crate::app::common::MergeResult;
 use crate::representation::{ConnectPoint, Device, DeviceType, Link};
 use bitfield::fmt::{Debug, Display};
 use std::cmp::Ordering;
@@ -146,18 +147,22 @@ impl DefaultGraph {
         }
     }
 
-    pub fn add_link(&mut self, link: &Link, cost: u8) {
+    pub fn add_link(&mut self, link: &Link, cost: u8) -> MergeResult<()> {
         let one = *self.index_map.get(link.one.device.as_str()).unwrap();
         let two = *self.index_map.get(link.two.device.as_str()).unwrap();
         let key = if one <= two { (one, two) } else { (two, one) };
+        let mut result = MergeResult::ADDED(());
         if let Some((exist_link, exist_cost)) = self.link_map.get(&key) {
             if exist_link != link && *exist_cost < cost {
-                return;
+                return MergeResult::CONFLICT;
+            } else {
+                result = MergeResult::MERGED;
             }
         }
         self.link_map.insert(key, ((*link).clone(), cost));
         self.connectivity.set(one, two, cost);
         self.connectivity.set(two, one, cost);
+        result
     }
 
     pub fn get_path(&self, src: &Device, dst: &Device) -> Option<Path> {
@@ -220,93 +225,8 @@ impl DefaultGraph {
 }
 
 #[derive(Debug)]
-pub struct GenericGraph<K>
-where
-    K: Eq + Hash + Clone + Debug,
-{
-    connectivity: GraphBase<u8>,
-    index_map: HashMap<K, usize>,
-    node_count: usize,
-}
-
-#[derive(Debug)]
 pub struct Path {
     links: Vec<Link>,
-}
-
-pub struct ShortestPathStream {}
-
-impl<K> GenericGraph<K>
-where
-    K: Eq + Hash + Clone + Debug,
-{
-    pub fn new() -> GenericGraph<K> {
-        GenericGraph {
-            connectivity: GraphBase::with_capacity_and_usage(10, 5),
-            index_map: HashMap::new(),
-            node_count: 0,
-        }
-    }
-
-    pub fn add_node(&mut self, one: &K) {
-        if self.index_map.contains_key(one) {
-            return;
-        }
-        self.index_map.insert((*one).clone(), self.node_count);
-        self.node_count += 1;
-        if self.node_count > self.connectivity.n_usage {
-            self.connectivity
-                .incr_space(self.node_count - self.connectivity.n_usage);
-        }
-    }
-
-    pub fn add_link(&mut self, one: &K, two: &K, cost: u8) {
-        let one = *self.index_map.get(one).unwrap();
-        let two = *self.index_map.get(two).unwrap();
-        self.connectivity.set(one, two, cost);
-        self.connectivity.set(two, one, cost);
-    }
-
-    pub fn get_path(&self, src: &K, dst: &K) -> HashMap<usize, u8> {
-        let src = *self.index_map.get(src).unwrap();
-        let dst = *self.index_map.get(dst).unwrap();
-
-        let mut dist = HashMap::new();
-        dist.insert(src, 0);
-        let mut prev = HashMap::new();
-        let mut visited = HashSet::new();
-
-        let mut vertx_heap = BinaryHeap::new();
-        vertx_heap.push(ReversePrioritywithVertx {
-            vertx: src,
-            priority: 0,
-        });
-
-        while let Some(ReversePrioritywithVertx { vertx, priority }) = vertx_heap.pop() {
-            if !visited.insert(vertx) {
-                continue;
-            }
-
-            for i in 0..self.node_count {
-                if *self.connectivity.get(vertx, i) != 0 {
-                    let cost = *self.connectivity.get(vertx, i);
-                    let new_dist = priority + cost;
-                    let is_shorter = dist.get(&i).map_or(true, |&current| new_dist < current);
-
-                    if is_shorter {
-                        dist.insert(i, new_dist);
-                        prev.insert(i, vertx);
-                        vertx_heap.push(ReversePrioritywithVertx {
-                            vertx: i,
-                            priority: new_dist,
-                        })
-                    }
-                }
-            }
-        }
-        dbg!(prev);
-        dist
-    }
 }
 
 #[derive(Eq)]
@@ -348,25 +268,6 @@ fn test_incr() {
             assert_eq!(x + y * 3, *graph.get(x, y));
         }
     }
-}
-
-fn test_path() {
-    let mut graph: GenericGraph<u8> = GenericGraph::new();
-    graph.add_node(&0); // s
-    graph.add_node(&1); // t
-    graph.add_node(&2); // x
-    graph.add_node(&3); // y
-    graph.add_node(&4); // z
-    graph.add_link(&0, &1, 10);
-    graph.add_link(&0, &3, 5);
-    graph.add_link(&1, &3, 3);
-    graph.add_link(&1, &2, 1);
-    graph.add_link(&2, &4, 4);
-    graph.add_link(&3, &2, 9);
-    graph.add_link(&3, &4, 2);
-    graph.add_link(&4, &0, 7);
-    dbg!(&graph);
-    dbg!(graph.get_path(&0, &3));
 }
 
 #[test]

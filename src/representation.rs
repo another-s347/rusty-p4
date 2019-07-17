@@ -102,7 +102,7 @@ pub struct Meter {
     pub pir: i64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq)]
 pub struct Link {
     pub one: ConnectPoint,
     pub two: ConnectPoint,

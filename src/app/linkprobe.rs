@@ -10,7 +10,7 @@ use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use bytes::Bytes;
 use crate::util::packet::data::Data;
-use crate::representation::{Device, ConnectPoint, ConnectPointRef};
+use crate::representation::{Device, ConnectPoint, ConnectPointRef, Link};
 
 pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHandle<E>) where E:Event {
     let probe:Result<ConnectPointRef,serde_json::Error> = serde_json::from_slice(&data.0);
@@ -20,9 +20,11 @@ pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHan
             device: device_name,
             port
         };
-//        info!(target:"linkprobe","link detect {:?}<->{:?}",this,from);
         let from = from.to_owned();
-        ctx.send_event(CommonEvents::LinkDetected(this,from).into());
+        ctx.send_event(CommonEvents::LinkDetected(Link {
+            one: this,
+            two: from
+        }).into());
     }
     else {
         error!(target:"linkprobe","invalid probe == {:?}",probe);
