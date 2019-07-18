@@ -2,41 +2,43 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 
+use futures::future::{result, Future};
+use futures::sink::Sink;
+use futures::stream::Stream;
 use futures03::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures03::sink::SinkExt;
 use futures03::stream::StreamExt;
-use futures::future::{Future, result};
-use futures::sink::Sink;
-use futures::stream::Stream;
 use grpcio::{StreamingCallSink, WriteFlags};
-use tokio::runtime::Runtime;
 use tokio::runtime::current_thread::Handle;
+use tokio::runtime::Runtime;
 
 use crate::app::p4App;
 use crate::error::*;
+use crate::error::*;
+use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
-use crate::proto::p4runtime::{PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update, WriteRequest, Update, Uint128, Update_Type, Entity, MeterEntry, Index};
+use crate::p4rt::pure::{packet_out_request, set_meter_request, write_table_entry};
+use crate::proto::p4runtime::{
+    Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse,
+    StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest,
+};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::event::{PacketReceived, CoreEvent, CoreRequest, Event, CommonEvents};
-use crate::util::flow::Flow;
-use futures03::future::FutureExt;
-use crate::p4rt::pure::{write_table_entry, packet_out_request, set_meter_request};
-use crate::error::*;
-use log::{info, trace, warn, debug, error};
-use futures03::compat::*;
-use bitfield::fmt::Debug;
 use crate::representation::{Device, DeviceType, Meter};
+use crate::util::flow::Flow;
+use bitfield::fmt::Debug;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
+use futures03::compat::*;
+use futures03::future::FutureExt;
+use log::{debug, error, info, trace, warn};
 
 mod driver;
 mod netconfiguration;
 
 #[derive(Clone)]
-pub struct Context<E>
-{
+pub struct Context<E> {
     p4info_helper: Arc<P4InfoHelper>,
     pipeconf: String,
     core_channel_sender: UnboundedSender<CoreRequest<E>>,
@@ -44,10 +46,17 @@ pub struct Context<E>
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
-impl<E> Context<E> where E:Event + Clone + 'static + Send
+impl<E> Context<E>
+where
+    E: Event + Clone + 'static + Send,
 {
-    pub async fn try_new<T>(p4info_helper: P4InfoHelper, pipeconfig: String, mut app: T) -> Result<Context<E>>
-        where T: p4App<E> + Send + 'static
+    pub async fn try_new<T>(
+        p4info_helper: P4InfoHelper,
+        pipeconfig: String,
+        mut app: T,
+    ) -> Result<Context<E>>
+    where
+        T: p4App<E> + Send + 'static,
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
@@ -66,46 +75,43 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         let task = r.for_each(move |request| {
             trace!(target:"context","{:#?}",request);
             match request {
-                CoreRequest::AddDevice {
-                    device,
-                    reply
-                } => {
+                CoreRequest::AddDevice { device, reply } => {
                     let name = &device.name;
                     match device.typ {
                         DeviceType::MASTER {
                             ref socket_addr,
-                            device_id
+                            device_id,
                         } => {
-                            let bmv2connection = Bmv2SwitchConnection::new(name, socket_addr, device_id);
+                            let bmv2connection =
+                                Bmv2SwitchConnection::new(name, socket_addr, device_id);
                             obj.add_connection(bmv2connection).unwrap();
-                        },
-                        DeviceType::VIRTUAL {
-
-                        } => {}
+                        }
+                        DeviceType::VIRTUAL {} => {}
                     }
-                    obj.event_sender.unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device).into()));
+                    obj.event_sender
+                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device).into()));
                 }
                 CoreRequest::Event(e) => {
-                    obj.event_sender.unbounded_send(CoreEvent::Event(e)).unwrap();
+                    obj.event_sender
+                        .unbounded_send(CoreEvent::Event(e))
+                        .unwrap();
                 }
                 CoreRequest::PacketOut {
                     device,
                     port,
-                    packet
+                    packet,
                 } => {
                     if let Some(c) = obj.connections.write().unwrap().get_mut(&device) {
                         c.pack_out(&obj.p4info_helper, port, packet);
-                    }
-                    else {
+                    } else {
                         error!(target:"context","connection not found for device {}",device);
                     }
                 }
                 CoreRequest::SetMeter(meter) => {
                     if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
-                        let request = set_meter_request(&obj.p4info_helper,1,&meter).unwrap();
+                        let request = set_meter_request(&obj.p4info_helper, 1, &meter).unwrap();
                         c.p4runtime_client.write(&request);
-                    }
-                    else {
+                    } else {
                         error!(target:"context","connection not found for device {}",&meter.device);
                     }
                 }
@@ -117,7 +123,7 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         tokio::spawn(task);
         tokio::spawn(app_r.for_each(move |x| {
             match x {
-                CoreEvent::PacketReceived(packet)=>{
+                CoreEvent::PacketReceived(packet) => {
                     app.on_packet(packet, &context_handle);
                 }
                 CoreEvent::Event(e) => {
@@ -135,13 +141,23 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         Ok(result)
     }
 
-    pub fn get_handle(&mut self) -> ContextHandle<E> where E: Event {
-        ContextHandle::new(self.p4info_helper.clone(),self.core_channel_sender.clone(), self.connections.clone())
+    pub fn get_handle(&mut self) -> ContextHandle<E>
+    where
+        E: Event,
+    {
+        ContextHandle::new(
+            self.p4info_helper.clone(),
+            self.core_channel_sender.clone(),
+            self.connections.clone(),
+        )
     }
 
     pub fn add_connection(&mut self, mut connection: Bmv2SwitchConnection) -> Result<()> {
         connection.master_arbitration_update_async()?;
-        connection.set_forwarding_pipeline_config(&self.p4info_helper.p4info, Path::new(&self.pipeconf))?;
+        connection.set_forwarding_pipeline_config(
+            &self.p4info_helper.p4info,
+            Path::new(&self.pipeconf),
+        )?;
 
         let mut packet_s = self.event_sender.clone().compat().sink_map_err(|e| {
             dbg!(e);
@@ -183,15 +199,22 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
         }));
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
-        connection.client.spawn(sink_receiver.forward(connection.stream_channel_sink.sink_map_err(|e|{
-            dbg!(e);
-        })).map(|_|()));
+        connection.client.spawn(
+            sink_receiver
+                .forward(connection.stream_channel_sink.sink_map_err(|e| {
+                    dbg!(e);
+                }))
+                .map(|_| ()),
+        );
 
-        self.connections.write().unwrap().insert(connection.name.clone(), Connection {
-            p4runtime_client: connection.client,
-            sink: sink_sender,
-            device_id: connection.device_id
-        });
+        self.connections.write().unwrap().insert(
+            connection.name.clone(),
+            Connection {
+                p4runtime_client: connection.client,
+                sink: sink_sender,
+                device_id: connection.device_id,
+            },
+        );
 
         //self.event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceAdded(connection.name).into()));
 
@@ -201,12 +224,12 @@ impl<E> Context<E> where E:Event + Clone + 'static + Send
 
 pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
-    pub sink: futures::sync::mpsc::UnboundedSender<(StreamMessageRequest,WriteFlags)>,
-    pub device_id: u64
+    pub sink: futures::sync::mpsc::UnboundedSender<(StreamMessageRequest, WriteFlags)>,
+    pub device_id: u64,
 }
 
 impl Connection {
-    pub fn pack_out(&self, p4infoHelper:&P4InfoHelper, port:u32, packet:Bytes) {
+    pub fn pack_out(&self, p4infoHelper: &P4InfoHelper, port: u32, packet: Bytes) {
         let request = packet_out_request(p4infoHelper, port, packet).unwrap();
         self.sink.unbounded_send(request).unwrap();
     }
@@ -218,59 +241,72 @@ pub struct ContextHandle<E> {
     connections: Arc<RwLock<HashMap<String, Connection>>>,
 }
 
-impl<E> ContextHandle<E> where E:Debug {
-    pub fn new(p4info_helper:Arc<P4InfoHelper>,sender: UnboundedSender<CoreRequest<E>>, connections: Arc<RwLock<HashMap<String, Connection>>>) -> ContextHandle<E> {
+impl<E> ContextHandle<E>
+where
+    E: Debug,
+{
+    pub fn new(
+        p4info_helper: Arc<P4InfoHelper>,
+        sender: UnboundedSender<CoreRequest<E>>,
+        connections: Arc<RwLock<HashMap<String, Connection>>>,
+    ) -> ContextHandle<E> {
         ContextHandle {
             p4info_helper,
             sender,
-            connections
+            connections,
         }
     }
 
-    pub fn insert_flow(&self, flow:Flow) -> Result<()> {
+    pub fn insert_flow(&self, flow: Flow) -> Result<()> {
         let device = &flow.device;
+        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref());
         let connections = self.connections.read().unwrap();
         let device_client = connections.get(device);
-        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref());
         if let Some(connection) = device_client {
-            write_table_entry(&connection.p4runtime_client,connection.device_id,table_entry)
-        }
-        else {
+            write_table_entry(
+                &connection.p4runtime_client,
+                connection.device_id,
+                table_entry,
+            )
+        } else {
             Err(Box::new(ContextError::DeviceNotConnected(device.clone())))
         }
     }
 
-    pub fn add_device(&self, name:String, address:String, device_id:u64) {
+    pub fn add_device(&self, name: String, address: String, device_id: u64) {
         let device = Device {
             name,
             ports: Default::default(),
             typ: DeviceType::MASTER {
                 socket_addr: address,
-                device_id
+                device_id,
             },
             device_id,
-            index: 0
+            index: 0,
         };
-        self.sender.unbounded_send(CoreRequest::AddDevice {
-            device,
-            reply:None
-        }).unwrap()
+        self.sender
+            .unbounded_send(CoreRequest::AddDevice {
+                device,
+                reply: None,
+            })
+            .unwrap()
     }
 
-    pub fn send_event(&self, event:E) {
-        self.sender.unbounded_send(CoreRequest::Event(event)).unwrap();
+    pub fn send_event(&self, event: E) {
+        self.sender
+            .unbounded_send(CoreRequest::Event(event))
+            .unwrap();
     }
 
-    pub fn send_packet(&self, device:String, port:u32, packet:Bytes) {
-        self.sender.unbounded_send(CoreRequest::PacketOut {
-            device,
-            port,
-            packet
-        }).unwrap();
+    pub fn send_packet(&self, device: String, port: u32, packet: Bytes) {
+        self.sender
+            .unbounded_send(CoreRequest::PacketOut {
+                device,
+                port,
+                packet,
+            })
+            .unwrap();
     }
 
-    pub fn set_meter(&self, meter:Meter) {
-
-    }
+    pub fn set_meter(&self, meter: Meter) {}
 }
-

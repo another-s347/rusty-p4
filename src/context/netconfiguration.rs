@@ -63,7 +63,7 @@ impl Netconfig {
                 let interface = Interface {
                     name: port.interface.name.clone(),
                     ip: None,
-                    mac: Some(MAC::of(port.interface.mac.clone()))
+                    mac: Some(MAC::of(&port.interface.mac))
                 };
                 Port {
                     number: port.number,

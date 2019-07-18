@@ -227,7 +227,7 @@ impl DefaultGraph {
 
 #[derive(Debug)]
 pub struct Path {
-    links: Vec<Link>,
+    pub links: Vec<Link>,
 }
 
 #[derive(Eq)]

@@ -21,7 +21,7 @@ impl From<BytesMut> for MAC {
 }
 
 impl MAC {
-    pub fn of(s: String) -> MAC {
+    pub fn of(s: &str) -> MAC {
         let vec = hex::decode(s.replace(':', "")).unwrap();
         MAC(vec_to_mac(vec))
     }
@@ -145,8 +145,8 @@ impl Encode for u16 {
     }
 }
 
-impl Encode for MACString {
+impl Encode for MAC {
     fn encode(&self) -> Vec<u8> {
-        hex::decode(self.0.replace(':', "")).unwrap()
+        self.0.to_vec()
     }
 }
