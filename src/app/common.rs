@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::app::graph::DefaultGraph;
 use crate::context::ContextHandle;
 use crate::event::Event;
-use crate::representation::{Device, DeviceType, Host, Link};
+use crate::representation::{ConnectPoint, Device, DeviceType, Host, Interface, Link};
 use crate::util::flow::{Flow, FlowOwned};
 
 pub struct CommonState {
@@ -64,6 +64,16 @@ impl CommonState {
             MergeResult::MERGED => {}
         }
         result
+    }
+
+    pub fn get_interface_by_cp(&self, cp: &ConnectPoint) -> Option<&Interface> {
+        self.devices
+            .get(&cp.device)
+            .iter()
+            .flat_map(|dev| dev.ports.iter())
+            .find(|port| port.number == cp.port)
+            .map(|port| port.interface.as_ref())
+            .flatten()
     }
 }
 

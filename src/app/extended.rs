@@ -20,10 +20,16 @@ pub trait p4AppExtended<E> {
         state: &CommonState,
     ) {
     }
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) {}
-    fn on_host_added(self: &mut Self, host: &Host, ctx: &ContextHandle<E>) {}
-    fn on_device_added(self: &mut Self, device: &Device, ctx: &ContextHandle<E>) {}
-    fn on_link_added(self: &mut Self, link: &Link, ctx: &ContextHandle<E>) {}
+    fn on_event(self: &mut Self, event: E, state: &CommonState, ctx: &ContextHandle<E>) {}
+    fn on_host_added(self: &mut Self, host: &Host, state: &CommonState, ctx: &ContextHandle<E>) {}
+    fn on_device_added(
+        self: &mut Self,
+        device: &Device,
+        state: &CommonState,
+        ctx: &ContextHandle<E>,
+    ) {
+    }
+    fn on_link_added(self: &mut Self, link: &Link, state: &CommonState, ctx: &ContextHandle<E>) {}
 }
 
 pub struct p4AppExtendedCore<A, E> {
@@ -74,7 +80,7 @@ where
                         let device = self.common.devices.get(&name).unwrap();
                         linkprobe::on_device_added(&device, ctx);
                         proxyarp::on_device_added(&device, ctx);
-                        self.extension.on_device_added(&device, ctx);
+                        self.extension.on_device_added(&device, &self.common, ctx);
                     }
                     _ => unimplemented!(),
                 }
@@ -84,7 +90,7 @@ where
                 match result {
                     MergeResult::ADDED(host) => {
                         info!(target:"extend","host detected {:?}",host);
-                        self.extension.on_host_added(&host, ctx);
+                        self.extension.on_host_added(&host, &self.common, ctx);
                     }
                     MergeResult::CONFLICT => {}
                     MergeResult::MERGED => {}
@@ -94,7 +100,7 @@ where
                 let result = self.common.add_link(link.clone(), 1);
                 match result {
                     MergeResult::ADDED(()) => {
-                        self.extension.on_link_added(&link, ctx);
+                        self.extension.on_link_added(&link, &self.common, ctx);
                     }
                     MergeResult::CONFLICT => {}
                     MergeResult::MERGED => {}
@@ -102,7 +108,7 @@ where
             }
             _ => {}
         };
-        self.extension.on_event(event, ctx);
+        self.extension.on_event(event, &self.common, ctx);
     }
 }
 
