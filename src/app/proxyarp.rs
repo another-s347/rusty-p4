@@ -1,23 +1,29 @@
+use crate::app::common::CommonState;
 use crate::context::ContextHandle;
-use crate::event::{Event, CoreRequest, CommonEvents};
-use std::time::Duration;
+use crate::event::{CommonEvents, CoreRequest, Event};
+use crate::representation::{ConnectPoint, Device, Host};
+use crate::util::flow::{Flow, FlowAction, FlowTable};
+use crate::util::packet::arp::ETHERNET_TYPE_ARP;
+use crate::util::packet::data::Data;
+use crate::util::packet::Packet;
+use crate::util::packet::{arp::ArpOp, Arp, Ethernet};
+use crate::util::value::{Value, MAC};
+use bytes::Bytes;
 use futures::prelude::*;
 use futures03::prelude::*;
-use log::{info, trace, warn, debug, error};
-use crate::util::flow::{Flow, FlowTable, FlowAction};
-use crate::util::value::{Value, MAC};
-use crate::util::packet::{Ethernet, Arp, arp::{
-    ArpOp
-}};
-use crate::util::packet::Packet;
-use bytes::Bytes;
-use crate::util::packet::data::Data;
-use crate::util::packet::arp::ETHERNET_TYPE_ARP;
-use crate::representation::{Device, ConnectPoint, Host};
-use crate::app::common::CommonState;
+use log::{debug, error, info, trace, warn};
+use std::time::Duration;
 
-pub fn on_arp_received<E>(device:&Device, port:u32, data:Data,state:&CommonState,ctx:&ContextHandle<E>) where E:Event {
-    let arp = Arp::from_bytes(data.0.into());
+pub fn on_arp_received<E>(
+    device: &Device,
+    port: u32,
+    data: Data,
+    state: &CommonState,
+    ctx: &ContextHandle<E>,
+) where
+    E: Event,
+{
+    let arp = Arp::from_bytes(data.clone().0.into());
     if arp.is_none() {
         error!(target:"proxyarp","invalid arp packet");
         return;
@@ -27,17 +33,17 @@ pub fn on_arp_received<E>(device:&Device, port:u32, data:Data,state:&CommonState
         ArpOp::Request => {
             let cp = ConnectPoint {
                 device: device.name.clone(),
-                port
+                port,
             };
             let host = Host {
                 mac: arp.sender_mac,
                 ip: arp.sender_ip.into(),
-                location: cp
+                location: cp,
             };
             if !state.hosts.contains(&host) {
                 ctx.send_event(CommonEvents::HostDetected(host).into());
             }
-            if let Some(arp_target) = state.hosts.iter().find(|x|x.ip==arp.target_ip) {
+            if let Some(arp_target) = state.hosts.iter().find(|x| x.ip == arp.target_ip) {
                 let arp_reply = Arp {
                     hw_type: 1,
                     proto_type: 0x800,
@@ -47,57 +53,88 @@ pub fn on_arp_received<E>(device:&Device, port:u32, data:Data,state:&CommonState
                     sender_mac: arp_target.mac,
                     sender_ip: arp_target.ip,
                     target_mac: arp.sender_mac,
-                    target_ip: arp.sender_ip
+                    target_ip: arp.sender_ip,
                 };
                 let packet = Ethernet {
                     src: arp_target.mac,
                     dst: arp.sender_mac,
                     ether_type: 0x806,
-                    payload: arp_reply
-                }.into_bytes();
-                ctx.sender.unbounded_send(CoreRequest::PacketOut {
-                    device: device.name.clone(),
-                    port,
-                    packet
-                }).unwrap();
+                    payload: arp_reply,
+                }
+                .into_bytes();
+                ctx.sender
+                    .unbounded_send(CoreRequest::PacketOut {
+                        device: device.name.clone(),
+                        port,
+                        packet,
+                    })
+                    .unwrap();
+            } else {
+                let packet = Ethernet {
+                    src: arp.sender_mac,
+                    dst: MAC::broadcast(),
+                    ether_type: 0x806,
+                    payload: data,
+                }
+                .into_bytes();
+                state
+                    .devices
+                    .iter()
+                    .filter(|(p, _)| p != &&device.name)
+                    .for_each(|(_, d)| {
+                        for x in &d.ports {
+                            ctx.sender
+                                .unbounded_send(CoreRequest::PacketOut {
+                                    device: d.name.clone(),
+                                    port: x.number,
+                                    packet: packet.clone(),
+                                })
+                                .unwrap();
+                        }
+                    });
             }
         }
-        ArpOp::Reply=> {
+        ArpOp::Reply => {
             let cp = ConnectPoint {
                 device: device.name.clone(),
-                port
+                port,
             };
             let host = Host {
                 mac: arp.sender_mac,
                 ip: arp.sender_ip.into(),
-                location: cp
+                location: cp,
             };
             ctx.send_event(CommonEvents::HostDetected(host).into());
         }
-        ArpOp::Unknown(op)=>{
+        ArpOp::Unknown(op) => {
             error!(target:"proxyarp","unknown arp op code: {}", op);
         }
     }
 }
 
-pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(device: &Device, ctx: &ContextHandle<E>)
+where
+    E: Event,
 {
-    new_arp_interceptor(&device.name,ctx);
+    new_arp_interceptor(&device.name, ctx);
 }
 
-pub fn new_arp_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:Event {
+pub fn new_arp_interceptor<E>(device_name: &str, ctx: &ContextHandle<E>)
+where
+    E: Event,
+{
     let flow = Flow {
         device: device_name.to_owned(),
         table: FlowTable {
             name: "IngressPipeImpl.acl",
-            matches: &[("hdr.ethernet.ether_type",Value::EXACT(ETHERNET_TYPE_ARP))]
+            matches: &[("hdr.ethernet.ether_type", Value::EXACT(ETHERNET_TYPE_ARP))],
         },
         action: FlowAction {
             name: "send_to_cpu",
-            params: &[]
+            params: &[],
         },
         priority: 4000,
-        metadata: 0
+        metadata: 0,
     };
     ctx.insert_flow(flow);
 }

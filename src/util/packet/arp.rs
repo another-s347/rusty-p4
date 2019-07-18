@@ -1,29 +1,29 @@
 use crate::util::packet::Packet;
-use bytes::{BytesMut, Bytes, BufMut};
-use byteorder::ByteOrder;
 use crate::util::value::MAC;
+use byteorder::ByteOrder;
+use bytes::{BufMut, Bytes, BytesMut};
 use std::net::Ipv4Addr;
 
-pub const ETHERNET_TYPE_ARP:u16 = 0x806;
+pub const ETHERNET_TYPE_ARP: u16 = 0x806;
 
 #[derive(Debug, Clone)]
 pub struct Arp {
-    pub hw_type:u16,
-    pub proto_type:u16,
-    pub hw_addr_len:u8,
-    pub proto_addr_len:u8,
-    pub opcode:ArpOp,
-    pub sender_mac:MAC,
-    pub sender_ip:Ipv4Addr,
-    pub target_mac:MAC,
-    pub target_ip:Ipv4Addr
+    pub hw_type: u16,
+    pub proto_type: u16,
+    pub hw_addr_len: u8,
+    pub proto_addr_len: u8,
+    pub opcode: ArpOp,
+    pub sender_mac: MAC,
+    pub sender_ip: Ipv4Addr,
+    pub target_mac: MAC,
+    pub target_ip: Ipv4Addr,
 }
 
 #[derive(Clone, Debug)]
 pub enum ArpOp {
     Request,
     Reply,
-    Unknown(u16)
+    Unknown(u16),
 }
 
 impl From<u16> for ArpOp {
@@ -31,7 +31,7 @@ impl From<u16> for ArpOp {
         match op {
             0x1 => ArpOp::Request,
             0x2 => ArpOp::Reply,
-            other=>ArpOp::Unknown(other)
+            other => ArpOp::Unknown(other),
         }
     }
 }
@@ -39,9 +39,9 @@ impl From<u16> for ArpOp {
 impl Into<u16> for ArpOp {
     fn into(self) -> u16 {
         match self {
-            ArpOp::Unknown(o)=>o,
-            ArpOp::Reply=>0x2,
-            ArpOp::Request=>0x1
+            ArpOp::Unknown(o) => o,
+            ArpOp::Reply => 0x2,
+            ArpOp::Request => 0x1,
         }
     }
 }
@@ -71,7 +71,7 @@ impl Packet for Arp {
             sender_mac,
             sender_ip,
             target_mac,
-            target_ip
+            target_ip,
         })
     }
 
@@ -82,11 +82,15 @@ impl Packet for Arp {
         buffer.put_u8(self.hw_addr_len);
         buffer.put_u8(self.proto_addr_len);
         buffer.put_u16_be(self.opcode.into());
+        buffer.put_slice(&self.sender_mac.0);
+        buffer.put_slice(&self.sender_ip.octets());
+        buffer.put_slice(&self.target_mac.0);
+        buffer.put_slice(&self.target_ip.octets());
         buffer.freeze()
     }
 }
 
-fn bytes_to_ipv4(bytes:BytesMut) -> Ipv4Addr {
+fn bytes_to_ipv4(bytes: BytesMut) -> Ipv4Addr {
     let mut src = [0u8; 4];
     for (i, src) in src.iter_mut().enumerate() {
         *src = *bytes.get(i).unwrap();
