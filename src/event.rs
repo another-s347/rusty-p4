@@ -31,7 +31,7 @@ pub enum CoreRequest<E> {
     SetMeter(Meter),
 }
 
-pub trait Event: Debug + Send + 'static + From<CommonEvents> + Into<CommonEvents> {}
+pub trait Event: Clone + Debug + Send + 'static + From<CommonEvents> + Into<CommonEvents> {}
 
 impl Event for CommonEvents {}
 

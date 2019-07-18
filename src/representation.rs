@@ -104,19 +104,18 @@ pub struct Meter {
 
 #[derive(Clone, Hash, Eq)]
 pub struct Link {
-    pub one: ConnectPoint,
-    pub two: ConnectPoint,
+    pub src: ConnectPoint,
+    pub dst: ConnectPoint,
 }
 
 impl Debug for Link {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "{:?}<->{:?}", self.one, self.two)
+        write!(f, "{:?}->{:?}", self.src, self.dst)
     }
 }
 
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
-        (self.one == other.one && self.two == other.two)
-            || (self.one == other.two && self.two == other.one)
+        self.src == other.src && self.dst == other.dst
     }
 }

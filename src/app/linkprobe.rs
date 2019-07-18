@@ -22,8 +22,8 @@ pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHan
         };
         let from = from.to_owned();
         ctx.send_event(CommonEvents::LinkDetected(Link {
-            one: this,
-            two: from
+            src: from,
+            dst: this
         }).into());
     }
     else {
@@ -47,7 +47,7 @@ pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
         let name = device_name.to_owned();
         let task = tokio::spawn(async move {
             while let Some(s) = interval.next().await {
-//                trace!(target:"linkprobe","device probe {}", &name);
+//                info!(target:"linkprobe","device probe {}", &name);
                 my_sender.send(CoreRequest::PacketOut {
                     device: name.clone(),
                     port,

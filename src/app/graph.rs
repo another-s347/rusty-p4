@@ -148,9 +148,9 @@ impl DefaultGraph {
     }
 
     pub fn add_link(&mut self, link: &Link, cost: u8) -> MergeResult<()> {
-        let one = *self.index_map.get(link.one.device.as_str()).unwrap();
-        let two = *self.index_map.get(link.two.device.as_str()).unwrap();
-        let key = if one <= two { (one, two) } else { (two, one) };
+        let one = *self.index_map.get(link.src.device.as_str()).unwrap();
+        let two = *self.index_map.get(link.dst.device.as_str()).unwrap();
+        let key = (one, two);
         let mut result = MergeResult::ADDED(());
         if let Some((exist_link, exist_cost)) = self.link_map.get(&key) {
             if exist_link != link && *exist_cost < cost {
@@ -161,13 +161,12 @@ impl DefaultGraph {
         }
         self.link_map.insert(key, ((*link).clone(), cost));
         self.connectivity.set(one, two, cost);
-        self.connectivity.set(two, one, cost);
         result
     }
 
-    pub fn get_path(&self, src: &Device, dst: &Device) -> Option<Path> {
-        let src = *self.index_map.get(src.name.as_str()).unwrap();
-        let dst = *self.index_map.get(dst.name.as_str()).unwrap();
+    pub fn get_path(&self, src: &str, dst: &str) -> Option<Path> {
+        let src = *self.index_map.get(src).unwrap();
+        let dst = *self.index_map.get(dst).unwrap();
 
         let mut dist = HashMap::new();
         dist.insert(src, 0);
@@ -206,10 +205,12 @@ impl DefaultGraph {
             let mut lists = Vec::new();
             let mut one = p;
             let mut two = dst;
+            let mut c = 0;
             loop {
-                let key = if one < two { (one, two) } else { (two, one) };
-                let (link, _) = self.link_map.get(&key).unwrap();
+                let key = (one, two);
+                let (link, cost) = self.link_map.get(&key).unwrap();
                 lists.push(link.clone());
+                c += cost;
                 if one == src {
                     break;
                 }
@@ -334,62 +335,62 @@ fn test_defaultgraph() {
     graph.add_device(&d3);
     graph.add_device(&d4);
     let link = Link {
-        one: cp0.clone(),
-        two: cp1.clone(),
+        src: cp0.clone(),
+        dst: cp1.clone(),
     };
     graph.add_link(
         &Link {
-            one: cp0.clone(),
-            two: cp1.clone(),
+            src: cp0.clone(),
+            dst: cp1.clone(),
         },
         10,
     );
     graph.add_link(
         &Link {
-            one: cp0.clone(),
-            two: cp3.clone(),
+            src: cp0.clone(),
+            dst: cp3.clone(),
         },
         5,
     );
     graph.add_link(
         &Link {
-            one: cp1.clone(),
-            two: cp3.clone(),
+            src: cp1.clone(),
+            dst: cp3.clone(),
         },
         3,
     );
     graph.add_link(
         &Link {
-            one: cp1.clone(),
-            two: cp2.clone(),
+            src: cp1.clone(),
+            dst: cp2.clone(),
         },
         1,
     );
     graph.add_link(
         &Link {
-            one: cp2.clone(),
-            two: cp4.clone(),
+            src: cp2.clone(),
+            dst: cp4.clone(),
         },
         4,
     );
     graph.add_link(
         &Link {
-            one: cp3.clone(),
-            two: cp2.clone(),
+            src: cp3.clone(),
+            dst: cp2.clone(),
         },
         9,
     );
     graph.add_link(
         &Link {
-            one: cp3.clone(),
-            two: cp4.clone(),
+            src: cp3.clone(),
+            dst: cp4.clone(),
         },
         2,
     );
     graph.add_link(
         &Link {
-            one: cp4.clone(),
-            two: cp0.clone(),
+            src: cp4.clone(),
+            dst: cp0.clone(),
         },
         7,
     );
