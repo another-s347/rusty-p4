@@ -1,5 +1,5 @@
 use crate::proto::p4runtime::PacketIn;
-use crate::representation::{ConnectPoint, Device, Host, Link, Meter};
+use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link, Meter};
 use bitfield::fmt::Debug;
 use bytes::{Bytes, BytesMut};
 use std::sync::Arc;
@@ -12,8 +12,7 @@ pub enum CoreEvent<E> {
 #[derive(Debug, Clone)]
 pub struct PacketReceived {
     pub packet: PacketIn,
-    pub from: String,
-    pub port: u32,
+    pub from: ConnectPoint,
 }
 
 #[derive(Debug)]
@@ -24,8 +23,7 @@ pub enum CoreRequest<E> {
     },
     Event(E),
     PacketOut {
-        device: String,
-        port: u32,
+        connect_point: ConnectPoint,
         packet: Bytes,
     },
     SetMeter(Meter),
@@ -39,6 +37,7 @@ impl Event for CommonEvents {}
 pub enum CommonEvents {
     DeviceAdded(Device),
     DeviceUpdate(Device),
+    DeviceLost(DeviceID),
     LinkDetected(Link),
     HostDetected(Host),
     Other {},

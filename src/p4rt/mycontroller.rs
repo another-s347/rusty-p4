@@ -12,8 +12,8 @@ pub fn run() {
         "/home/skye/tutorials/exercises/p4runtime/build/advanced_tunnel.p4.p4info.bin",
     ));
     let bmv2_file = "/home/skye/tutorials/exercises/p4runtime/build/advanced_tunnel.json";
-    let mut s1 = Bmv2SwitchConnection::new("s1", "127.0.0.1:50051", 0);
-    let mut s2 = Bmv2SwitchConnection::new("s2", "127.0.0.1:50052", 1);
+    let mut s1 = Bmv2SwitchConnection::new_without_id("s1", "127.0.0.1:50051", 0);
+    let mut s2 = Bmv2SwitchConnection::new_without_id("s2", "127.0.0.1:50052", 1);
 
     s1.master_arbitration_update_async();
     s2.master_arbitration_update_async();

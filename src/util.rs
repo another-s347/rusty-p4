@@ -6,7 +6,10 @@ pub mod flow;
 pub mod packet;
 pub mod value;
 
-pub fn hash_flow(obj: &Flow) -> u64 {
+pub fn hash<T>(obj: T) -> u64
+where
+    T: Hash,
+{
     let mut hasher = DefaultHasher::new();
     obj.hash(&mut hasher);
     hasher.finish()

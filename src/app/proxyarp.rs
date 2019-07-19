@@ -1,7 +1,7 @@
 use crate::app::common::CommonState;
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, CoreRequest, Event};
-use crate::representation::{ConnectPoint, Device, Host};
+use crate::representation::{ConnectPoint, Device, DeviceID, Host};
 use crate::util::flow::{Flow, FlowAction, FlowTable};
 use crate::util::packet::arp::ETHERNET_TYPE_ARP;
 use crate::util::packet::data::Data;
@@ -16,7 +16,7 @@ use std::time::Duration;
 
 pub fn on_arp_received<E>(
     device: &Device,
-    port: u32,
+    cp: ConnectPoint,
     data: Data,
     state: &CommonState,
     ctx: &ContextHandle<E>,
@@ -31,10 +31,6 @@ pub fn on_arp_received<E>(
     let arp = arp.unwrap();
     match arp.opcode {
         ArpOp::Request => {
-            let cp = ConnectPoint {
-                device: device.name.clone(),
-                port,
-            };
             let host = Host {
                 mac: arp.sender_mac,
                 ip: arp.sender_ip.into(),
@@ -64,8 +60,7 @@ pub fn on_arp_received<E>(
                 .into_bytes();
                 ctx.sender
                     .unbounded_send(CoreRequest::PacketOut {
-                        device: device.name.clone(),
-                        port,
+                        connect_point: cp,
                         packet,
                     })
                     .unwrap();
@@ -80,13 +75,12 @@ pub fn on_arp_received<E>(
                 state
                     .devices
                     .iter()
-                    .filter(|(p, _)| p != &&device.name)
+                    .filter(|(p, _)| p != &&device.id)
                     .for_each(|(_, d)| {
                         for x in &d.ports {
                             ctx.sender
                                 .unbounded_send(CoreRequest::PacketOut {
-                                    device: d.name.clone(),
-                                    port: x.number,
+                                    connect_point: cp,
                                     packet: packet.clone(),
                                 })
                                 .unwrap();
@@ -95,10 +89,6 @@ pub fn on_arp_received<E>(
             }
         }
         ArpOp::Reply => {
-            let cp = ConnectPoint {
-                device: device.name.clone(),
-                port,
-            };
             let host = Host {
                 mac: arp.sender_mac,
                 ip: arp.sender_ip.into(),
@@ -116,15 +106,15 @@ pub fn on_device_added<E>(device: &Device, ctx: &ContextHandle<E>)
 where
     E: Event,
 {
-    new_arp_interceptor(&device.name, ctx);
+    new_arp_interceptor(device.id, ctx);
 }
 
-pub fn new_arp_interceptor<E>(device_name: &str, ctx: &ContextHandle<E>)
+pub fn new_arp_interceptor<E>(device_id: DeviceID, ctx: &ContextHandle<E>)
 where
     E: Event,
 {
     let flow = Flow {
-        device: device_name,
+        device: device_id,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
             matches: &[("hdr.ethernet.ether_type", Value::EXACT(ETHERNET_TYPE_ARP))],

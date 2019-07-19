@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::context::{Context, ContextHandle};
 use crate::event::{CoreRequest, Event, CommonEvents};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
-use crate::representation::{Device, DeviceType, Interface, Port};
+use crate::representation::{Device, DeviceType, Interface, Port, DeviceID};
 use crate::util::value::MAC;
 
 #[derive(Deserialize, Debug)]
@@ -57,24 +57,28 @@ pub struct NetconfigDeviceInterface {
 }
 
 impl Netconfig {
-    pub fn to_devices(&self) -> Vec<Device> {
-        self.devices.iter().map(|(name,device_config)|{
-            let ports:HashSet<Port> = device_config.ports.iter().map(|(port_name,port)|{
+    pub fn into_devices(self) -> Vec<Device> {
+        let mut devices = self.devices;
+        devices.drain().map(|(name,mut device_config)|{
+            let ports:HashSet<Port> = device_config.ports.drain().map(|(port_name,port)|{
                 let interface = Interface {
-                    name: port.interface.name.clone(),
+                    name: port.interface.name,
                     ip: None,
                     mac: Some(MAC::of(&port.interface.mac))
                 };
                 Port {
+                    name: port_name,
                     number: port.number,
                     interface: Some(interface)
                 }
             }).collect();
+            let id=DeviceID(crate::util::hash(&name));
             Device {
-                name: name.clone(),
+                id,
+                name,
                 ports,
                 typ: DeviceType::MASTER {
-                    socket_addr: device_config.basic.socket_addr.clone(),
+                    socket_addr: device_config.basic.socket_addr,
                     device_id: device_config.basic.device_id
                 },
                 device_id: device_config.basic.device_id,
@@ -119,7 +123,7 @@ pub async fn build_netconfig_server<E>(server: NetconfigServer, core_event_sende
                     futures03::future::ready(x)
                 }).map(move|x|{
                     let config:Netconfig = serde_json::from_slice(x.as_ref()).unwrap();
-                    for device in config.to_devices() {
+                    for device in config.into_devices() {
                         y.unbounded_send(CoreRequest::AddDevice {
                             device,
                             reply: None,

@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use crate::app::graph::DefaultGraph;
 use crate::context::ContextHandle;
 use crate::event::Event;
-use crate::representation::{ConnectPoint, Device, DeviceType, Host, Interface, Link};
+use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
 use crate::util::flow::{Flow, FlowOwned};
 
 pub struct CommonState {
-    pub devices: HashMap<String, Device>,
-    pub flows: HashMap<String, HashSet<FlowOwned>>,
+    pub devices: HashMap<DeviceID, Device>,
+    pub flows: HashMap<u64, HashSet<FlowOwned>>,
     pub hosts: HashSet<Host>,
     pub graph: DefaultGraph,
     pub links: HashSet<Link>,
@@ -27,17 +27,17 @@ impl CommonState {
 }
 
 impl CommonState {
-    pub fn merge_device(&mut self, mut info: Device) -> MergeResult<String> {
-        let name = info.name.clone();
-        if let Some(pre) = self.devices.get_mut(&name) {
+    pub fn merge_device(&mut self, mut info: Device) -> MergeResult<DeviceID> {
+        let id = info.id;
+        if let Some(pre) = self.devices.get_mut(&id) {
             // merge ports
             unimplemented!()
         } else {
             // add device
             self.graph.add_device(&info);
-            self.devices.insert(info.name.clone(), info);
+            self.devices.insert(id, info);
         }
-        MergeResult::ADDED(name)
+        MergeResult::ADDED(id)
     }
 
     pub fn merge_host(&mut self, info: Host) -> MergeResult<Host> {

@@ -65,7 +65,7 @@ impl p4App<CommonEvents> for Example {
                     params: &[("dst_id", ParamValue::of(100u32))],
                 };
                 let flow = Flow {
-                    device: &device.name,
+                    device: device.id,
                     table: flow_table,
                     action: flow_action,
                     priority: 0,

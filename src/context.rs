@@ -24,7 +24,7 @@ use crate::proto::p4runtime::{
     StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest,
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::representation::{Device, DeviceType, Meter};
+use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
 use crate::util::flow::{Flow, FlowOwned};
 use bitfield::fmt::Debug;
 use byteorder::BigEndian;
@@ -43,7 +43,8 @@ pub struct Context<E> {
     pipeconf: String,
     core_channel_sender: UnboundedSender<CoreRequest<E>>,
     event_sender: UnboundedSender<CoreEvent<E>>,
-    connections: Arc<RwLock<HashMap<String, Connection>>>,
+    connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+    id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
 }
 
 impl<E> Context<E>
@@ -68,6 +69,7 @@ where
             core_channel_sender: s,
             event_sender: app_s,
             connections: Arc::new(RwLock::new(HashMap::new())),
+            id_to_name: Arc::new(RwLock::new(HashMap::new())),
         };
         let context_handle = obj.get_handle();
 
@@ -83,7 +85,7 @@ where
                             device_id,
                         } => {
                             let bmv2connection =
-                                Bmv2SwitchConnection::new(name, socket_addr, device_id);
+                                Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
                             obj.add_connection(bmv2connection).unwrap();
                         }
                         DeviceType::VIRTUAL {} => {}
@@ -97,14 +99,19 @@ where
                         .unwrap();
                 }
                 CoreRequest::PacketOut {
-                    device,
-                    port,
+                    connect_point,
                     packet,
                 } => {
-                    if let Some(c) = obj.connections.write().unwrap().get_mut(&device) {
-                        c.pack_out(&obj.p4info_helper, port, packet);
+                    if let Some(c) = obj
+                        .connections
+                        .write()
+                        .unwrap()
+                        .get_mut(&connect_point.device)
+                    {
+                        c.pack_out(&obj.p4info_helper, connect_point.port, packet);
                     } else {
-                        error!(target:"context","connection not found for device {}",device);
+                        // find device name
+                        error!(target:"context","connection not found for device {:?}", connect_point.device);
                     }
                 }
                 CoreRequest::SetMeter(meter) => {
@@ -112,7 +119,7 @@ where
                         let request = set_meter_request(&obj.p4info_helper, 1, &meter).unwrap();
                         c.p4runtime_client.write(&request);
                     } else {
-                        error!(target:"context","connection not found for device {}",&meter.device);
+                        error!(target:"context","connection not found for device {:?}",&meter.device);
                     }
                 }
             }
@@ -164,6 +171,7 @@ where
         });
 
         let name = connection.name.clone();
+        let id = connection.inner_id;
         let packet_in_metaid = self.p4info_helper.packetin_ingress_id;
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
@@ -177,8 +185,10 @@ where
                             .map(|x|BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
                         let x = PacketReceived {
                             packet,
-                            from: name.clone(),
-                            port
+                            from: ConnectPoint {
+                                device: id,
+                                port
+                            }
                         };
                         packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
@@ -199,16 +209,19 @@ where
         }));
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
+        let error_sender = self.event_sender.clone();
         connection.client.spawn(
             sink_receiver
-                .forward(connection.stream_channel_sink.sink_map_err(|e| {
+                .forward(connection.stream_channel_sink.sink_map_err(move |e| {
                     dbg!(e);
+                    error_sender
+                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into()));
                 }))
                 .map(|_| ()),
         );
 
         self.connections.write().unwrap().insert(
-            connection.name.clone(),
+            id,
             Connection {
                 p4runtime_client: connection.client,
                 sink: sink_sender,
@@ -238,7 +251,7 @@ impl Connection {
 pub struct ContextHandle<E> {
     p4info_helper: Arc<P4InfoHelper>,
     pub sender: UnboundedSender<CoreRequest<E>>,
-    connections: Arc<RwLock<HashMap<String, Connection>>>,
+    connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
 }
 
 impl<E> ContextHandle<E>
@@ -248,7 +261,7 @@ where
     pub fn new(
         p4info_helper: Arc<P4InfoHelper>,
         sender: UnboundedSender<CoreRequest<E>>,
-        connections: Arc<RwLock<HashMap<String, Connection>>>,
+        connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     ) -> ContextHandle<E> {
         ContextHandle {
             p4info_helper,
@@ -259,10 +272,10 @@ where
 
     pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned> {
         let device = flow.device;
-        let hash = crate::util::hash_flow(&flow);
+        let hash = crate::util::hash(&flow);
         let table_entry = flow.to_table_entry(self.p4info_helper.as_ref(), hash);
         let connections = self.connections.read().unwrap();
-        let device_client = connections.get(device);
+        let device_client = connections.get(&device);
         if let Some(connection) = device_client {
             write_table_entry(
                 &connection.p4runtime_client,
@@ -272,13 +285,15 @@ where
             Ok(flow.into_owned(hash))
         } else {
             Err(Box::new(ContextError::DeviceNotConnected(
-                device.to_string(),
+                "TODO: Get device name from id".to_string(),
             )))
         }
     }
 
     pub fn add_device(&self, name: String, address: String, device_id: u64) {
+        let id = crate::util::hash(&name);
         let device = Device {
+            id: DeviceID(id),
             name,
             ports: Default::default(),
             typ: DeviceType::MASTER {
@@ -302,11 +317,10 @@ where
             .unwrap();
     }
 
-    pub fn send_packet(&self, device: String, port: u32, packet: Bytes) {
+    pub fn send_packet(&self, to: ConnectPoint, packet: Bytes) {
         self.sender
             .unbounded_send(CoreRequest::PacketOut {
-                device,
-                port,
+                connect_point: to,
                 packet,
             })
             .unwrap();

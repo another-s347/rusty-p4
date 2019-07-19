@@ -3,15 +3,32 @@ use bitfield::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Formatter;
+use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Clone, Debug)]
 pub struct Device {
+    pub id: DeviceID,
     pub name: String,
     pub ports: HashSet<Port>,
     pub typ: DeviceType,
     pub device_id: u64,
     pub index: usize,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct DeviceID(pub(crate) u64);
+
+impl ToString for DeviceID {
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl Hash for DeviceID {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0)
+    }
 }
 
 #[derive(Eq, Hash, Clone, Debug)]
@@ -35,6 +52,7 @@ pub enum DeviceType {
 
 #[derive(Eq, Hash, Clone, Debug)]
 pub struct Port {
+    pub name: String,
     pub number: u32,
     pub interface: Option<Interface>,
 }
@@ -58,15 +76,15 @@ impl PartialEq for Interface {
     }
 }
 
-#[derive(Eq, Hash, Clone)]
+#[derive(Eq, Hash, Copy, Clone, Serialize, Deserialize)]
 pub struct ConnectPoint {
-    pub device: String,
+    pub device: DeviceID,
     pub port: u32,
 }
 
 impl Debug for ConnectPoint {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "{}[{}]", self.device, self.port)
+        write!(f, "{:?}[{}]", self.device, self.port)
     }
 }
 
@@ -76,24 +94,9 @@ impl PartialEq for ConnectPoint {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ConnectPointRef<'a> {
-    pub device: &'a str,
-    pub port: u32,
-}
-
-impl<'a> ConnectPointRef<'a> {
-    pub fn to_owned(&self) -> ConnectPoint {
-        ConnectPoint {
-            device: self.device.to_owned(),
-            port: self.port,
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Meter {
-    pub device: String,
+    pub device: DeviceID,
     pub name: String,
     pub index: i64,
     pub cburst: i64,

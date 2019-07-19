@@ -1,5 +1,5 @@
 use crate::app::common::MergeResult;
-use crate::representation::{ConnectPoint, Device, DeviceType, Link};
+use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Link};
 use bitfield::fmt::{Debug, Display};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -120,7 +120,7 @@ struct ShortestPathBuffer {
 #[derive(Debug)]
 pub struct DefaultGraph {
     connectivity: GraphBase<u8>,
-    index_map: HashMap<String, usize>,
+    index_map: HashMap<DeviceID, usize>,
     link_map: HashMap<(usize, usize), (Link, u8)>,
     node_count: usize,
 }
@@ -136,10 +136,10 @@ impl DefaultGraph {
     }
 
     pub fn add_device(&mut self, device: &Device) {
-        if self.index_map.contains_key(&device.name) {
+        if self.index_map.contains_key(&device.id) {
             return;
         }
-        self.index_map.insert(device.name.clone(), self.node_count);
+        self.index_map.insert(device.id, self.node_count);
         self.node_count += 1;
         if self.node_count > self.connectivity.n_usage {
             self.connectivity
@@ -148,8 +148,8 @@ impl DefaultGraph {
     }
 
     pub fn add_link(&mut self, link: &Link, cost: u8) -> MergeResult<()> {
-        let one = *self.index_map.get(link.src.device.as_str()).unwrap();
-        let two = *self.index_map.get(link.dst.device.as_str()).unwrap();
+        let one = *self.index_map.get(&link.src.device).unwrap();
+        let two = *self.index_map.get(&link.dst.device).unwrap();
         let key = (one, two);
         let mut result = MergeResult::ADDED(());
         if let Some((exist_link, exist_cost)) = self.link_map.get(&key) {
@@ -164,9 +164,9 @@ impl DefaultGraph {
         result
     }
 
-    pub fn get_path(&self, src: &str, dst: &str) -> Option<Path> {
-        let src = *self.index_map.get(src).unwrap();
-        let dst = *self.index_map.get(dst).unwrap();
+    pub fn get_path(&self, src: DeviceID, dst: DeviceID) -> Option<Path> {
+        let src = *self.index_map.get(&src).unwrap();
+        let dst = *self.index_map.get(&dst).unwrap();
 
         let mut dist = HashMap::new();
         dist.insert(src, 0);

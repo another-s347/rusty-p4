@@ -45,17 +45,17 @@ where
 {
     fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<E>) {
         let bytes = BytesMut::from(packet.packet.payload.clone());
-        let device = self.common.devices.get(&packet.from);
+        let device = self.common.devices.get(&packet.from.device);
         if let Some(device) = device {
             let ethernet: Option<Ethernet<Data>> = Ethernet::from_bytes(bytes);
             if let Some(eth) = ethernet {
                 match eth.ether_type {
                     0x861 => {
-                        linkprobe::on_probe_received(device, packet.port, eth.payload, ctx);
+                        linkprobe::on_probe_received(device, packet.from, eth.payload, ctx);
                     }
                     arp::ETHERNET_TYPE_ARP => proxyarp::on_arp_received(
                         device,
-                        packet.port,
+                        packet.from,
                         eth.payload,
                         &self.common,
                         ctx,
@@ -66,7 +66,7 @@ where
                 }
             }
         } else {
-            error!(target:"extend","device not found with name: {}", packet.from);
+            error!(target:"extend","device not found with id: {:?}", packet.from.device);
         }
     }
 

@@ -1,10 +1,11 @@
 use crate::p4rt::helper::P4InfoHelper;
 use crate::proto::p4runtime::TableEntry;
+use crate::representation::DeviceID;
 use crate::util::value::{InnerValue, ParamValue, Value};
 
 #[derive(Debug, Clone, Hash)]
 pub struct Flow<'a> {
-    pub device: &'a str,
+    pub device: DeviceID,
     pub table: FlowTable<'a>,
     pub action: FlowAction<'a>,
     pub priority: i32,
@@ -12,7 +13,7 @@ pub struct Flow<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FlowOwned {
-    pub device: String,
+    pub device: DeviceID,
     pub table: FlowTableOwned,
     pub action: FlowActionOwned,
     pub priority: i32,
@@ -35,7 +36,7 @@ impl<'a> Flow<'a> {
 
     pub fn into_owned(self, metadata: u64) -> FlowOwned {
         FlowOwned {
-            device: self.device.to_owned(),
+            device: self.device,
             table: self.table.into_owned(),
             action: self.action.to_owned(),
             priority: self.priority,

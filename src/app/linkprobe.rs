@@ -10,16 +10,12 @@ use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use bytes::Bytes;
 use crate::util::packet::data::Data;
-use crate::representation::{Device, ConnectPoint, ConnectPointRef, Link};
+use crate::representation::{Device, ConnectPoint, Link, DeviceID};
 
-pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHandle<E>) where E:Event {
-    let probe:Result<ConnectPointRef,serde_json::Error> = serde_json::from_slice(&data.0);
-    let device_name = device.name.as_str().to_owned();
+pub fn on_probe_received<E>(device:&Device, cp:ConnectPoint, data:Data ,ctx:&ContextHandle<E>) where E:Event {
+    let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&data.0);
     if let Ok(from) = probe {
-        let this = ConnectPoint {
-            device: device_name,
-            port
-        };
+        let this = cp;
         let from = from.to_owned();
         ctx.send_event(CommonEvents::LinkDetected(Link {
             src: from,
@@ -33,24 +29,21 @@ pub fn on_probe_received<E>(device:&Device, port:u32, data:Data ,ctx:&ContextHan
 
 pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
 {
-    let device_name = device.name.as_str();
-    new_probe_interceptor(&device_name,ctx);
+    new_probe_interceptor(device.id,ctx);
     let mut linkprobe_per_ports = Vec::new();
     for port in device.ports.iter().map(|x|x.number) {
-        let cp = ConnectPointRef {
-            device: &device_name,
+        let cp = ConnectPoint {
+            device: device.id,
             port
         };
         let mut my_sender = ctx.sender.clone();
         let probe = new_probe(&cp);
         let mut interval = tokio::timer::Interval::new_interval(Duration::new(3,0));
-        let name = device_name.to_owned();
         let task = tokio::spawn(async move {
             while let Some(s) = interval.next().await {
 //                info!(target:"linkprobe","device probe {}", &name);
                 my_sender.send(CoreRequest::PacketOut {
-                    device: name.clone(),
-                    port,
+                    connect_point:cp,
                     packet: probe.clone()
                 }).await.unwrap();
             }
@@ -59,9 +52,9 @@ pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
     }
 }
 
-pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:Event {
+pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {
     let flow = Flow {
-        device: device_name,
+        device: device_id,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
             matches: &[("hdr.ethernet.ether_type",Value::EXACT(0x861u16))]
@@ -75,7 +68,7 @@ pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:
     ctx.insert_flow(flow);
 }
 
-pub fn new_probe(cp:&ConnectPointRef) -> Bytes
+pub fn new_probe(cp:&ConnectPoint) -> Bytes
 {
     let probe = serde_json::to_vec(cp).unwrap();
     Ethernet {
