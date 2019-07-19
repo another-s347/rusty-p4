@@ -308,5 +308,9 @@ where
             .unwrap();
     }
 
-    pub fn set_meter(&self, meter: Meter) {}
+    pub fn set_meter(&self, meter: Meter) {
+        self.sender
+            .unbounded_send(CoreRequest::SetMeter(meter))
+            .unwrap();
+    }
 }
