@@ -25,7 +25,7 @@ use crate::proto::p4runtime::{
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::{Device, DeviceType, Meter};
-use crate::util::flow::Flow;
+use crate::util::flow::{Flow, FlowOwned};
 use bitfield::fmt::Debug;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -257,9 +257,10 @@ where
         }
     }
 
-    pub fn insert_flow(&self, flow: Flow) -> Result<()> {
-        let device = &flow.device;
-        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref());
+    pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned> {
+        let device = flow.device;
+        let hash = crate::util::hash_flow(&flow);
+        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref(), hash);
         let connections = self.connections.read().unwrap();
         let device_client = connections.get(device);
         if let Some(connection) = device_client {
@@ -267,9 +268,12 @@ where
                 &connection.p4runtime_client,
                 connection.device_id,
                 table_entry,
-            )
+            )?;
+            Ok(flow.into_owned(hash))
         } else {
-            Err(Box::new(ContextError::DeviceNotConnected(device.clone())))
+            Err(Box::new(ContextError::DeviceNotConnected(
+                device.to_string(),
+            )))
         }
     }
 

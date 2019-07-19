@@ -69,7 +69,7 @@ impl Value {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash)]
 pub enum InnerValue {
     EXACT(Vec<u8>),
     LPM(Vec<u8>, /*prefix_len*/ i32),

@@ -65,11 +65,10 @@ impl p4App<CommonEvents> for Example {
                     params: &[("dst_id", ParamValue::of(100u32))],
                 };
                 let flow = Flow {
-                    device: device.name.to_string(),
+                    device: &device.name,
                     table: flow_table,
                     action: flow_action,
                     priority: 0,
-                    metadata: 0,
                 };
                 ctx.insert_flow(flow);
             }

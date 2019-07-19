@@ -124,7 +124,7 @@ where
     E: Event,
 {
     let flow = Flow {
-        device: device_name.to_owned(),
+        device: device_name,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
             matches: &[("hdr.ethernet.ether_type", Value::EXACT(ETHERNET_TYPE_ARP))],
@@ -134,7 +134,6 @@ where
             params: &[],
         },
         priority: 4000,
-        metadata: 0,
     };
     ctx.insert_flow(flow);
 }

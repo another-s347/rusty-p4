@@ -54,6 +54,7 @@ fn write_tunnel_rules(
         "MyIngress.myTunnel_ingress",
         &[("dst_id", ParamValue::of(tunnel_id))],
         0,
+        0,
     );
 
     ingress_sw.write_table_entry(dbg!(table_entry));
@@ -64,6 +65,7 @@ fn write_tunnel_rules(
         false,
         "MyIngress.myTunnel_forward",
         &[("port", ParamValue::of(2u32))],
+        0,
         0,
     );
     ingress_sw.write_table_entry(table_entry);
@@ -77,6 +79,7 @@ fn write_tunnel_rules(
             ("dstAddr", ParamValue::with(dst_eth_addr.encode())),
             ("port", ParamValue::of(1u32)),
         ],
+        0,
         0,
     );
     egress_sw.write_table_entry(table_entry);

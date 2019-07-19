@@ -61,7 +61,7 @@ pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
 
 pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:Event {
     let flow = Flow {
-        device: device_name.to_owned(),
+        device: device_name,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
             matches: &[("hdr.ethernet.ether_type",Value::EXACT(0x861u16))]
@@ -70,8 +70,7 @@ pub fn new_probe_interceptor<E>(device_name:&str,ctx:&ContextHandle<E>) where E:
             name: "send_to_cpu",
             params: &[]
         },
-        priority: 4000,
-        metadata: 0
+        priority: 4000
     };
     ctx.insert_flow(flow);
 }

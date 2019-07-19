@@ -40,11 +40,13 @@ impl P4InfoHelper {
         action_name: &str,
         action_params: &[(&str, InnerParamValue)],
         priority: i32,
+        metadata: u64,
     ) -> TableEntry {
         let mut table_entry = crate::proto::p4runtime::TableEntry::new();
         table_entry.set_table_id(self.get_table_id(table_name).unwrap());
 
         table_entry.set_priority(priority);
+        table_entry.set_controller_metadata(metadata);
 
         for (match_field_name, value) in match_fields {
             let entry = self
