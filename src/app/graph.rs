@@ -1,9 +1,9 @@
 use crate::app::common::MergeResult;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Link};
-use bitfield::fmt::{Debug, Display};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::Formatter;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 // index = x+y*n

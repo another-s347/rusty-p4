@@ -1,7 +1,7 @@
 use crate::util::value::MAC;
-use bitfield::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr};

@@ -1,7 +1,7 @@
 use crate::proto::p4runtime::PacketIn;
 use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link, Meter};
-use bitfield::fmt::Debug;
 use bytes::{Bytes, BytesMut};
+use std::fmt::Debug;
 use std::sync::Arc;
 
 pub enum CoreEvent<E> {

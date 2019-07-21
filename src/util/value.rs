@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use bitfield::fmt::Debug;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Bytes, BytesMut};
 use hex;
+use std::fmt::Debug;
 use std::fmt::Formatter;
 
 pub struct Value;

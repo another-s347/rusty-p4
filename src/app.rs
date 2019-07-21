@@ -22,7 +22,7 @@ pub mod linkprobe;
 pub mod proxyarp;
 pub mod statistic;
 
-pub trait p4App<E>
+pub trait P4app<E>
 where
     E: Event,
 {
@@ -37,7 +37,7 @@ pub struct Example {
     pub counter: u32,
 }
 
-impl p4App<CommonEvents> for Example {
+impl P4app<CommonEvents> for Example {
     fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<CommonEvents>) {
         let packet = BytesMut::from(packet.packet.payload);
         let parsed: Option<Ethernet<Data>> = Ethernet::from_bytes(packet);

@@ -11,8 +11,33 @@ use crate::util::packet::Packet;
 use bytes::Bytes;
 use crate::util::packet::data::Data;
 use crate::representation::{Device, ConnectPoint, Link, DeviceID};
+use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use crate::app::common::CommonState;
 
-pub fn on_probe_received<E>(device:&Device, cp:ConnectPoint, data:Data ,ctx:&ContextHandle<E>) where E:Event {
+pub struct LinkProbeLoader {
+    inner:Arc<Mutex<HashMap<u16,u16>>>
+}
+
+impl LinkProbeLoader {
+    pub fn new() -> Self {
+        LinkProbeLoader {
+            inner: Arc::new(Mutex::new(Default::default()))
+        }
+    }
+}
+
+impl<A,E> P4appInstallable<A,E> for LinkProbeLoader
+    where E:Event
+{
+    fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
+        let my_state = self.inner.clone();
+        extend_core.install_ether_hook(0x861,Box::new(on_probe_received));
+    }
+}
+
+pub fn on_probe_received<E>(data:Data,cp:ConnectPoint,state:&CommonState,ctx:&ContextHandle<E>) where E:Event {
     let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&data.0);
     if let Ok(from) = probe {
         let this = cp;

@@ -7,10 +7,11 @@ use crate::util::packet::Packet;
 
 #[derive(Debug)]
 pub struct Ipv4<P>
-    where P:Packet
+where
+    P: Packet,
 {
     version: u8,
-    ihl:u8,
+    ihl: u8,
     dscp: u8,
     ecn: u8,
     total_len: u16,
@@ -21,9 +22,9 @@ pub struct Ipv4<P>
     ttl: u8,
     protocol: u8,
     hdr_checksum: u32,
-    src:Ipv4Addr,
-    dst:Ipv4Addr,
-    payload:P
+    src: Ipv4Addr,
+    dst: Ipv4Addr,
+    payload: P,
 }
 
 bitfield! {
@@ -65,7 +66,8 @@ impl<T: AsRef<[u8]> + AsMut<[u8]>> Ipv4Raw<T> {
 }
 
 impl<P> Packet for Ipv4<P>
-    where P:Packet
+where
+    P: Packet,
 {
     type Payload = P;
 
@@ -94,7 +96,7 @@ impl<P> Packet for Ipv4<P>
             hdr_checksum: raw.get_header_checksum(),
             src: raw.get_source_as_ip_addr(),
             dst: raw.get_destination_as_ip_addr(),
-            payload: payload.unwrap()
+            payload: payload.unwrap(),
         };
         Some(part)
     }

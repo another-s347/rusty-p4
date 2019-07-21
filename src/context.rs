@@ -12,7 +12,7 @@ use grpcio::{StreamingCallSink, WriteFlags};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 
-use crate::app::p4App;
+use crate::app::P4app;
 use crate::error::*;
 use crate::error::*;
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
@@ -26,13 +26,13 @@ use crate::proto::p4runtime::{
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
 use crate::util::flow::{Flow, FlowOwned};
-use bitfield::fmt::Debug;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
 use futures03::compat::*;
 use futures03::future::FutureExt;
 use log::{debug, error, info, trace, warn};
+use std::fmt::Debug;
 
 mod driver;
 mod netconfiguration;
@@ -57,7 +57,7 @@ where
         mut app: T,
     ) -> Result<Context<E>>
     where
-        T: p4App<E> + Send + 'static,
+        T: P4app<E> + Send + 'static,
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 

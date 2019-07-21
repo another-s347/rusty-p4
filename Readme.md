@@ -65,7 +65,7 @@ pub struct Example {
     pub counter:u32
 }
 
-impl p4App for Example {
+impl P4app for Example {
     fn on_packet(self:&mut Self, packet:PacketReceived, ctx: &ContextHandle) {
         let packet = Bytes::from(packet.packet.payload);
         let parsed:Option<Ethernet<Data>> = Ethernet::from_bytes(packet);
@@ -85,7 +85,7 @@ pub struct AdhocApp {
     flowMap: HashMap<String, FlowOwned>
 }
 
-impl p4AppExtended<CommonEvents> for AdhocApp {
+impl P4appExtended<CommonEvents> for AdhocApp {
     fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<CommonEvents>, state: &CommonState) {
         if let Some(eth) = Ethernet::from_bytes(BytesMut::from(packet.packet.payload)) {
             if eth.ether_type == 0x865 {
