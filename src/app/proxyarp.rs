@@ -75,12 +75,15 @@ pub fn on_arp_received<E>(
                 state
                     .devices
                     .iter()
-                    .filter(|(p, _)| p != &&device.id)
+                    .filter(|(&p, _)| p != device.id)
                     .for_each(|(_, d)| {
                         for x in &d.ports {
                             ctx.sender
                                 .unbounded_send(CoreRequest::PacketOut {
-                                    connect_point: cp,
+                                    connect_point: ConnectPoint {
+                                        device: d.id,
+                                        port: x.number,
+                                    },
                                     packet: packet.clone(),
                                 })
                                 .unwrap();

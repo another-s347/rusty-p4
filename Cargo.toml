@@ -3,6 +3,7 @@ name = "rusty-p4"
 version = "0.1.0"
 authors = ["skye"]
 edition = "2018"
+build=false
 
 [dependencies]
 protobuf = "2.7.0"

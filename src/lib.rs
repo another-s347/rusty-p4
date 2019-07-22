@@ -28,10 +28,12 @@ pub mod context;
 pub mod error;
 pub mod event;
 pub mod representation;
+pub mod restore;
 
 use tokio;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+<<<<<<< Updated upstream
 use crate::app::linkprobe::LinkProbeLoader;
 
 #[tokio::main]
@@ -50,3 +52,20 @@ pub async fn main() {
 
 //    context.get_handle().add_device("s1".to_string(),"1".to_string(),1);
 }
+=======
+use crate::app::graph::GraphBase;
+use crate::proto::p4data::P4Data_oneof_data::bool;
+
+//#[tokio::main]
+//#[test]
+//pub async fn main() {
+//    flexi_logger::Logger::with_str("debug").start().unwrap();
+//
+//    let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));
+//    let bmv2_file = "/home/skye/rusty-p4/p4test/build/simple.json";
+//
+//    let mut context = Context::try_new(p4info_helper, bmv2_file.to_owned(), extend(ExampleExtended {
+//
+//    })).await.unwrap();
+//}
+>>>>>>> Stashed changes
