@@ -14,8 +14,10 @@ use log::{debug, error, info, trace, warn};
 use serde::export::PhantomData;
 use std::collections::HashMap;
 
-pub type EventHook<E> = Box<FnMut(&E, &CommonState, &ContextHandle<E>) -> ()>;
-pub type EtherPacketHook<E> = Box<FnMut(Data, ConnectPoint, &CommonState, &ContextHandle<E>) -> ()>;
+pub type EventHook<E> = Box<FnMut(&E, &CommonState, &ContextHandle<E>) -> () + Send>;
+pub type EtherPacketHook<E> =
+    Box<FnMut(Data, ConnectPoint, &CommonState, &ContextHandle<E>) -> () + Send>;
+pub type OnDeviceAddedHook<E> = Box<FnMut(&Device, &CommonState, &ContextHandle<E>) -> () + Send>;
 
 pub trait P4appExtended<E> {
     fn on_packet(
@@ -47,6 +49,7 @@ pub struct P4appExtendedCore<A, E> {
     phantom: PhantomData<E>,
     event_hooks: HashMap<String, EventHook<E>>,
     ether_hooks: HashMap<u16, EtherPacketHook<E>>,
+    device_added_hooks: HashMap<String, OnDeviceAddedHook<E>>,
 }
 
 pub struct P4appBuilder<A, E> {
@@ -66,11 +69,12 @@ where
                 phantom: PhantomData,
                 event_hooks: HashMap::new(),
                 ether_hooks: HashMap::new(),
+                device_added_hooks: HashMap::new(),
             },
         }
     }
 
-    pub fn with(&mut self, mut i: impl P4appInstallable<A, E>) -> &mut Self {
+    pub fn with(mut self, mut i: impl P4appInstallable<A, E>) -> Self {
         i.install(&mut self.core);
         self
     }
@@ -95,25 +99,10 @@ where
                 if let Some((_, h)) = self
                     .ether_hooks
                     .iter_mut()
-                    .find(|(k, _)| k == &&eth.ether_type)
+                    .find(|(&k, _)| k == eth.ether_type)
                 {
                     h(eth.payload, packet.from, state, ctx);
                 }
-                //                match eth.ether_type {
-                //                    0x861 => {
-                //                        linkprobe::on_probe_received(device, packet.from, eth.payload, ctx);
-                //                    }
-                //                    arp::ETHERNET_TYPE_ARP => proxyarp::on_arp_received(
-                //                        device,
-                //                        packet.from,
-                //                        eth.payload,
-                //                        &self.common,
-                //                        ctx,
-                //                    ),
-                //                    _ => {
-                //                        self.extension.on_packet(packet, ctx, &self.common);
-                //                    }
-                //                }
                 self.extension.on_packet(packet, ctx, &self.common);
             }
         } else {
@@ -129,8 +118,11 @@ where
                 match result {
                     MergeResult::ADDED(name) => {
                         let device = self.common.devices.get(&name).unwrap();
-                        linkprobe::on_device_added(&device, ctx);
-                        proxyarp::on_device_added(&device, ctx);
+                        let state = &self.common;
+                        self.device_added_hooks.iter_mut().for_each(|(h_name, h)| {
+                            debug!(target:"extend","executing device added hook: {}",h_name);
+                            h(&device, &state, ctx);
+                        });
                         self.extension.on_device_added(&device, &self.common, ctx);
                     }
                     _ => unimplemented!(),
@@ -157,6 +149,43 @@ where
                     MergeResult::MERGED => {}
                 }
             }
+            CommonEvents::DeviceLost(deviceID) => {
+                if let Some(device) = self.common.devices.remove(&deviceID) {
+                    self.common
+                        .hosts
+                        .iter()
+                        .filter(|host| host.location.device == deviceID)
+                        .for_each(|host| {
+                            ctx.send_event(CommonEvents::HostLost(*host).into());
+                        });
+                    self.common
+                        .links
+                        .iter()
+                        .filter(|x| x.src.device == deviceID || x.dst.device == deviceID)
+                        .for_each(|link| {
+                            ctx.send_event(CommonEvents::LinkLost(*link).into());
+                        });
+                    self.common.graph.remove_device(&deviceID);
+                    info!(target:"extend","device removed {}", device.name);
+                } else {
+                    warn!(target:"extend","duplicated device lost event {:?}", deviceID);
+                }
+            }
+            CommonEvents::LinkLost(link) => {
+                if self.common.links.remove(&link) {
+                    self.common.graph.remove_link(&link);
+                    info!(target:"extend","link removed {:?}", link);
+                } else {
+                    warn!(target:"extend","duplicated link lost event {:?}", link);
+                }
+            }
+            CommonEvents::HostLost(host) => {
+                if self.common.hosts.remove(&host) {
+                    info!(target:"extend","host removed {:?}", &host);
+                } else {
+                    warn!(target:"extend","duplicated host lost event {:?}", &host);
+                }
+            }
             _ => {}
         };
         let state = &self.common;
@@ -170,6 +199,7 @@ where
 impl<A, E> P4appExtendedCore<A, E> {
     pub fn install_event_hook(&mut self, name: &str, hook: EventHook<E>) -> Option<()> {
         if self.event_hooks.contains_key(name) {
+            error!(target:"extend","install event hook fail for: {}",name);
             return None;
         } else {
             self.event_hooks.insert(name.to_owned(), hook);
@@ -179,9 +209,23 @@ impl<A, E> P4appExtendedCore<A, E> {
 
     pub fn install_ether_hook(&mut self, ether_type: u16, hook: EtherPacketHook<E>) -> Option<()> {
         if self.ether_hooks.contains_key(&ether_type) {
+            error!(target:"extend","install ether hook fail for: {}",ether_type);
             return None;
         } else {
             self.ether_hooks.insert(ether_type, hook);
+            return Some(());
+        }
+    }
+
+    pub fn install_device_added_hook(
+        &mut self,
+        name: &str,
+        hook: OnDeviceAddedHook<E>,
+    ) -> Option<()> {
+        if self.device_added_hooks.contains_key(name) {
+            return None;
+        } else {
+            self.device_added_hooks.insert(name.to_owned(), hook);
             return Some(());
         }
     }
@@ -190,13 +234,3 @@ impl<A, E> P4appExtendedCore<A, E> {
 pub struct ExampleExtended {}
 
 impl P4appExtended<CommonEvents> for ExampleExtended {}
-
-pub fn extend<E: Event, A: P4appExtended<E>>(app: A) -> P4appExtendedCore<A, E> {
-    P4appExtendedCore {
-        common: CommonState::new(),
-        extension: app,
-        phantom: PhantomData,
-        event_hooks: HashMap::new(),
-        ether_hooks: HashMap::new(),
-    }
-}

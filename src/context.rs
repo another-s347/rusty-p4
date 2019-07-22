@@ -108,7 +108,10 @@ where
                         .unwrap()
                         .get_mut(&connect_point.device)
                     {
-                        c.pack_out(&obj.p4info_helper, connect_point.port, packet);
+                        let result = c.packet_out(&obj.p4info_helper, connect_point.port, packet);
+                        if result.is_err() {
+                            error!(target:"context","packet out err {:?}", result.err().unwrap());
+                        }
                     } else {
                         // find device name
                         error!(target:"context","connection not found for device {:?}", connect_point.device);
@@ -210,12 +213,17 @@ where
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
         let error_sender = self.event_sender.clone();
+        let obj = self.clone();
         connection.client.spawn(
             sink_receiver
                 .forward(connection.stream_channel_sink.sink_map_err(move |e| {
                     dbg!(e);
                     error_sender
                         .unbounded_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into()));
+                    let mut conns = obj.connections.write().unwrap();
+                    conns.remove(&id);
+                    let mut map = obj.id_to_name.write().unwrap();
+                    map.remove(&id);
                 }))
                 .map(|_| ()),
         );
@@ -242,9 +250,11 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn pack_out(&self, p4infoHelper: &P4InfoHelper, port: u32, packet: Bytes) {
-        let request = packet_out_request(p4infoHelper, port, packet).unwrap();
-        self.sink.unbounded_send(request).unwrap();
+    pub fn packet_out(&self, p4infoHelper: &P4InfoHelper, port: u32, packet: Bytes) -> Result<()> {
+        let request = packet_out_request(p4infoHelper, port, packet)?;
+        self.sink.unbounded_send(request)?;
+
+        Ok(())
     }
 }
 

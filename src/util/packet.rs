@@ -1,20 +1,21 @@
 use bytes::{Bytes, BytesMut};
 
-pub use ethernet::Ethernet as Ethernet;
-pub use arp::Arp as Arp;
+pub use arp::Arp;
+pub use ethernet::Ethernet;
 
-pub mod ethernet;
-pub mod ip;
 pub mod arp;
 pub mod data;
+pub mod ethernet;
+pub mod ip;
 pub mod packet_in_header;
 
 pub trait Packet
-    where Self: std::marker::Sized
+where
+    Self: std::marker::Sized,
 {
     type Payload;
 
-    fn from_bytes(b:BytesMut) -> Option<Self>;
+    fn from_bytes(b: BytesMut) -> Option<Self>;
 
     fn into_bytes(self) -> Bytes;
 }

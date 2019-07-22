@@ -39,6 +39,8 @@ pub enum CommonEvents {
     DeviceUpdate(Device),
     DeviceLost(DeviceID),
     LinkDetected(Link),
+    LinkLost(Link),
     HostDetected(Host),
+    HostLost(Host),
     Other {},
 }

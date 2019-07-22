@@ -15,9 +15,13 @@ use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook}
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::app::common::CommonState;
+use std::process::exit;
+//use futures::prelude::*;
+use futures03::prelude::*;
+use tokio::sync::oneshot::Sender;
 
 pub struct LinkProbeLoader {
-    inner:Arc<Mutex<HashMap<u16,u16>>>
+    inner:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>
 }
 
 impl LinkProbeLoader {
@@ -34,6 +38,27 @@ impl<A,E> P4appInstallable<A,E> for LinkProbeLoader
     fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
         let my_state = self.inner.clone();
         extend_core.install_ether_hook(0x861,Box::new(on_probe_received));
+        extend_core.install_device_added_hook("link probe",Box::new(move|device, state, ctx|{
+            let s = my_state.clone();
+            on_device_added(s,device,state,ctx)
+        }));
+        let my_state = self.inner.clone();
+        extend_core.install_event_hook("link probe",Box::new(move|event:&E, state:&CommonState, ctx:&ContextHandle<E>|{
+            match event.clone().into() {
+                CommonEvents::DeviceLost(device)=>{
+                    let mut s = my_state.lock().unwrap();
+                    if let Some(list) = s.remove(&device) {
+                        info!(target:"extend","cancel link probe task for device: {:?}",device);
+                        for x in list {
+                            x.send(());
+                        }
+                    }
+                }
+                _=>{
+
+                }
+            }
+        }));
     }
 }
 
@@ -52,7 +77,7 @@ pub fn on_probe_received<E>(data:Data,cp:ConnectPoint,state:&CommonState,ctx:&Co
     }
 }
 
-pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(tasks:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,device:&Device, state:&CommonState, ctx:&ContextHandle<E>) where E:Event
 {
     new_probe_interceptor(device.id,ctx);
     let mut linkprobe_per_ports = Vec::new();
@@ -64,17 +89,25 @@ pub fn on_device_added<E>(device:&Device,ctx:&ContextHandle<E>) where E:Event
         let mut my_sender = ctx.sender.clone();
         let probe = new_probe(&cp);
         let mut interval = tokio::timer::Interval::new_interval(Duration::new(3,0));
-        let task = tokio::spawn(async move {
+        let (cancel,mut cancel_r) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
             while let Some(s) = interval.next().await {
-//                info!(target:"linkprobe","device probe {}", &name);
+                if cancel_r.try_recv().is_ok() {
+                    break;
+                }
                 my_sender.send(CoreRequest::PacketOut {
                     connect_point:cp,
                     packet: probe.clone()
                 }).await.unwrap();
             }
         });
-        linkprobe_per_ports.push(task);
+        linkprobe_per_ports.push(cancel);
     }
+    if !linkprobe_per_ports.is_empty() {
+        info!(target:"linkprobe","start probe for device: {:?}",device.id);
+    }
+    let mut tasks = tasks.lock().unwrap();
+    tasks.insert(device.id,linkprobe_per_ports);
 }
 
 pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {

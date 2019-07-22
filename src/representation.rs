@@ -31,7 +31,7 @@ impl Hash for DeviceID {
     }
 }
 
-#[derive(Eq, Hash, Clone, Debug)]
+#[derive(Copy, Eq, Hash, Clone, Debug)]
 pub struct Host {
     pub mac: MAC,
     pub ip: Ipv4Addr,
@@ -105,7 +105,7 @@ pub struct Meter {
     pub pir: i64,
 }
 
-#[derive(Clone, Hash, Eq)]
+#[derive(Copy, Clone, Hash, Eq)]
 pub struct Link {
     pub src: ConnectPoint,
     pub dst: ConnectPoint,

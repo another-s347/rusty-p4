@@ -147,6 +147,17 @@ impl DefaultGraph {
         }
     }
 
+    pub fn remove_device(&mut self, device: &DeviceID) {
+        if !self.index_map.contains_key(device) {
+            return;
+        }
+        let index = self.index_map.remove(device).unwrap();
+        for y in 0..self.connectivity.n_usage {
+            self.connectivity.set(index, y, 0);
+            self.connectivity.set(y, index, 0);
+        }
+    }
+
     pub fn add_link(&mut self, link: &Link, cost: u8) -> MergeResult<()> {
         let one = *self.index_map.get(&link.src.device).unwrap();
         let two = *self.index_map.get(&link.dst.device).unwrap();
@@ -162,6 +173,22 @@ impl DefaultGraph {
         self.link_map.insert(key, ((*link).clone(), cost));
         self.connectivity.set(one, two, cost);
         result
+    }
+
+    pub fn remove_link(&mut self, link: &Link) {
+        let one = self.index_map.get(&link.src.device);
+        if one.is_none() {
+            return;
+        }
+        let two = self.index_map.get(&link.dst.device);
+        if two.is_none() {
+            return;
+        }
+        let one = *one.unwrap();
+        let two = *two.unwrap();
+        let key = (one, two);
+        self.link_map.remove(&key);
+        self.connectivity.set(one, two, 0);
     }
 
     pub fn get_path(&self, src: DeviceID, dst: DeviceID) -> Option<Path> {

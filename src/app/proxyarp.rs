@@ -1,4 +1,5 @@
 use crate::app::common::CommonState;
+use crate::app::extended::{P4appExtendedCore, P4appInstallable};
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, CoreRequest, Event};
 use crate::representation::{ConnectPoint, Device, DeviceID, Host};
@@ -14,15 +15,29 @@ use futures03::prelude::*;
 use log::{debug, error, info, trace, warn};
 use std::time::Duration;
 
-pub fn on_arp_received<E>(
-    device: &Device,
-    cp: ConnectPoint,
-    data: Data,
-    state: &CommonState,
-    ctx: &ContextHandle<E>,
-) where
+pub struct ProxyArpLoader {}
+
+impl ProxyArpLoader {
+    pub fn new() -> Self {
+        ProxyArpLoader {}
+    }
+}
+
+impl<A, E> P4appInstallable<A, E> for ProxyArpLoader
+where
     E: Event,
 {
+    fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
+        extend_core.install_ether_hook(0x806, Box::new(on_arp_received));
+        extend_core.install_device_added_hook("proxy arp", Box::new(on_device_added));
+    }
+}
+
+pub fn on_arp_received<E>(data: Data, cp: ConnectPoint, state: &CommonState, ctx: &ContextHandle<E>)
+where
+    E: Event,
+{
+    let device = cp.device;
     let arp = Arp::from_bytes(data.clone().0.into());
     if arp.is_none() {
         error!(target:"proxyarp","invalid arp packet");
@@ -75,7 +90,7 @@ pub fn on_arp_received<E>(
                 state
                     .devices
                     .iter()
-                    .filter(|(&p, _)| p != device.id)
+                    .filter(|(&p, _)| p != device)
                     .for_each(|(_, d)| {
                         for x in &d.ports {
                             ctx.sender
@@ -105,7 +120,7 @@ pub fn on_arp_received<E>(
     }
 }
 
-pub fn on_device_added<E>(device: &Device, ctx: &ContextHandle<E>)
+pub fn on_device_added<E>(device: &Device, state: &CommonState, ctx: &ContextHandle<E>)
 where
     E: Event,
 {
