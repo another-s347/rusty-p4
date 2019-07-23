@@ -6,7 +6,7 @@ use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Device {
     pub id: DeviceID,
     pub name: String,
@@ -44,13 +44,13 @@ impl PartialEq for Host {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DeviceType {
     MASTER { socket_addr: String, device_id: u64 },
     VIRTUAL,
 }
 
-#[derive(Eq, Hash, Clone, Debug)]
+#[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Port {
     pub name: String,
     pub number: u32,
@@ -63,7 +63,7 @@ impl PartialEq for Port {
     }
 }
 
-#[derive(Eq, Hash, Clone, Debug)]
+#[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Interface {
     pub name: String,
     pub ip: Option<IpAddr>,

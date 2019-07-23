@@ -3,13 +3,13 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Bytes, BytesMut};
 use hex;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fmt::Formatter;
-
 pub struct Value;
 
 pub struct MACString(pub String);
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct MAC(pub [u8; 6]);
 
 impl From<BytesMut> for MAC {

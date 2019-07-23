@@ -25,6 +25,8 @@ use crate::proto::p4runtime::{
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
+use crate::restore;
+use crate::restore::Restore;
 use crate::util::flow::{Flow, FlowOwned};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -45,6 +47,7 @@ pub struct Context<E> {
     event_sender: UnboundedSender<CoreEvent<E>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+    restore: Option<Restore>,
 }
 
 impl<E> Context<E>
@@ -55,6 +58,7 @@ where
         p4info_helper: P4InfoHelper,
         pipeconfig: String,
         mut app: T,
+        restore: Option<Restore>,
     ) -> Result<Context<E>>
     where
         T: P4app<E> + Send + 'static,
@@ -70,28 +74,43 @@ where
             event_sender: app_s,
             connections: Arc::new(RwLock::new(HashMap::new())),
             id_to_name: Arc::new(RwLock::new(HashMap::new())),
+            restore,
         };
         let context_handle = obj.get_handle();
 
-        let result = obj.clone();
+        let mut result = obj.clone();
         let task = r.for_each(move |request| {
             trace!(target:"context","{:#?}",request);
             match request {
-                CoreRequest::AddDevice { device, reply } => {
+                CoreRequest::AddDevice { ref device, reply } => {
                     let name = &device.name;
-                    match device.typ {
+                    let send = match device.typ {
                         DeviceType::MASTER {
                             ref socket_addr,
                             device_id,
                         } => {
                             let bmv2connection =
                                 Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
-                            obj.add_connection(bmv2connection).unwrap();
+                            let result = obj.add_connection(bmv2connection);
+                            if result.is_ok() {
+                                if let Some(r) = obj.restore.as_mut() {
+                                    r.add_device(device.clone());
+                                }
+                                true
+                            }
+                            else {
+                                error!(target:"context","add connection fail: {:?}",result.err().unwrap());
+                                false
+                            }
                         }
-                        DeviceType::VIRTUAL {} => {}
+                        _ => {
+                            true
+                        }
+                    };
+                    if send {
+                        obj.event_sender
+                            .unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into()));
                     }
-                    obj.event_sender
-                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device).into()));
                 }
                 CoreRequest::Event(e) => {
                     obj.event_sender
@@ -145,6 +164,11 @@ where
 
         let netconfiguration_server = netconfiguration::NetconfigServer::new();
         let core_sender = result.core_channel_sender.clone();
+
+        let handle = result.get_handle();
+        if let Some(r) = result.restore.as_mut() {
+            r.restore(handle);
+        }
 
         netconfiguration::build_netconfig_server(netconfiguration_server, core_sender).await;
 
@@ -213,7 +237,7 @@ where
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
         let error_sender = self.event_sender.clone();
-        let obj = self.clone();
+        let mut obj = self.clone();
         connection.client.spawn(
             sink_receiver
                 .forward(connection.stream_channel_sink.sink_map_err(move |e| {
@@ -224,6 +248,9 @@ where
                     conns.remove(&id);
                     let mut map = obj.id_to_name.write().unwrap();
                     map.remove(&id);
+                    if let Some(r) = obj.restore.as_mut() {
+                        r.remove_device(id);
+                    }
                 }))
                 .map(|_| ()),
         );
