@@ -7,7 +7,6 @@ pub mod arp;
 pub mod data;
 pub mod ethernet;
 pub mod ip;
-pub mod packet_in_header;
 
 pub trait Packet
 where

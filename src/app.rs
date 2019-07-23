@@ -10,7 +10,6 @@ use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::proto::p4runtime::PacketIn;
 use crate::util::flow::{Flow, FlowAction, FlowTable};
 use crate::util::packet::data::Data;
-use crate::util::packet::packet_in_header::PacketInHeader;
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use crate::util::value::{ParamValue, Value};
