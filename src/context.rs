@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
-
 use futures::future::{result, Future};
 use futures::sink::Sink;
 use futures::stream::Stream;
@@ -142,8 +141,19 @@ where
                     }
                     CoreRequest::SetMeter(meter) => {
                         if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
-                            let request = set_meter_request(&obj.p4info_helper, 1, &meter).unwrap();
-                            c.p4runtime_client.write(&request);
+                            let request = set_meter_request(&obj.p4info_helper, 1, &meter);
+                            if request.is_err() {
+                                error!(target:"context","set meter pipeconf error: {:?}",request.err().unwrap());
+                                continue;
+                            }
+                            match c.p4runtime_client.write(&request.unwrap()) {
+                                Ok(response)=>{
+                                    debug!(target:"context","set meter response: {:?}",response);
+                                }
+                                Err(e)=>{
+                                    error!(target:"context","grpc send error: {:?}",e);
+                                }
+                            }
                         } else {
                             error!(target:"context","connection not found for device {:?}",&meter.device);
                         }
@@ -193,11 +203,11 @@ where
         &mut self,
         mut connection: Bmv2SwitchConnection,
     ) -> Result<(), ContextError> {
-        connection.master_arbitration_update().context(ContextErrorKind::ConnectionError)?;
+        connection.master_arbitration_update().context(ContextErrorKind::ConnectionError(format!("set master for device {}",&connection.name)))?;
         connection.set_forwarding_pipeline_config_async(
             &self.p4info_helper.p4info,
             Path::new(&self.pipeconf),
-        ).await.context(ContextErrorKind::ConnectionError)?;
+        ).await.context(ContextErrorKind::ConnectionError(format!("set pipeline for device {}",&connection.name)))?;
 
         let mut packet_s = self.event_sender.clone().compat().sink_map_err(|e| {
             dbg!(e);
@@ -292,7 +302,7 @@ impl Connection {
         port: u32,
         packet: Bytes,
     ) -> Result<(), ContextError> {
-        let request = packet_out_request(p4infoHelper, port, packet).context(ContextErrorKind::ConnectionError)?;
+        let request = packet_out_request(p4infoHelper, port, packet);
         self.sink.unbounded_send(request).context(ContextErrorKind::DeviceNotConnected { device: DeviceID(self.device_id) })?;
 
         Ok(())
@@ -338,7 +348,7 @@ where
             &connection.p4runtime_client,
             connection.device_id,
             table_entry,
-        ).context(ContextErrorKind::ConnectionError)?;
+        ).context(ContextErrorKind::ConnectionError(format!("writing table entry for flow: {:?}",flow)))?;
         Ok(flow.into_owned(hash))
     }
 

@@ -9,12 +9,12 @@ pub struct ContextError {
     inner: Context<ContextErrorKind>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ContextErrorKind {
-    #[fail(display = "")]
+    #[fail(display = "Device not connected: {:?}.", device)]
     DeviceNotConnected { device: DeviceID },
-    #[fail(display = "")]
-    ConnectionError,
+    #[fail(display = "Internal connection error when {}.", _0)]
+    ConnectionError(String),
 }
 
 impl Fail for ContextError {
@@ -30,12 +30,6 @@ impl Fail for ContextError {
 impl Display for ContextError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(&self.inner, f)
-    }
-}
-
-impl ContextError {
-    pub fn kind(&self) -> ContextErrorKind {
-        *self.inner.get_context()
     }
 }
 
@@ -58,12 +52,14 @@ pub struct ConnectionError {
     inner: Context<ConnectionErrorKind>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ConnectionErrorKind {
-    #[fail(display = "")]
+    #[fail(display = "Sending gRPC request failed.")]
     GRPCSendError,
-    #[fail(display = "")]
+    #[fail(display = "Error when processing device config file.")]
     DeviceConfigFileError,
+    #[fail(display = "Build request from pipeconf failed: {}.", _0)]
+    PipeconfError(String),
 }
 
 impl Fail for ConnectionError {
@@ -79,12 +75,6 @@ impl Fail for ConnectionError {
 impl Display for ConnectionError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Display::fmt(&self.inner, f)
-    }
-}
-
-impl ConnectionError {
-    pub fn kind(&self) -> ConnectionErrorKind {
-        *self.inner.get_context()
     }
 }
 

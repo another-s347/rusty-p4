@@ -58,7 +58,7 @@ pub fn packet_out_request(
     p4info: &P4InfoHelper,
     egress_port: u32,
     packet: Bytes,
-) -> Result<(StreamMessageRequest, WriteFlags), ConnectionError> {
+) -> (StreamMessageRequest, WriteFlags) {
     let mut request = StreamMessageRequest::new();
     let mut packetOut = PacketOut::new();
     packetOut.set_payload(packet.to_vec());
@@ -69,7 +69,7 @@ pub fn packet_out_request(
     packetout_metadata.set_value(adjust_value(v, 2));
     packetOut.mut_metadata().push(packetout_metadata);
     request.set_packet(packetOut);
-    Ok((request, WriteFlags::default()))
+    (request, WriteFlags::default())
 }
 
 pub fn set_meter_request(
@@ -84,7 +84,11 @@ pub fn set_meter_request(
     update.set_field_type(Update_Type::MODIFY);
     let mut entity = Entity::new();
     let mut meter_entry = MeterEntry::new();
-    let meter_id = p4info.get_meter_id(&meter.name).unwrap();
+    let meter_id = p4info
+        .get_meter_id(&meter.name)
+        .ok_or(ConnectionError::from(ConnectionErrorKind::PipeconfError(
+            format!("meter id not found for: {}", &meter.name),
+        )))?;
     meter_entry.set_meter_id(meter_id);
     meter_entry.mut_index().set_index(meter.index);
     meter_entry.mut_config().set_cburst(meter.cburst);
