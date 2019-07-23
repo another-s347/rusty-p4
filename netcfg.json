@@ -1,59 +1,47 @@
 {
-    "ports": {
-        "device:bmv2:s1/2": {
-            "interfaces": [
-                {
-                    "mac": "52:91:34:b3:dd:5f", 
-                    "name": "s1-eth2"
-                }
-            ]
-        }, 
-        "device:bmv2:s1/3": {
-            "interfaces": [
-                {
-                    "mac": "02:00:00:00:00:00", 
-                    "name": "sta1-wlan0"
-                }
-            ]
-        }, 
-        "device:bmv2:s1/1": {
-            "interfaces": [
-                {
-                    "mac": "7e:29:a5:4a:21:9e", 
-                    "name": "s1-eth1"
-                }
-            ]
-        }
-    }, 
     "devices": {
         "device:bmv2:s1": {
             "ports": {
                 "of:device:bmv2:s1/2": {
-                    "type": "copper", 
-                    "removed": false, 
+                    "speed": 10000, 
                     "enabled": true, 
                     "number": 2, 
-                    "speed": 10000
+                    "interface": {
+                        "mac": "42:d8:82:9f:24:75", 
+                        "name": "s1-eth2"
+                    }, 
+                    "removed": false, 
+                    "type": "copper"
                 }, 
                 "of:device:bmv2:s1/3": {
-                    "type": "copper", 
-                    "removed": false, 
+                    "speed": 10000, 
                     "enabled": true, 
                     "number": 3, 
-                    "speed": 10000
+                    "interface": {
+                        "mac": "42:ee:02:84:d3:b2", 
+                        "name": "s1-eth3"
+                    }, 
+                    "removed": false, 
+                    "type": "copper"
                 }, 
                 "of:device:bmv2:s1/1": {
-                    "type": "copper", 
-                    "removed": false, 
+                    "speed": 10000, 
                     "enabled": true, 
                     "number": 1, 
-                    "speed": 10000
+                    "interface": {
+                        "mac": "00:00:00:00:01:01", 
+                        "name": "s1-eth1"
+                    }, 
+                    "removed": false, 
+                    "type": "copper"
                 }
             }, 
             "basic": {
-                "managementAddress": "grpc://172.17.0.1:53313?device_id=1", 
+                "socket_addr": "127.0.0.1:45623", 
+                "managementAddress": "grpc://127.0.0.1:45623?device_id=1", 
                 "driver": "bmv2", 
-                "pipeconf": "p4adhocproject.pipeconf"
+                "pipeconf": "p4adhocproject.pipeconf", 
+                "device_id": 1
             }
         }
     }
