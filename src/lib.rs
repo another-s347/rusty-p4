@@ -2,10 +2,9 @@
 #![feature(option_flattening)]
 #![feature(async_await)]
 
-#[macro_use]
-extern crate bitfield;
-#[macro_use]
-extern crate serde_json;
+#[macro_use] extern crate bitfield;
+#[macro_use] extern crate serde_json;
+#[macro_use] extern crate failure;
 use std::path::Path;
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use futures::stream::Stream;
@@ -44,13 +43,13 @@ pub async fn main() {
     let p4info_helper = p4rt::helper::P4InfoHelper::new(&Path::new("/home/skye/rusty-p4/p4test/build/simple.p4.p4info.bin"));
     let bmv2_file = "/home/skye/rusty-p4/p4test/build/simple.json";
 
-    let restore = Restore::new("state.json").ok();
+    let restore = Restore::new("state.json");
 
     let app = P4appBuilder::new(ExampleExtended {
 
     }).with(LinkProbeLoader::new()).build();
 
-    let mut context = Context::try_new(p4info_helper, bmv2_file.to_owned(), app, restore).await.unwrap();
+    let mut context = Context::try_new(p4info_helper, bmv2_file.to_owned(), app, Some(restore)).await.unwrap();
 
 //    context.get_handle().add_device("s1".to_string(),"1".to_string(),1);
 }

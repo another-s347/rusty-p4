@@ -15,8 +15,8 @@ pub fn run() {
     let mut s1 = Bmv2SwitchConnection::new_without_id("s1", "127.0.0.1:50051", 0);
     let mut s2 = Bmv2SwitchConnection::new_without_id("s2", "127.0.0.1:50052", 1);
 
-    s1.master_arbitration_update_async();
-    s2.master_arbitration_update_async();
+    s1.master_arbitration_update();
+    s2.master_arbitration_update();
 
     s1.set_forwarding_pipeline_config(&p4info_helper.p4info, &Path::new(bmv2_file));
     s2.set_forwarding_pipeline_config(&p4info_helper.p4info, &Path::new(bmv2_file));

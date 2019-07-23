@@ -11,10 +11,8 @@ use futures03::stream::StreamExt;
 use grpcio::{StreamingCallSink, WriteFlags};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
-
 use crate::app::P4app;
-use crate::error::*;
-use crate::error::*;
+use crate::error::{ContextErrorKind, ContextError};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
@@ -35,6 +33,7 @@ use futures03::compat::*;
 use futures03::future::FutureExt;
 use log::{debug, error, info, trace, warn};
 use std::fmt::Debug;
+use failure::ResultExt;
 
 mod driver;
 mod netconfiguration;
@@ -47,6 +46,7 @@ pub struct Context<E> {
     event_sender: UnboundedSender<CoreEvent<E>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+    removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     restore: Option<Restore>,
 }
 
@@ -59,13 +59,13 @@ where
         pipeconfig: String,
         mut app: T,
         restore: Option<Restore>,
-    ) -> Result<Context<E>>
+    ) -> Result<Context<E>, ContextError>
     where
         T: P4app<E> + Send + 'static,
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
-        let (s, r) = futures03::channel::mpsc::unbounded();
+        let (s, mut r) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
             p4info_helper: Arc::new(p4info_helper),
@@ -74,82 +74,83 @@ where
             event_sender: app_s,
             connections: Arc::new(RwLock::new(HashMap::new())),
             id_to_name: Arc::new(RwLock::new(HashMap::new())),
+            removed_id_to_name: Arc::new(RwLock::new(HashMap::new())),
             restore,
         };
         let context_handle = obj.get_handle();
 
         let mut result = obj.clone();
-        let task = r.for_each(move |request| {
-            trace!(target:"context","{:#?}",request);
-            match request {
-                CoreRequest::AddDevice { ref device, reply } => {
-                    let name = &device.name;
-                    let send = match device.typ {
-                        DeviceType::MASTER {
-                            ref socket_addr,
-                            device_id,
-                        } => {
-                            let bmv2connection =
-                                Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
-                            let result = obj.add_connection(bmv2connection);
-                            if result.is_ok() {
-                                if let Some(r) = obj.restore.as_mut() {
-                                    r.add_device(device.clone());
+
+        app.on_start(&context_handle);
+        tokio::spawn(async move {
+            while let Some(request) = r.next().await {
+                trace!(target:"context","{:#?}",request);
+                match request {
+                    CoreRequest::AddDevice { ref device, reply } => {
+                        let name = &device.name;
+                        let send = match device.typ {
+                            DeviceType::MASTER {
+                                ref socket_addr,
+                                device_id,
+                            } => {
+                                let bmv2connection =
+                                    Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
+                                let result = obj.add_connection(bmv2connection).await;
+                                if result.is_ok() {
+                                    if let Some(r) = obj.restore.as_mut() {
+                                        r.add_device(device.clone());
+                                    }
+                                    true
                                 }
+                                else {
+                                    error!(target:"context","add connection fail: {:?}",result.err().unwrap());
+                                    false
+                                }
+                            }
+                            _ => {
                                 true
                             }
-                            else {
-                                error!(target:"context","add connection fail: {:?}",result.err().unwrap());
-                                false
-                            }
+                        };
+                        if send {
+                            obj.event_sender
+                                .send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into())).await.unwrap();
                         }
-                        _ => {
-                            true
-                        }
-                    };
-                    if send {
+                    }
+                    CoreRequest::Event(e) => {
                         obj.event_sender
-                            .unbounded_send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into()));
+                            .send(CoreEvent::Event(e))
+                            .await.unwrap();
                     }
-                }
-                CoreRequest::Event(e) => {
-                    obj.event_sender
-                        .unbounded_send(CoreEvent::Event(e))
-                        .unwrap();
-                }
-                CoreRequest::PacketOut {
-                    connect_point,
-                    packet,
-                } => {
-                    if let Some(c) = obj
-                        .connections
-                        .write()
-                        .unwrap()
-                        .get_mut(&connect_point.device)
-                    {
-                        let result = c.packet_out(&obj.p4info_helper, connect_point.port, packet);
-                        if result.is_err() {
-                            error!(target:"context","packet out err {:?}", result.err().unwrap());
+                    CoreRequest::PacketOut {
+                        connect_point,
+                        packet,
+                    } => {
+                        if let Some(c) = obj
+                            .connections
+                            .write()
+                            .unwrap()
+                            .get_mut(&connect_point.device)
+                        {
+                            let result = c.packet_out(&obj.p4info_helper, connect_point.port, packet);
+                            if result.is_err() {
+                                error!(target:"context","packet out err {:?}", result.err().unwrap());
+                            }
+                        } else {
+                            // find device name
+                            error!(target:"context","connection not found for device {:?}", connect_point.device);
                         }
-                    } else {
-                        // find device name
-                        error!(target:"context","connection not found for device {:?}", connect_point.device);
                     }
-                }
-                CoreRequest::SetMeter(meter) => {
-                    if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
-                        let request = set_meter_request(&obj.p4info_helper, 1, &meter).unwrap();
-                        c.p4runtime_client.write(&request);
-                    } else {
-                        error!(target:"context","connection not found for device {:?}",&meter.device);
+                    CoreRequest::SetMeter(meter) => {
+                        if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
+                            let request = set_meter_request(&obj.p4info_helper, 1, &meter).unwrap();
+                            c.p4runtime_client.write(&request);
+                        } else {
+                            error!(target:"context","connection not found for device {:?}",&meter.device);
+                        }
                     }
                 }
             }
-            futures03::future::ready(())
         });
-
-        app.on_start(&context_handle);
-        tokio::spawn(task);
         tokio::spawn(app_r.for_each(move |x| {
             match x {
                 CoreEvent::PacketReceived(packet) => {
@@ -183,15 +184,20 @@ where
             self.p4info_helper.clone(),
             self.core_channel_sender.clone(),
             self.connections.clone(),
+            self.id_to_name.clone(),
+            self.removed_id_to_name.clone(),
         )
     }
 
-    pub fn add_connection(&mut self, mut connection: Bmv2SwitchConnection) -> Result<()> {
-        connection.master_arbitration_update_async()?;
-        connection.set_forwarding_pipeline_config(
+    pub async fn add_connection(
+        &mut self,
+        mut connection: Bmv2SwitchConnection,
+    ) -> Result<(), ContextError> {
+        connection.master_arbitration_update().context(ContextErrorKind::ConnectionError)?;
+        connection.set_forwarding_pipeline_config_async(
             &self.p4info_helper.p4info,
             Path::new(&self.pipeconf),
-        )?;
+        ).await.context(ContextErrorKind::ConnectionError)?;
 
         let mut packet_s = self.event_sender.clone().compat().sink_map_err(|e| {
             dbg!(e);
@@ -247,7 +253,10 @@ where
                     let mut conns = obj.connections.write().unwrap();
                     conns.remove(&id);
                     let mut map = obj.id_to_name.write().unwrap();
-                    map.remove(&id);
+                    if let Some(old) = map.remove(&id) {
+                        let mut removed_map = obj.id_to_name.write().unwrap();
+                        removed_map.insert(id, old);
+                    }
                     if let Some(r) = obj.restore.as_mut() {
                         r.remove_device(id);
                     }
@@ -277,9 +286,14 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn packet_out(&self, p4infoHelper: &P4InfoHelper, port: u32, packet: Bytes) -> Result<()> {
-        let request = packet_out_request(p4infoHelper, port, packet)?;
-        self.sink.unbounded_send(request)?;
+    pub fn packet_out(
+        &self,
+        p4infoHelper: &P4InfoHelper,
+        port: u32,
+        packet: Bytes,
+    ) -> Result<(), ContextError> {
+        let request = packet_out_request(p4infoHelper, port, packet).context(ContextErrorKind::ConnectionError)?;
+        self.sink.unbounded_send(request).context(ContextErrorKind::DeviceNotConnected { device: DeviceID(self.device_id) })?;
 
         Ok(())
     }
@@ -289,6 +303,8 @@ pub struct ContextHandle<E> {
     p4info_helper: Arc<P4InfoHelper>,
     pub sender: UnboundedSender<CoreRequest<E>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+    id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+    removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
 }
 
 impl<E> ContextHandle<E>
@@ -299,32 +315,31 @@ where
         p4info_helper: Arc<P4InfoHelper>,
         sender: UnboundedSender<CoreRequest<E>>,
         connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+        id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+        removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     ) -> ContextHandle<E> {
         ContextHandle {
             p4info_helper,
             sender,
             connections,
+            id_to_name,
+            removed_id_to_name,
         }
     }
 
-    pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned> {
+    pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned, ContextError> {
         let device = flow.device;
         let hash = crate::util::hash(&flow);
         let table_entry = flow.to_table_entry(self.p4info_helper.as_ref(), hash);
         let connections = self.connections.read().unwrap();
-        let device_client = connections.get(&device);
-        if let Some(connection) = device_client {
-            write_table_entry(
-                &connection.p4runtime_client,
-                connection.device_id,
-                table_entry,
-            )?;
-            Ok(flow.into_owned(hash))
-        } else {
-            Err(Box::new(ContextError::DeviceNotConnected(
-                "TODO: Get device name from id".to_string(),
-            )))
-        }
+        let connection:&Connection = connections.get(&device)
+            .ok_or(ContextError::from(ContextErrorKind::DeviceNotConnected {device}))?;
+        write_table_entry(
+            &connection.p4runtime_client,
+            connection.device_id,
+            table_entry,
+        ).context(ContextErrorKind::ConnectionError)?;
+        Ok(flow.into_owned(hash))
     }
 
     pub fn add_device(&self, name: String, address: String, device_id: u64) {

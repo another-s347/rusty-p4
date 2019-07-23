@@ -1,6 +1,6 @@
 use log::{debug, error, info, trace, warn};
 
-use crate::error::*;
+use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::p4rt::helper::P4InfoHelper;
 use crate::proto::p4info::Meter;
 use crate::proto::p4runtime::{
@@ -12,6 +12,7 @@ use crate::representation::Meter as MeterRep;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
+use failure::ResultExt;
 use futures::{Future, Sink};
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 
@@ -19,7 +20,7 @@ pub fn write_table_entry(
     client: &P4RuntimeClient,
     device_id: u64,
     table_entry: TableEntry,
-) -> Result<()> {
+) -> Result<(), ConnectionError> {
     let mut request = crate::proto::p4runtime::WriteRequest::new();
     request.set_device_id(device_id);
     request.mut_election_id().low = 1;
@@ -35,7 +36,9 @@ pub fn write_table_entry(
         .clone_from(&table_entry);
     request.updates.push(update);
     //    debug!(target:"write_table_entry", "request: {:#?}", &request);
-    client.write(&request)?;
+    client
+        .write(&request)
+        .context(ConnectionErrorKind::GRPCSendError)?;
 
     Ok(())
 }
@@ -55,7 +58,7 @@ pub fn packet_out_request(
     p4info: &P4InfoHelper,
     egress_port: u32,
     packet: Bytes,
-) -> Result<(StreamMessageRequest, WriteFlags)> {
+) -> Result<(StreamMessageRequest, WriteFlags), ConnectionError> {
     let mut request = StreamMessageRequest::new();
     let mut packetOut = PacketOut::new();
     packetOut.set_payload(packet.to_vec());
@@ -73,7 +76,7 @@ pub fn set_meter_request(
     p4info: &P4InfoHelper,
     device_id: u64,
     meter: &MeterRep,
-) -> Result<WriteRequest> {
+) -> Result<WriteRequest, ConnectionError> {
     let mut write_request = WriteRequest::new();
     write_request.set_device_id(device_id);
     write_request.mut_election_id().set_low(1);

@@ -28,7 +28,7 @@ pub struct Restore {
 }
 
 impl Restore {
-    pub fn new(path: &str) -> crate::error::Result<Restore> {
+    pub fn new(path: &str) -> Restore {
         let pathbuf = PathBuf::from(path);
         let state = if let Ok(f) = File::open(pathbuf.as_path()) {
             serde_json::from_reader(f).unwrap_or(RestoreState::new())
@@ -46,7 +46,7 @@ impl Restore {
             exit(0);
         })
         .expect("Error setting Ctrl-C handler");
-        Ok(obj)
+        obj
     }
 
     pub fn save(&self) {
