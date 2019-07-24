@@ -15,20 +15,33 @@ use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook}
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::app::common::CommonState;
-use std::process::exit;
 //use futures::prelude::*;
 use futures03::prelude::*;
 use tokio::sync::oneshot::Sender;
+use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
+use std::any::Any;
 
 pub struct LinkProbeLoader {
-    inner:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>
+    inner:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,
+    interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
+}
+
+pub trait LinkProbeInterceptor {
+    fn new_flow(&self,device:DeviceID) -> Option<Flow>;
 }
 
 impl LinkProbeLoader {
     pub fn new() -> Self {
         LinkProbeLoader {
-            inner: Arc::new(Mutex::new(Default::default()))
+            inner: Arc::new(Mutex::new(Default::default())),
+            interceptor: HashMap::new()
         }
+    }
+
+    pub fn with_interceptor<T:'static>(mut self,pipeconf:&str,interceptor:T) -> Self where T:LinkProbeInterceptor {
+        let pipeconf = crate::util::hash(pipeconf);
+        self.interceptor.insert(PipeconfID(pipeconf),Box::new(interceptor));
+        self
     }
 }
 

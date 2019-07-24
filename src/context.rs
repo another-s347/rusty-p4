@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use futures::future::{result, Future};
@@ -15,11 +15,8 @@ use crate::error::{ContextErrorKind, ContextError};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::helper::P4InfoHelper;
-use crate::p4rt::pure::{packet_out_request, set_meter_request, write_table_entry};
-use crate::proto::p4runtime::{
-    Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse,
-    StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest,
-};
+use crate::p4rt::pure::{new_packet_out_request, new_set_meter_request, new_write_table_entry};
+use crate::proto::p4runtime::{Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest, WriteResponse};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
 use crate::restore;
@@ -33,14 +30,14 @@ use futures03::future::FutureExt;
 use log::{debug, error, info, trace, warn};
 use std::fmt::Debug;
 use failure::ResultExt;
+use crate::p4rt::pipeconf::{PipeconfID, Pipeconf};
 
 mod driver;
 mod netconfiguration;
 
 #[derive(Clone)]
 pub struct Context<E> {
-    p4info_helper: Arc<P4InfoHelper>,
-    pipeconf: String,
+    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     core_channel_sender: UnboundedSender<CoreRequest<E>>,
     event_sender: UnboundedSender<CoreEvent<E>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
@@ -55,7 +52,6 @@ where
 {
     pub async fn try_new<T>(
         p4info_helper: P4InfoHelper,
-        pipeconfig: String,
         mut app: T,
         restore: Option<Restore>,
     ) -> Result<Context<E>, ContextError>
@@ -67,8 +63,7 @@ where
         let (s, mut r) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
-            p4info_helper: Arc::new(p4info_helper),
-            pipeconf: pipeconfig,
+            pipeconf: Arc::new(HashMap::new()),
             core_channel_sender: s,
             event_sender: app_s,
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -87,33 +82,34 @@ where
                 match request {
                     CoreRequest::AddDevice { ref device, reply } => {
                         let name = &device.name;
-                        let send = match device.typ {
+                        match device.typ {
                             DeviceType::MASTER {
                                 ref socket_addr,
                                 device_id,
+                                pipeconf
                             } => {
+                                let pipeconf_obj = obj.pipeconf.get(&pipeconf);
+                                if pipeconf_obj.is_none() {
+                                    error!(target:"context","pipeconf not found: {:?}",pipeconf);
+                                    continue;
+                                }
+                                let pipeconf = pipeconf_obj.unwrap().clone();
                                 let bmv2connection =
                                     Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
-                                let result = obj.add_connection(bmv2connection).await;
-                                if result.is_ok() {
-                                    if let Some(r) = obj.restore.as_mut() {
-                                        r.add_device(device.clone());
-                                    }
-                                    true
-                                }
-                                else {
+                                let result = obj.add_connection(bmv2connection, &pipeconf).await;
+                                if result.is_err() {
                                     error!(target:"context","add connection fail: {:?}",result.err().unwrap());
-                                    false
+                                    continue;
+                                }
+                                if let Some(r) = obj.restore.as_mut() {
+                                    r.add_device(device.clone());
                                 }
                             }
                             _ => {
-                                true
                             }
-                        };
-                        if send {
-                            obj.event_sender
-                                .send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into())).await.unwrap();
                         }
+                        obj.event_sender
+                            .send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into())).await.unwrap();
                     }
                     CoreRequest::Event(e) => {
                         obj.event_sender
@@ -130,7 +126,8 @@ where
                             .unwrap()
                             .get_mut(&connect_point.device)
                         {
-                            let result = c.packet_out(&obj.p4info_helper, connect_point.port, packet);
+                            let request = new_packet_out_request(&c.pipeconf, connect_point.port, packet);
+                            let result = c.send_stream_request(request);
                             if result.is_err() {
                                 error!(target:"context","packet out err {:?}", result.err().unwrap());
                             }
@@ -141,7 +138,7 @@ where
                     }
                     CoreRequest::SetMeter(meter) => {
                         if let Some(c) = obj.connections.write().unwrap().get_mut(&meter.device) {
-                            let request = set_meter_request(&obj.p4info_helper, 1, &meter);
+                            let request = new_set_meter_request(&c.pipeconf, 1, &meter);
                             if request.is_err() {
                                 error!(target:"context","set meter pipeconf error: {:?}",request.err().unwrap());
                                 continue;
@@ -191,23 +188,24 @@ where
         E: Event,
     {
         ContextHandle::new(
-            self.p4info_helper.clone(),
             self.core_channel_sender.clone(),
             self.connections.clone(),
             self.id_to_name.clone(),
             self.removed_id_to_name.clone(),
+            self.pipeconf.clone()
         )
     }
 
     pub async fn add_connection(
         &mut self,
         mut connection: Bmv2SwitchConnection,
+        pipeconf:&Pipeconf
     ) -> Result<(), ContextError> {
-        connection.master_arbitration_update().context(ContextErrorKind::ConnectionError(format!("set master for device {}",&connection.name)))?;
+        connection.master_arbitration_update().context(ContextErrorKind::ConnectionError)?;
         connection.set_forwarding_pipeline_config_async(
-            &self.p4info_helper.p4info,
-            Path::new(&self.pipeconf),
-        ).await.context(ContextErrorKind::ConnectionError(format!("set pipeline for device {}",&connection.name)))?;
+            pipeconf.get_p4info(),
+            pipeconf.get_bmv2_file_path(),
+        ).await.context(ContextErrorKind::ConnectionError)?;
 
         let mut packet_s = self.event_sender.clone().compat().sink_map_err(|e| {
             dbg!(e);
@@ -215,7 +213,7 @@ where
 
         let name = connection.name.clone();
         let id = connection.inner_id;
-        let packet_in_metaid = self.p4info_helper.packetin_ingress_id;
+        let packet_in_metaid = pipeconf.packetin_ingress_id;
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
                 match update {
@@ -280,6 +278,7 @@ where
                 p4runtime_client: connection.client,
                 sink: sink_sender,
                 device_id: connection.device_id,
+                pipeconf: pipeconf.clone()
             },
         );
 
@@ -293,25 +292,35 @@ pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
     pub sink: futures::sync::mpsc::UnboundedSender<(StreamMessageRequest, WriteFlags)>,
     pub device_id: u64,
+    pub pipeconf: Pipeconf
 }
 
 impl Connection {
-    pub fn packet_out(
-        &self,
-        p4infoHelper: &P4InfoHelper,
-        port: u32,
-        packet: Bytes,
-    ) -> Result<(), ContextError> {
-        let request = packet_out_request(p4infoHelper, port, packet);
-        self.sink.unbounded_send(request).context(ContextErrorKind::DeviceNotConnected { device: DeviceID(self.device_id) })?;
+//    pub fn packet_out(
+//        &self,
+//        port: u32,
+//        packet: Bytes,
+//    ) -> Result<(), ContextError> {
+//        let request = new_packet_out_request(&self.pipeconf, port, packet);
+//        self.sink.unbounded_send(request).context(ContextErrorKind::DeviceNotConnected { device: DeviceID(self.device_id) })?;
+//
+//        Ok(())
+//    }
+
+    pub fn send_stream_request(&self,request:StreamMessageRequest)-> Result<(), ContextError> {
+        self.sink.unbounded_send((request,WriteFlags::default())).context(ContextErrorKind::DeviceNotConnected { device: DeviceID(self.device_id) })?;
 
         Ok(())
+    }
+
+    pub fn send_request_sync(&self,request:&WriteRequest)-> Result<WriteResponse, ContextError> {
+        Ok(self.p4runtime_client.write(request).context(ContextErrorKind::ConnectionError)?)
     }
 }
 
 pub struct ContextHandle<E> {
-    p4info_helper: Arc<P4InfoHelper>,
     pub sender: UnboundedSender<CoreRequest<E>>,
+    pipeconf: Arc<HashMap<PipeconfID,Pipeconf>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
@@ -322,15 +331,15 @@ where
     E: Debug,
 {
     pub fn new(
-        p4info_helper: Arc<P4InfoHelper>,
         sender: UnboundedSender<CoreRequest<E>>,
         connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
         id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
         removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+        pipeconf:Arc<HashMap<PipeconfID,Pipeconf>>
     ) -> ContextHandle<E> {
         ContextHandle {
-            p4info_helper,
             sender,
+            pipeconf,
             connections,
             id_to_name,
             removed_id_to_name,
@@ -340,20 +349,21 @@ where
     pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned, ContextError> {
         let device = flow.device;
         let hash = crate::util::hash(&flow);
-        let table_entry = flow.to_table_entry(self.p4info_helper.as_ref(), hash);
         let connections = self.connections.read().unwrap();
-        let connection:&Connection = connections.get(&device)
+        let connection = connections.get(&device)
             .ok_or(ContextError::from(ContextErrorKind::DeviceNotConnected {device}))?;
-        write_table_entry(
-            &connection.p4runtime_client,
+        let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
+        let request = new_write_table_entry(
             connection.device_id,
             table_entry,
-        ).context(ContextErrorKind::ConnectionError(format!("writing table entry for flow: {:?}",flow)))?;
+        );
+        connection.send_request_sync(&request).context(ContextErrorKind::ConnectionError)?;
         Ok(flow.into_owned(hash))
     }
 
-    pub fn add_device(&self, name: String, address: String, device_id: u64) {
+    pub fn add_device(&self, name: String, address: String, device_id: u64, pipeconf:&str) {
         let id = crate::util::hash(&name);
+        let pipeconf = crate::util::hash(pipeconf);
         let device = Device {
             id: DeviceID(id),
             name,
@@ -361,6 +371,7 @@ where
             typ: DeviceType::MASTER {
                 socket_addr: address,
                 device_id,
+                pipeconf:PipeconfID(pipeconf)
             },
             device_id,
             index: 0,

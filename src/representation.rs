@@ -1,3 +1,4 @@
+use crate::p4rt::pipeconf::PipeconfID;
 use crate::util::value::MAC;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -17,7 +18,7 @@ pub struct Device {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct DeviceID(pub(crate) u64);
+pub struct DeviceID(pub u64);
 
 impl ToString for DeviceID {
     fn to_string(&self) -> String {
@@ -46,7 +47,11 @@ impl PartialEq for Host {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DeviceType {
-    MASTER { socket_addr: String, device_id: u64 },
+    MASTER {
+        socket_addr: String,
+        device_id: u64,
+        pipeconf: PipeconfID,
+    },
     VIRTUAL,
 }
 

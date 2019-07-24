@@ -9,12 +9,12 @@ pub struct ContextError {
     inner: Context<ContextErrorKind>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ContextErrorKind {
     #[fail(display = "Device not connected: {:?}.", device)]
     DeviceNotConnected { device: DeviceID },
-    #[fail(display = "Internal connection error when {}.", _0)]
-    ConnectionError(String),
+    #[fail(display = "Internal connection error.")]
+    ConnectionError,
 }
 
 impl Fail for ContextError {

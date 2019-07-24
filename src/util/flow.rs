@@ -1,4 +1,6 @@
 use crate::p4rt::helper::P4InfoHelper;
+use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pure::build_table_entry;
 use crate::proto::p4runtime::TableEntry;
 use crate::representation::DeviceID;
 use crate::util::value::{InnerValue, ParamValue, Value};
@@ -21,8 +23,9 @@ pub struct FlowOwned {
 }
 
 impl<'a> Flow<'a> {
-    pub fn to_table_entry(&self, p4info_helper: &P4InfoHelper, metadata: u64) -> TableEntry {
-        let table_entry = p4info_helper.build_table_entry(
+    pub fn to_table_entry(&self, pipeconf: &Pipeconf, metadata: u64) -> TableEntry {
+        let table_entry = build_table_entry(
+            pipeconf.get_p4info(),
             self.table.name,
             self.table.matches,
             false,

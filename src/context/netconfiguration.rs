@@ -23,6 +23,7 @@ use crate::event::{CoreRequest, Event, CommonEvents};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::representation::{Device, DeviceType, Interface, Port, DeviceID};
 use crate::util::value::MAC;
+use crate::p4rt::pipeconf::PipeconfID;
 
 #[derive(Deserialize, Debug)]
 pub struct Netconfig {
@@ -73,13 +74,15 @@ impl Netconfig {
                 }
             }).collect();
             let id=DeviceID(crate::util::hash(&name));
+            let pipeconf = PipeconfID(crate::util::hash(&device_config.basic.pipeconf));
             Device {
                 id,
                 name,
                 ports,
                 typ: DeviceType::MASTER {
                     socket_addr: device_config.basic.socket_addr,
-                    device_id: device_config.basic.device_id
+                    device_id: device_config.basic.device_id,
+                    pipeconf
                 },
                 device_id: device_config.basic.device_id,
                 index: 0
