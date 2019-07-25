@@ -11,7 +11,7 @@ use crate::proto::p4runtime::{
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::Meter as MeterRep;
-use crate::util::value::{InnerParamValue, InnerValue};
+use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
@@ -100,7 +100,7 @@ pub fn build_table_entry(
     match_fields: &[(&str, InnerValue)],
     default_action: bool,
     action_name: &str,
-    action_params: &[(&str, InnerParamValue)],
+    action_params: &[(&str, Vec<u8>)],
     priority: i32,
     metadata: u64,
 ) -> TableEntry {
@@ -124,9 +124,12 @@ pub fn build_table_entry(
         action.set_action_id(get_actions_id(p4info, action_name).unwrap());
         if !action_params.is_empty() {
             for (field_name, value) in action_params {
-                action
-                    .params
-                    .push(get_action_param_pb(p4info, action_name, field_name, value));
+                action.params.push(get_action_param_pb(
+                    p4info,
+                    action_name,
+                    field_name,
+                    value.clone(),
+                ));
             }
         }
     }
@@ -315,11 +318,10 @@ pub fn get_action_param_pb(
     pipeconf: &P4Info,
     action_name: &str,
     param_name: &str,
-    value: &InnerParamValue,
+    mut value: InnerParamValue,
 ) -> crate::proto::p4runtime::Action_Param {
     let p4info_param = get_action_param_by_name(pipeconf, action_name, param_name).unwrap();
     let mut p4runtime_param = crate::proto::p4runtime::Action_Param::new();
-    let mut value = value.clone();
     let bytes_len = (p4info_param.bitwidth as f32 / 8.0).ceil() as usize;
     //        println!("adjust value: action:{}, param:{}, value:{:?}, bitwidth:{}",action_name,param_name,value,p4info_param.bitwidth);
     let value = adjust_value(value, bytes_len);

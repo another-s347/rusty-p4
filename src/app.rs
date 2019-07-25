@@ -12,7 +12,7 @@ use crate::util::flow::{Flow, FlowAction, FlowTable};
 use crate::util::packet::data::Data;
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
-use crate::util::value::{ParamValue, Value};
+use crate::util::value::{encode, LPM};
 
 pub mod common;
 pub mod extended;
@@ -56,12 +56,12 @@ impl P4app<CommonEvents> for Example {
                     name: "MyIngress.ipv4_lpm",
                     matches: &[(
                         "hdr.ipv4.dstAddr",
-                        Value::LPM(Ipv4Addr::from_str("10.0.2.2").unwrap(), 32),
+                        LPM(Ipv4Addr::from_str("10.0.2.2").unwrap(), 32),
                     )],
                 };
                 let flow_action = FlowAction {
                     name: "MyIngress.myTunnel_ingress",
-                    params: &[("dst_id", ParamValue::of(100u32))],
+                    params: &[("dst_id", encode(100u32))],
                 };
                 let flow = Flow {
                     device: device.id,

@@ -2,7 +2,7 @@ use crate::p4rt::pipeconf::Pipeconf;
 use crate::p4rt::pure::build_table_entry;
 use crate::proto::p4runtime::TableEntry;
 use crate::representation::DeviceID;
-use crate::util::value::{InnerValue, ParamValue, Value};
+use crate::util::value::{InnerValue, Value};
 
 #[derive(Debug, Clone, Hash)]
 pub struct Flow<'a> {

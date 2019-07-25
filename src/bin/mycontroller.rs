@@ -53,10 +53,10 @@ fn write_tunnel_rules(
     let table_entry = build_table_entry(
         pipeconf.get_p4info(),
         "MyIngress.ipv4_lpm",
-        &[("hdr.ipv4.dstAddr", Value::LPM(dst_ip_addr, 32))],
+        &[("hdr.ipv4.dstAddr", LPM(dst_ip_addr, 32))],
         false,
         "MyIngress.myTunnel_ingress",
-        &[("dst_id", ParamValue::of(tunnel_id))],
+        &[("dst_id", encode(tunnel_id))],
         0,
         0,
     );
@@ -66,10 +66,10 @@ fn write_tunnel_rules(
     let table_entry = build_table_entry(
         pipeconf.get_p4info(),
         "MyIngress.myTunnel_exact",
-        &[("hdr.myTunnel.dst_id", Value::EXACT(tunnel_id))],
+        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
         false,
         "MyIngress.myTunnel_forward",
-        &[("port", ParamValue::of(2u32))],
+        &[("port", encode(2u32))],
         0,
         0,
     );
@@ -78,13 +78,10 @@ fn write_tunnel_rules(
     let table_entry = build_table_entry(
         pipeconf.get_p4info(),
         "MyIngress.myTunnel_exact",
-        &[("hdr.myTunnel.dst_id", Value::EXACT(tunnel_id))],
+        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
         false,
         "MyIngress.myTunnel_egress",
-        &[
-            ("dstAddr", ParamValue::with(dst_eth_addr.encode())),
-            ("port", ParamValue::of(1u32)),
-        ],
+        &[("dstAddr", encode(dst_eth_addr)), ("port", encode(1u32))],
         0,
         0,
     );

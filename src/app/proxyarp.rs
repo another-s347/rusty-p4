@@ -8,7 +8,7 @@ use crate::util::packet::arp::ETHERNET_TYPE_ARP;
 use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
 use crate::util::packet::{arp::ArpOp, Arp, Ethernet};
-use crate::util::value::{Value, MAC};
+use crate::util::value::{Value, EXACT, MAC};
 use bytes::Bytes;
 use futures::prelude::*;
 use futures03::prelude::*;
@@ -135,7 +135,7 @@ where
         device: device_id,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
-            matches: &[("hdr.ethernet.ether_type", Value::EXACT(ETHERNET_TYPE_ARP))],
+            matches: &[("hdr.ethernet.ether_type", EXACT(ETHERNET_TYPE_ARP))],
         },
         action: FlowAction {
             name: "send_to_cpu",

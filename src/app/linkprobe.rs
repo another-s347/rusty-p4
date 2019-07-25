@@ -5,7 +5,7 @@ use futures::prelude::*;
 use futures03::prelude::*;
 use log::{info, trace, warn, debug, error};
 use crate::util::flow::{Flow, FlowTable, FlowAction};
-use crate::util::value::{Value, MAC};
+use crate::util::value::{Value, MAC, EXACT};
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use bytes::Bytes;
@@ -128,7 +128,7 @@ pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where 
         device: device_id,
         table: FlowTable {
             name: "IngressPipeImpl.acl",
-            matches: &[("hdr.ethernet.ether_type",Value::EXACT(0x861u16))]
+            matches: &[("hdr.ethernet.ether_type",EXACT(0x861u16))]
         },
         action: FlowAction {
             name: "send_to_cpu",

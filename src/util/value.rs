@@ -55,18 +55,16 @@ fn vec_to_mac(vec: Vec<u8>) -> [u8; 6] {
     mac
 }
 
-impl Value {
-    pub fn EXACT<T: Encode>(v: T) -> InnerValue {
-        InnerValue::EXACT(v.encode())
-    }
+pub fn EXACT<T: Encode>(v: T) -> InnerValue {
+    InnerValue::EXACT(v.encode())
+}
 
-    pub fn LPM<T: Encode>(v: T, prefix_len: i32) -> InnerValue {
-        InnerValue::LPM(v.encode(), prefix_len)
-    }
+pub fn LPM<T: Encode>(v: T, prefix_len: i32) -> InnerValue {
+    InnerValue::LPM(v.encode(), prefix_len)
+}
 
-    pub fn TERNARY<T: Encode>(v: T, mask: Vec<u8>) -> InnerValue {
-        InnerValue::TERNARY(v.encode(), mask)
-    }
+pub fn TERNARY<T: Encode>(v: T, mask: Vec<u8>) -> InnerValue {
+    InnerValue::TERNARY(v.encode(), mask)
 }
 
 #[derive(Clone, Debug, Hash)]
@@ -77,16 +75,8 @@ pub enum InnerValue {
     RANGE(/*low*/ Vec<u8>, /*high*/ Vec<u8>),
 }
 
-pub struct ParamValue;
-
-impl ParamValue {
-    pub fn with(v: Vec<u8>) -> InnerParamValue {
-        v
-    }
-
-    pub fn of<T: Encode>(v: T) -> InnerParamValue {
-        v.encode()
-    }
+pub fn encode<T: Encode>(v: T) -> InnerParamValue {
+    v.encode()
 }
 
 pub type InnerParamValue = Vec<u8>;
