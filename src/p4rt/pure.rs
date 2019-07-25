@@ -1,7 +1,6 @@
 use log::{debug, error, info, trace, warn};
 
 use crate::error::{ConnectionError, ConnectionErrorKind};
-use crate::p4rt::helper::P4InfoHelper;
 use crate::p4rt::pipeconf::Pipeconf;
 use crate::proto::p4info::{
     Action, Action_Param, MatchField, MatchField_MatchType, Meter, P4Info, Table,
@@ -96,7 +95,7 @@ pub fn new_set_meter_request(
 }
 
 pub fn build_table_entry(
-    pipeconf: &P4Info,
+    p4info: &P4Info,
     table_name: &str,
     match_fields: &[(&str, InnerValue)],
     default_action: bool,
@@ -106,13 +105,13 @@ pub fn build_table_entry(
     metadata: u64,
 ) -> TableEntry {
     let mut table_entry = crate::proto::p4runtime::TableEntry::new();
-    table_entry.set_table_id(get_table_id(pipeconf, table_name).unwrap());
+    table_entry.set_table_id(get_table_id(p4info, table_name).unwrap());
 
     table_entry.set_priority(priority);
     table_entry.set_controller_metadata(metadata);
 
     for (match_field_name, value) in match_fields {
-        let entry = get_match_field_pb(pipeconf, table_name, match_field_name, value).unwrap();
+        let entry = get_match_field_pb(p4info, table_name, match_field_name, value).unwrap();
         table_entry.field_match.push(entry)
     }
 
@@ -122,15 +121,12 @@ pub fn build_table_entry(
 
     if !action_name.is_empty() {
         let action = table_entry.mut_action().mut_action();
-        action.set_action_id(get_actions_id(pipeconf, action_name).unwrap());
+        action.set_action_id(get_actions_id(p4info, action_name).unwrap());
         if !action_params.is_empty() {
             for (field_name, value) in action_params {
-                action.params.push(get_action_param_pb(
-                    pipeconf,
-                    action_name,
-                    field_name,
-                    value,
-                ));
+                action
+                    .params
+                    .push(get_action_param_pb(p4info, action_name, field_name, value));
             }
         }
     }

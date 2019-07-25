@@ -14,7 +14,6 @@ use crate::app::P4app;
 use crate::error::{ContextErrorKind, ContextError};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
-use crate::p4rt::helper::P4InfoHelper;
 use crate::p4rt::pure::{new_packet_out_request, new_set_meter_request, new_write_table_entry};
 use crate::proto::p4runtime::{Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest, WriteResponse};
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
@@ -51,7 +50,7 @@ where
     E: Event + Clone + 'static + Send,
 {
     pub async fn try_new<T>(
-        p4info_helper: P4InfoHelper,
+        pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
         restore: Option<Restore>,
     ) -> Result<Context<E>, ContextError>
@@ -63,7 +62,7 @@ where
         let (s, mut r) = futures03::channel::mpsc::unbounded();
 
         let mut obj = Context {
-            pipeconf: Arc::new(HashMap::new()),
+            pipeconf: Arc::new(pipeconf),
             core_channel_sender: s,
             event_sender: app_s,
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -105,8 +104,7 @@ where
                                     r.add_device(device.clone());
                                 }
                             }
-                            _ => {
-                            }
+                            _ => {}
                         }
                         obj.event_sender
                             .send(CoreEvent::Event(CommonEvents::DeviceAdded(device.clone()).into())).await.unwrap();

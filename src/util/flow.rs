@@ -1,4 +1,3 @@
-use crate::p4rt::helper::P4InfoHelper;
 use crate::p4rt::pipeconf::Pipeconf;
 use crate::p4rt::pure::build_table_entry;
 use crate::proto::p4runtime::TableEntry;

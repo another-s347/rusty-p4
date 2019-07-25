@@ -4,9 +4,9 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
-use super::helper::P4InfoHelper;
 use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::failure::ResultExt;
+use crate::p4rt::pipeconf::Pipeconf;
 use crate::p4rt::pure::adjust_value;
 use crate::proto::p4config::P4DeviceConfig;
 use crate::proto::p4info::P4Info;
@@ -17,6 +17,7 @@ use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::DeviceID;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
+use bytes::Bytes;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures03::compat::*;
@@ -77,18 +78,11 @@ impl Bmv2SwitchConnection {
 
     pub fn packet_out(
         &mut self,
-        p4info: &P4InfoHelper,
+        pipeconf: &Pipeconf,
         egress_port: u32,
-        packet: Vec<u8>,
+        packet: Bytes,
     ) -> Result<(), ConnectionError> {
-        let mut request = StreamMessageRequest::new();
-        request.mut_packet().set_payload(packet);
-        let mut packetout_metadata = PacketMetadata::new();
-        packetout_metadata.set_metadata_id(p4info.packetout_egress_id);
-        let mut v = vec![];
-        BigEndian::write_u32(&mut v, egress_port);
-        packetout_metadata.set_value(adjust_value(v, 9));
-        request.mut_packet().mut_metadata().push(packetout_metadata);
+        let request = super::pure::new_packet_out_request(pipeconf, egress_port, packet);
         self.stream_channel_sink
             .start_send((request, WriteFlags::default()))
             .context(ConnectionErrorKind::GRPCSendError)?;
