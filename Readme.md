@@ -108,6 +108,7 @@ impl P4appExtended<CommonEvents> for AdhocApp {
 }
 ```
 ## TODO
+0. Migrate to tokio 0.2/ hyper 0.13/ tower-grpc.
 1. Complete P4Runtime API (read/write table, counter...).
 2. More packet parser.
 3. ~~Composable App~~.
@@ -115,9 +116,10 @@ impl P4appExtended<CommonEvents> for AdhocApp {
 5. Logging and error handling and config.
 6. ~~Network-object configuration~~(Simple net config supported).
 7. ~~State restore~~.
-8. Multiple p4 pipeline (low priority).
-9. More API.
-10. Maybe more.
+8. ~~Multiple p4 pipeline~~(need test and app update).
+9. Rest API for external control (CLI and ONOS restconf driver..etc).
+10. More API.
+11. Maybe more.
 
 ## Built With
 
