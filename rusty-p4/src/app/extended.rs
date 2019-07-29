@@ -14,10 +14,11 @@ use log::{debug, error, info, trace, warn};
 use serde::export::PhantomData;
 use std::collections::HashMap;
 
-pub type EventHook<E> = Box<FnMut(&E, &CommonState, &ContextHandle<E>) -> () + Send>;
+pub type EventHook<E> = Box<dyn FnMut(&E, &CommonState, &ContextHandle<E>) -> () + Send>;
 pub type EtherPacketHook<E> =
-    Box<FnMut(Data, ConnectPoint, &CommonState, &ContextHandle<E>) -> () + Send>;
-pub type OnDeviceAddedHook<E> = Box<FnMut(&Device, &CommonState, &ContextHandle<E>) -> () + Send>;
+    Box<dyn FnMut(Ethernet<Data>, ConnectPoint, &CommonState, &ContextHandle<E>) -> () + Send>;
+pub type OnDeviceAddedHook<E> =
+    Box<dyn FnMut(&Device, &CommonState, &ContextHandle<E>) -> () + Send>;
 
 pub trait P4appExtended<E>: Send + 'static {
     fn on_packet(
@@ -101,7 +102,7 @@ where
                     .iter_mut()
                     .find(|(&k, _)| k == eth.ether_type)
                 {
-                    h(eth.payload, packet.from, state, ctx);
+                    h(eth, packet.from, state, ctx);
                 }
                 self.extension.on_packet(packet, ctx, &self.common);
             }

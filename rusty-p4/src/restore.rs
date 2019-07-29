@@ -28,16 +28,16 @@ pub struct Restore {
 }
 
 impl Restore {
-    pub fn new(path: &str) -> Restore {
-        let pathbuf = PathBuf::from(path);
-        let state = if let Ok(f) = File::open(pathbuf.as_path()) {
+    pub fn new<T: AsRef<Path>>(path: T) -> Restore {
+        let path = path.as_ref();
+        let state = if let Ok(f) = File::open(path) {
             serde_json::from_reader(f).unwrap_or(RestoreState::new())
         } else {
             RestoreState::new()
         };
         let obj = Restore {
             state: Arc::new(Mutex::new(state)),
-            file: pathbuf,
+            file: PathBuf::from(path),
         };
         let obj2 = obj.clone();
         ctrlc::set_handler(move || {

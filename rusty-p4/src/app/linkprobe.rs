@@ -75,15 +75,15 @@ impl<A,E> P4appInstallable<A,E> for LinkProbeLoader
     }
 }
 
-pub fn on_probe_received<E>(data:Data,cp:ConnectPoint,state:&CommonState,ctx:&ContextHandle<E>) where E:Event {
-    let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&data.0);
+pub fn on_probe_received<E>(data:Ethernet<Data>,cp:ConnectPoint,state:&CommonState,ctx:&ContextHandle<E>) where E:Event {
+    let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&data.payload.0);
     if let Ok(from) = probe {
         let this = cp;
         let from = from.to_owned();
         ctx.send_event(CommonEvents::LinkDetected(Link {
             src: from,
             dst: this
-        }).into());
+        }));
     }
     else {
         error!(target:"linkprobe","invalid probe == {:?}",probe);

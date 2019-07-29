@@ -33,11 +33,16 @@ where
     }
 }
 
-pub fn on_arp_received<E>(data: Data, cp: ConnectPoint, state: &CommonState, ctx: &ContextHandle<E>)
-where
+pub fn on_arp_received<E>(
+    data: Ethernet<Data>,
+    cp: ConnectPoint,
+    state: &CommonState,
+    ctx: &ContextHandle<E>,
+) where
     E: Event,
 {
     let device = cp.device;
+    let data = data.payload;
     let arp = Arp::from_bytes(data.clone().0.into());
     if arp.is_none() {
         error!(target:"proxyarp","invalid arp packet");
@@ -52,7 +57,7 @@ where
                 location: cp,
             };
             if !state.hosts.contains(&host) {
-                ctx.send_event(CommonEvents::HostDetected(host).into());
+                ctx.send_event(CommonEvents::HostDetected(host));
             }
             if let Some(arp_target) = state.hosts.iter().find(|x| x.ip == arp.target_ip) {
                 let arp_reply = Arp {
@@ -112,7 +117,7 @@ where
                 ip: arp.sender_ip.into(),
                 location: cp,
             };
-            ctx.send_event(CommonEvents::HostDetected(host).into());
+            ctx.send_event(CommonEvents::HostDetected(host));
         }
         ArpOp::Unknown(op) => {
             error!(target:"proxyarp","unknown arp op code: {}", op);
