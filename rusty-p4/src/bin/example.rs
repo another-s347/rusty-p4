@@ -34,5 +34,7 @@ pub async fn main() {
 
     }).with(LinkProbeLoader::new()).build();
 
-    let mut context = Context::try_new(pipeconfs, app, Some(restore)).await.unwrap();
+    let (mut context,driver) = Context::try_new(pipeconfs, app, Some(restore), ContextConfig::default()).await.unwrap();
+
+    driver.run_to_end().await;
 }

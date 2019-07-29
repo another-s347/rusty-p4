@@ -19,7 +19,7 @@ pub type EtherPacketHook<E> =
     Box<FnMut(Data, ConnectPoint, &CommonState, &ContextHandle<E>) -> () + Send>;
 pub type OnDeviceAddedHook<E> = Box<FnMut(&Device, &CommonState, &ContextHandle<E>) -> () + Send>;
 
-pub trait P4appExtended<E> {
+pub trait P4appExtended<E>: Send + 'static {
     fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
@@ -156,14 +156,14 @@ where
                         .iter()
                         .filter(|host| host.location.device == deviceID)
                         .for_each(|host| {
-                            ctx.send_event(CommonEvents::HostLost(*host).into());
+                            ctx.send_event(CommonEvents::HostLost(*host));
                         });
                     self.common
                         .links
                         .iter()
                         .filter(|x| x.src.device == deviceID || x.dst.device == deviceID)
                         .for_each(|link| {
-                            ctx.send_event(CommonEvents::LinkLost(*link).into());
+                            ctx.send_event(CommonEvents::LinkLost(*link));
                         });
                     self.common.graph.remove_device(&deviceID);
                     info!(target:"extend","device removed {}", device.name);
