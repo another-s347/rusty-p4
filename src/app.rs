@@ -21,7 +21,7 @@ pub mod linkprobe;
 pub mod proxyarp;
 pub mod statistic;
 
-pub trait P4app<E>
+pub trait P4app<E>: Send + 'static
 where
     E: Event,
 {

@@ -3,7 +3,7 @@
 #![feature(async_await)]
 
 use rusty_p4::p4rt;
-use rusty_p4::context::Context;
+use rusty_p4::context::{Context, ContextConfig};
 use rusty_p4::app::extended::{ExampleExtended, P4appBuilder};
 use rusty_p4::restore;
 use std::path::Path;
@@ -34,5 +34,7 @@ pub async fn main() {
 
     }).with(LinkProbeLoader::new()).build();
 
-    let mut context = Context::try_new(pipeconfs, app, Some(restore)).await.unwrap();
+    let (mut context,driver) = Context::try_new(pipeconfs, app, Some(restore), ContextConfig::default()).await.unwrap();
+
+    driver.run_to_end().await;
 }
