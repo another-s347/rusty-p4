@@ -1,7 +1,11 @@
 use crate::p4rt::pure::{get_packin_egress_port_metaid, get_packout_egress_port_metaid};
 use crate::proto::p4info::P4Info;
+use failure::ResultExt;
+use log::error;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -14,8 +18,17 @@ pub struct Pipeconf {
 }
 
 impl Pipeconf {
-    pub fn new<T: AsRef<Path>>(name: &str, p4info_file_path: T, bmv2_file_path: T) -> Pipeconf {
-        let mut file = std::fs::File::open(p4info_file_path).unwrap();
+    pub fn new<T: AsRef<Path> + Debug>(
+        name: &str,
+        p4info_file_path: T,
+        bmv2_file_path: T,
+    ) -> Pipeconf {
+        let file = std::fs::File::open(&p4info_file_path);
+        if file.is_err() {
+            error!(target:"pipeconf", "critical: Opening P4 info file fail: {:?}, path: {:?}", file.err().unwrap(), &p4info_file_path);
+            exit(1);
+        }
+        let mut file = file.unwrap();
         let mut is = protobuf::CodedInputStream::new(&mut file);
         let p4info = protobuf::parse_from_reader(&mut is).unwrap();
         let packetout_id = get_packout_egress_port_metaid(&p4info).unwrap();

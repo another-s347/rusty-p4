@@ -55,6 +55,19 @@ pub enum DeviceType {
     VIRTUAL,
 }
 
+impl DeviceType {
+    pub fn is_master(&self) -> bool {
+        match self {
+            DeviceType::MASTER {
+                socket_addr,
+                device_id,
+                pipeconf,
+            } => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Port {
     pub name: String,
