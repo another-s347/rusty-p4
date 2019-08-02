@@ -6,11 +6,12 @@ use crate::proto::p4info::{
     Action, Action_Param, MatchField, MatchField_MatchType, Meter, P4Info, Table,
 };
 use crate::proto::p4runtime::{
-    Entity, FieldMatch, MeterEntry, PacketMetadata, PacketOut, StreamMessageRequest,
-    StreamMessageRequest_oneof_update, TableEntry, Update, Update_Type, WriteRequest,
+    Entity, FieldMatch, MeterEntry, MulticastGroupEntry, PacketMetadata, PacketOut,
+    PacketReplicationEngineEntry, Replica, StreamMessageRequest, StreamMessageRequest_oneof_update,
+    TableEntry, Update, Update_Type, WriteRequest,
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
-use crate::representation::Meter as MeterRep;
+use crate::representation::{Meter as MeterRep, MulticastGroup};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -89,6 +90,33 @@ pub fn new_set_meter_request(
     meter_entry.mut_config().set_pburst(meter.pburst);
     meter_entry.mut_config().set_pir(meter.pir);
     entity.set_meter_entry(meter_entry);
+    update.set_entity(entity);
+    write_request.mut_updates().push(update);
+    Ok(write_request)
+}
+
+pub fn new_create_multicast_group_request(
+    pipeconf: &Pipeconf,
+    device_id: u64,
+    multicastgroup: crate::representation::MulticastGroup,
+) -> Result<WriteRequest, ConnectionError> {
+    let mut write_request = WriteRequest::new();
+    write_request.set_device_id(device_id);
+    write_request.mut_election_id().set_low(1);
+    let mut update = Update::new();
+    update.set_field_type(Update_Type::INSERT);
+    let mut entity = Entity::new();
+    let mut m = MulticastGroupEntry::new();
+    m.set_multicast_group_id(multicastgroup.id);
+    for r in multicastgroup.replica {
+        let mut replica = Replica::new();
+        replica.set_egress_port(r.port);
+        replica.set_instance(r.instance);
+        m.replicas.push(replica);
+    }
+    let mut r = PacketReplicationEngineEntry::new();
+    r.set_multicast_group_entry(m);
+    entity.set_packet_replication_engine_entry(r);
     update.set_entity(entity);
     write_request.mut_updates().push(update);
     Ok(write_request)
@@ -259,6 +287,13 @@ pub fn get_match_field_pb(
             assert_eq!(byte_len, high.len());
             p4runtime_match.mut_range().low = low.clone();
             p4runtime_match.mut_range().high = high.clone();
+        }
+        // "Don't care ternary"
+        (MatchField_MatchType::TERNARY, InnerValue::EXACT(v)) => {
+            //            assert_eq!(byte_len, v.len());
+            let v = adjust_value(v.clone(), byte_len);
+            p4runtime_match.mut_ternary().value = v.clone();
+            p4runtime_match.mut_ternary().mask = vec![0b11111111u8; v.len()];
         }
         _ => panic!("what"),
     }
