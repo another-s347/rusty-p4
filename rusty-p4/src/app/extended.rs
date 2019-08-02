@@ -126,7 +126,8 @@ where
                         });
                         self.extension.on_device_added(&device, &self.common, ctx);
                     }
-                    _ => unimplemented!(),
+                    MergeResult::MERGED => {}
+                    MergeResult::CONFLICT => unimplemented!(),
                 }
             }
             CommonEvents::HostDetected(host) => {
