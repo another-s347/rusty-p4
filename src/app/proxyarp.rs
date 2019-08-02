@@ -95,9 +95,12 @@ pub fn on_arp_received<E>(
                 state
                     .devices
                     .iter()
-                    .filter(|(&p, _)| p != device)
+                    .filter(|(_, d)| d.typ.is_master())
                     .for_each(|(_, d)| {
                         for x in &d.ports {
+                            if x.number == cp.port {
+                                continue;
+                            }
                             ctx.sender
                                 .unbounded_send(CoreRequest::PacketOut {
                                     connect_point: ConnectPoint {

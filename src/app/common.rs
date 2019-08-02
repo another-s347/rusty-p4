@@ -5,6 +5,7 @@ use crate::context::ContextHandle;
 use crate::event::Event;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
 use crate::util::flow::{Flow, FlowOwned};
+use crate::util::value::MAC;
 
 pub struct CommonState {
     pub devices: HashMap<DeviceID, Device>,
@@ -31,13 +32,16 @@ impl CommonState {
         let id = info.id;
         if let Some(pre) = self.devices.get_mut(&id) {
             // merge ports
-            unimplemented!()
+            for port in info.ports {
+                pre.ports.insert(port);
+            }
+            MergeResult::MERGED
         } else {
             // add device
             self.graph.add_device(&info);
             self.devices.insert(id, info);
+            MergeResult::ADDED(id)
         }
-        MergeResult::ADDED(id)
     }
 
     pub fn merge_host(&mut self, info: Host) -> MergeResult<Host> {
@@ -74,6 +78,10 @@ impl CommonState {
             .find(|port| port.number == cp.port)
             .map(|port| port.interface.as_ref())
             .flatten()
+    }
+
+    pub fn get_mac_by_cp(&self, cp: &ConnectPoint) -> Option<MAC> {
+        self.get_interface_by_cp(cp).map(|i| i.mac).flatten()
     }
 }
 

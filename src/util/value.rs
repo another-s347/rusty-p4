@@ -30,6 +30,10 @@ impl MAC {
         MAC([0xff; 6])
     }
 
+    pub fn zero() -> MAC {
+        MAC([0x00; 6])
+    }
+
     pub fn is_broadcast(&self) -> bool {
         self.0 == [0xff; 6]
     }
