@@ -140,3 +140,16 @@ impl PartialEq for Link {
         self.src == other.src && self.dst == other.dst
     }
 }
+
+#[derive(Clone, Hash, Debug)]
+pub struct MulticastGroup {
+    pub device: DeviceID,
+    pub id: u32,
+    pub replica: Vec<Replica>,
+}
+
+#[derive(Clone, Hash, Debug)]
+pub struct Replica {
+    pub port: u32,
+    pub instance: u32,
+}

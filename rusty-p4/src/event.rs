@@ -1,5 +1,5 @@
 use crate::proto::p4runtime::PacketIn;
-use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link, Meter};
+use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link, Meter, MulticastGroup};
 use bytes::{Bytes, BytesMut};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -27,6 +27,7 @@ pub enum CoreRequest<E> {
         packet: Bytes,
     },
     SetMeter(Meter),
+    SetMulticastGroup(MulticastGroup),
 }
 
 pub trait Event: Clone + Debug + Send + 'static + From<CommonEvents> + Into<CommonEvents> {}
