@@ -11,6 +11,7 @@ use crate::proto::p4runtime::{
 };
 use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::Meter as MeterRep;
+use crate::util::flow::{NewFlowActionParam, NewFlowMatch};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -37,11 +38,11 @@ pub fn new_write_table_entry(device_id: u64, table_entry: TableEntry) -> WriteRe
     request
 }
 
-pub fn adjust_value(value: Vec<u8>, bytes_len: usize) -> Vec<u8> {
-    let mut value = value.clone();
-    if bytes_len < value.len() {
-        let (_, v2) = value.split_at(value.len() - bytes_len);
-        v2.to_vec()
+pub fn adjust_value(mut value: Bytes, bytes_len: usize) -> Bytes {
+    if bytes_len == value.len() {
+        value
+    } else if bytes_len < value.len() {
+        value.slice(value.len() - bytes_len, value.len())
     } else {
         value.extend(vec![0u8; bytes_len - value.len()]);
         value
@@ -58,9 +59,8 @@ pub fn new_packet_out_request(
     packetOut.set_payload(packet.to_vec());
     let mut packetout_metadata = PacketMetadata::new();
     packetout_metadata.set_metadata_id(pipeconf.packetout_egress_id);
-    let mut v = vec![0u8; 4];
-    BigEndian::write_u32(&mut v, egress_port);
-    packetout_metadata.set_value(adjust_value(v, 2));
+    let mut v = Bytes::from(egress_port.to_be_bytes().as_ref());
+    packetout_metadata.set_value(adjust_value(v, 2).to_vec());
     packetOut.mut_metadata().push(packetout_metadata);
     request.set_packet(packetOut);
     request
@@ -97,10 +97,10 @@ pub fn new_set_meter_request(
 pub fn build_table_entry(
     p4info: &P4Info,
     table_name: &str,
-    match_fields: &[(&str, InnerValue)],
+    match_fields: &[NewFlowMatch],
     default_action: bool,
     action_name: &str,
-    action_params: &[(&str, Vec<u8>)],
+    action_params: &[NewFlowActionParam],
     priority: i32,
     metadata: u64,
 ) -> TableEntry {
@@ -110,8 +110,8 @@ pub fn build_table_entry(
     table_entry.set_priority(priority);
     table_entry.set_controller_metadata(metadata);
 
-    for (match_field_name, value) in match_fields {
-        let entry = get_match_field_pb(p4info, table_name, match_field_name, value).unwrap();
+    for m in match_fields {
+        let entry = get_match_field_pb(p4info, table_name, m.name, &m.value).unwrap();
         table_entry.field_match.push(entry)
     }
 
@@ -123,12 +123,12 @@ pub fn build_table_entry(
         let action = table_entry.mut_action().mut_action();
         action.set_action_id(get_actions_id(p4info, action_name).unwrap());
         if !action_params.is_empty() {
-            for (field_name, value) in action_params {
+            for p in action_params {
                 action.params.push(get_action_param_pb(
                     p4info,
                     action_name,
-                    field_name,
-                    value.clone(),
+                    p.name,
+                    p.value.clone(),
                 ));
             }
         }
@@ -240,25 +240,25 @@ pub fn get_match_field_pb(
         (MatchField_MatchType::EXACT, InnerValue::EXACT(v)) => {
             //                assert_eq!(byte_len, v.len());
             let v = adjust_value(v.clone(), byte_len);
-            p4runtime_match.mut_exact().value = v;
+            p4runtime_match.mut_exact().value = v.to_vec();
         }
         (MatchField_MatchType::LPM, InnerValue::LPM(v, l)) => {
             assert_eq!(byte_len, v.len());
             p4runtime_match.mut_lpm().prefix_len = *l;
-            p4runtime_match.mut_lpm().value = v.clone();
+            p4runtime_match.mut_lpm().value = v.to_vec();
         }
         (MatchField_MatchType::TERNARY, InnerValue::TERNARY(v, mask)) => {
             assert_eq!(byte_len, v.len());
             //                assert_eq!(byte_len, mask.len());
             let mask = adjust_value(mask.clone(), byte_len);
-            p4runtime_match.mut_ternary().value = v.clone();
-            p4runtime_match.mut_ternary().mask = mask;
+            p4runtime_match.mut_ternary().value = v.to_vec();
+            p4runtime_match.mut_ternary().mask = mask.to_vec();
         }
         (MatchField_MatchType::RANGE, InnerValue::RANGE(low, high)) => {
             assert_eq!(byte_len, low.len());
             assert_eq!(byte_len, high.len());
-            p4runtime_match.mut_range().low = low.clone();
-            p4runtime_match.mut_range().high = high.clone();
+            p4runtime_match.mut_range().low = low.to_vec();
+            p4runtime_match.mut_range().high = high.to_vec();
         }
         _ => panic!("what"),
     }
@@ -326,6 +326,6 @@ pub fn get_action_param_pb(
     //        println!("adjust value: action:{}, param:{}, value:{:?}, bitwidth:{}",action_name,param_name,value,p4info_param.bitwidth);
     let value = adjust_value(value, bytes_len);
     p4runtime_param.set_param_id(p4info_param.id);
-    p4runtime_param.set_value(value.clone());
+    p4runtime_param.set_value(value.to_vec());
     return p4runtime_param;
 }

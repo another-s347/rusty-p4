@@ -6,6 +6,7 @@ use hex;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::fmt::Formatter;
+
 pub struct Value;
 
 pub struct MACString(pub String);
@@ -63,80 +64,82 @@ pub fn LPM<T: Encode>(v: T, prefix_len: i32) -> InnerValue {
     InnerValue::LPM(v.encode(), prefix_len)
 }
 
-pub fn TERNARY<T: Encode>(v: T, mask: Vec<u8>) -> InnerValue {
-    InnerValue::TERNARY(v.encode(), mask)
+pub fn TERNARY<T: Encode, P: Encode>(v: T, mask: P) -> InnerValue {
+    InnerValue::TERNARY(v.encode(), mask.encode())
 }
 
 #[derive(Clone, Debug, Hash)]
 pub enum InnerValue {
-    EXACT(Vec<u8>),
-    LPM(Vec<u8>, /*prefix_len*/ i32),
-    TERNARY(Vec<u8>, /*mask*/ Vec<u8>),
-    RANGE(/*low*/ Vec<u8>, /*high*/ Vec<u8>),
+    EXACT(Bytes),
+    LPM(Bytes, /*prefix_len*/ i32),
+    TERNARY(Bytes, /*mask*/ Bytes),
+    RANGE(/*low*/ Bytes, /*high*/ Bytes),
 }
 
 pub fn encode<T: Encode>(v: T) -> InnerParamValue {
     v.encode()
 }
 
-pub type InnerParamValue = Vec<u8>;
+pub type InnerParamValue = Bytes;
 
-pub trait Encode {
-    fn encode(&self) -> Vec<u8>;
+pub trait Encode: Copy {
+    fn encode(self) -> Bytes;
 }
 
 impl Encode for Ipv4Addr {
-    fn encode(&self) -> Vec<u8> {
-        let b = self.octets();
-        b.to_vec()
+    fn encode(self) -> Bytes {
+        Bytes::from(self.octets().as_ref())
     }
 }
 
 impl Encode for Ipv6Addr {
-    fn encode(&self) -> Vec<u8> {
-        self.octets().to_vec()
+    fn encode(self) -> Bytes {
+        Bytes::from(self.octets().as_ref())
     }
 }
 
 impl Encode for IpAddr {
-    fn encode(&self) -> Vec<u8> {
+    fn encode(self) -> Bytes {
         match self {
-            IpAddr::V4(ip) => ip.octets().to_vec(),
-            IpAddr::V6(ip) => ip.octets().to_vec(),
+            IpAddr::V4(ip) => Bytes::from(ip.octets().as_ref()),
+            IpAddr::V6(ip) => Bytes::from(ip.octets().as_ref()),
         }
     }
 }
 
 impl Encode for &str {
-    fn encode(&self) -> Vec<u8> {
-        self.as_bytes().to_vec()
+    fn encode(self) -> Bytes {
+        Bytes::from(self)
     }
 }
 
 impl Encode for u32 {
-    fn encode(&self) -> Vec<u8> {
-        let mut vec = vec![0u8; 4];
-        byteorder::BigEndian::write_u32(&mut vec, *self);
-        vec
+    fn encode(self) -> Bytes {
+        Bytes::from(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for u8 {
-    fn encode(&self) -> Vec<u8> {
-        vec![*self]
+    fn encode(self) -> Bytes {
+        Bytes::from(self.to_be_bytes().as_ref())
+    }
+}
+
+impl Encode for i32 {
+    fn encode(self) -> Bytes {
+        Bytes::from(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for u16 {
-    fn encode(&self) -> Vec<u8> {
-        let mut buffer = vec![0u8; 2];
-        BigEndian::write_u16(&mut buffer, *self);
-        buffer
+    fn encode(self) -> Bytes {
+        Bytes::from(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for MAC {
-    fn encode(&self) -> Vec<u8> {
-        self.0.to_vec()
+    fn encode(self) -> Bytes {
+        //        Bytes::f
+        Bytes::from(self.0.as_ref())
     }
 }
