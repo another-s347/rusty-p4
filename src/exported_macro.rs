@@ -1,5 +1,5 @@
 use crate::util::flow::*;
-use crate::util::value::{encode, EXACT, LPM, MAC, TERNARY};
+use crate::util::value::{encode, EXACT, LPM, MAC, TERNARY, RANGE};
 use smallvec::*;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -203,18 +203,61 @@ macro_rules! flow_tablematches {
             value:TERNARY(MAC::of($mac),$ternary)
         });
     };
-    // range
-    ($m:ident,$x:expr=>$v:literal..$lpm:literal,$($z:tt)*) => {
-        $x.to_string()
+    // range literal..literal
+    ($m:ident,$x:expr=>$v:literal..$p:literal,$($z:tt)*) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+        flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:literal..$lpm:literal) => {
-        $x.to_string()
+    ($m:ident,$x:expr=>$v:literal..$p:literal) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
     };
-    ($m:ident,$x:expr=>$v:ident..$lpm:literal,$($z:tt)*) => {
-        $v.to_string()
+    // range ident..literal
+    ($m:ident,$x:expr=>$v:ident..$p:literal,$($z:tt)*) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+        flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:ident..$lpm:literal) => {
-        $v.to_string()
+    ($m:ident,$x:expr=>$v:ident..$p:literal) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+    };
+    // range ident..ident
+    ($m:ident,$x:expr=>$v:ident..$p:ident,$($z:tt)*) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+        flow_tablematches!($m,$($z)*)
+    };
+    ($m:ident,$x:expr=>$v:ident..$p:ident) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+    };
+    // range literal..ident
+    ($m:ident,$x:expr=>$v:literal..$p:ident,$($z:tt)*) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
+        flow_tablematches!($m,$($z)*)
+    };
+    ($m:ident,$x:expr=>$v:literal..$p:ident) => {
+        $m.push(NewFlowMatch{
+            name:$x,
+            value:RANGE(encode($v),encode($p))
+        });
     };
 }
 
@@ -259,7 +302,8 @@ fn test_macro() {
         pipe="MyIngress";
         table = "xxxx";
         key = {
-             "aaaa"=>ip("10.0.0.1")&0b1111
+             "aaaa"=>ip("10.0.0.1")&0b1111,
+             "bbbb"=>0x123..0x456
         };
         action = action_name(abcd:0x1234,xyz:0x445)
     };
