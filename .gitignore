@@ -13,3 +13,6 @@ logs/
 pcaps/
 .vscode/
 *.pyc
+rusty-p4-proto/src/google.*
+rusty-p4-proto/src/p4.*
+googleapis/

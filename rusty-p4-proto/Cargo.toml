@@ -1,0 +1,17 @@
+[package]
+name = "rusty-p4-proto"
+version = "0.1.0"
+authors = ["skye347 <s347419313@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.5"
+bytes = "0.4"
+grpcio = {version="0.5.0-alpha.4",features=["prost-codec"]}
+prost-types = "0.5"
+futures = "0.1.28"
+
+[build-dependencies]
+grpcio-compiler = {version="0.5.0-alpha.2", features=["prost-codec"]}
