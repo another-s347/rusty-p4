@@ -1,6 +1,5 @@
 /target
 **/*.rs.bk
-p4runtime/
 py_out/
 grpc_out/
 cpp_out/
@@ -15,4 +14,3 @@ pcaps/
 *.pyc
 rusty-p4-proto/src/google.*
 rusty-p4-proto/src/p4.*
-googleapis/
