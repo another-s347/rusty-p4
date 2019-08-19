@@ -4,18 +4,18 @@ use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use crate::p4rt::pure::{
-    new_create_multicast_group_request, new_packet_out_request, new_set_meter_request,
+    new_packet_out_request, new_set_meter_request,
     new_write_table_entry,
 };
 use crate::proto::p4runtime::{
     Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse,
-    StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest, WriteResponse,
+    Uint128, Update, WriteRequest, WriteResponse, stream_message_response
 };
-use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use crate::proto::p4runtime::P4RuntimeClient;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter, MulticastGroup};
 use crate::restore;
 use crate::restore::Restore;
-use crate::util::flow::{Flow, FlowOwned};
+use crate::util::flow::{Flow};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
@@ -151,19 +151,19 @@ impl<E, T> ContextDriver<E, T>
                 }
                 CoreRequest::SetMulticastGroup(mc) => {
                     if let Some(c) = ctx.connections.write().unwrap().get_mut(&mc.device) {
-                        let request = new_create_multicast_group_request(&c.pipeconf, 1, mc);
-                        if request.is_err() {
-                            error!(target:"context","set multicast group pipeconf error: {:?}",request.err().unwrap());
-                            continue;
-                        }
-                        match c.p4runtime_client.write(&request.unwrap()) {
-                            Ok(response) => {
-                                info!(target:"context","set multicast group response: {:?}",response);
-                            }
-                            Err(e) => {
-                                error!(target:"context","grpc send error: {:?}",e);
-                            }
-                        }
+//                        let request = new_create_multicast_group_request(&c.pipeconf, 1, mc);
+//                        if request.is_err() {
+//                            error!(target:"context","set multicast group pipeconf error: {:?}",request.err().unwrap());
+//                            continue;
+//                        }
+//                        match c.p4runtime_client.write(&request.unwrap()) {
+//                            Ok(response) => {
+//                                info!(target:"context","set multicast group response: {:?}",response);
+//                            }
+//                            Err(e) => {
+//                                error!(target:"context","grpc send error: {:?}",e);
+//                            }
+//                        }
                     } else {
                         error!(target:"context","SetMulticastGroup error: connection not found for device {:?}",&mc.device);
                     }
@@ -230,14 +230,14 @@ impl<E> Context<E>
             r.restore(handle);
         }
 
-        if config.enable_netconfiguration {
-            let netconfiguration_server = netconfiguration::NetconfigServer::new();
-            let core_sender = result.core_channel_sender.clone();
-            tokio::spawn(netconfiguration::build_netconfig_server(
-                netconfiguration_server,
-                core_sender,
-            ));
-        }
+//        if config.enable_netconfiguration {
+//            let netconfiguration_server = netconfiguration::NetconfigServer::new();
+//            let core_sender = result.core_channel_sender.clone();
+//            tokio::spawn(netconfiguration::build_netconfig_server(
+//                netconfiguration_server,
+//                core_sender,
+//            ));
+//        }
 
         let driver = ContextDriver {
             core_request_receiver: r,
@@ -288,10 +288,10 @@ impl<E> Context<E>
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
                 match update {
-                    StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {
+                    stream_message_response::Update::Arbitration(masterUpdate) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", masterUpdate);
                     }
-                    StreamMessageResponse_oneof_update::packet(packet) => {
+                    stream_message_response::Update::Packet(packet) => {
                         let port = packet.metadata.iter()
                             .find(|x|x.metadata_id==packet_in_metaid)
                             .map(|x|BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
@@ -304,13 +304,13 @@ impl<E> Context<E>
                         };
                         packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
-                    StreamMessageResponse_oneof_update::digest(p) => {
+                    stream_message_response::Update::Digest(p) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", p);
                     }
-                    StreamMessageResponse_oneof_update::idle_timeout_notification(n) => {
+                    stream_message_response::Update::IdleTimeoutNotification(n) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", n);
                     }
-                    StreamMessageResponse_oneof_update::other(what) => {
+                    stream_message_response::Update::Other(what) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", what);
                     }
                 }
@@ -393,14 +393,10 @@ pub struct ContextHandle<E> {
     removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
 }
 
-<<<<<<< HEAD:rusty-p4/src/context.rs
 impl<E> ContextHandle<E>
     where
         E: Debug,
 {
-=======
-impl<E> ContextHandle<E> {
->>>>>>> add api with multicast group:src/context.rs
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
         connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
@@ -417,8 +413,7 @@ impl<E> ContextHandle<E> {
         }
     }
 
-    pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned, ContextError> {
-        let device = flow.device;
+    pub fn insert_flow(&self, mut flow: Flow, device:DeviceID) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
         let connections = self.connections.read().unwrap();
         let connection = connections.get(&device).ok_or(ContextError::from(
@@ -429,7 +424,8 @@ impl<E> ContextHandle<E> {
         connection
             .send_request_sync(&request)
             .context(ContextErrorKind::ConnectionError)?;
-        Ok(flow.into_owned(hash))
+        flow.metadata=hash;
+        Ok(flow)
     }
 
     pub fn add_device(&self, name: String, address: String, device_id: u64, pipeconf: &str) {

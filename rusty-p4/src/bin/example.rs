@@ -14,6 +14,7 @@ use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::DeviceID;
 use rusty_p4::util::flow::Flow;
 use std::collections::HashMap;
+use rusty_p4::context::ContextConfig;
 
 #[tokio::main]
 pub async fn main() {

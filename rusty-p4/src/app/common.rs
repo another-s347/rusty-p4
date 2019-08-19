@@ -4,12 +4,8 @@ use crate::app::graph::DefaultGraph;
 use crate::context::ContextHandle;
 use crate::event::Event;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
-<<<<<<< HEAD:rusty-p4/src/app/common.rs
 use crate::util::flow::*;
-=======
-use crate::util::flow::{Flow, FlowOwned};
 use crate::util::value::MAC;
->>>>>>> general app update:src/app/common.rs
 
 pub struct CommonState {
     pub devices: HashMap<DeviceID, Device>,
