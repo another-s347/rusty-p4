@@ -3,7 +3,7 @@ use crate::app::extended::{P4appExtendedCore, P4appInstallable};
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, CoreRequest, Event};
 use crate::representation::{ConnectPoint, Device, DeviceID, Host};
-use crate::util::flow::{Flow, FlowAction, FlowTable};
+use crate::util::flow::*;
 use crate::util::packet::arp::ETHERNET_TYPE_ARP;
 use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
@@ -131,17 +131,14 @@ pub fn new_arp_interceptor<E>(device_id: DeviceID, ctx: &ContextHandle<E>)
 where
     E: Event,
 {
-    let flow = Flow {
-        device: device_id,
-        table: FlowTable {
-            name: "IngressPipeImpl.acl",
-            matches: &[("hdr.ethernet.ether_type", EXACT(ETHERNET_TYPE_ARP))],
-        },
-        action: FlowAction {
-            name: "send_to_cpu",
-            params: &[],
-        },
-        priority: 4000,
+    let flow = flow!{
+        pipe="IngressPipeImpl";
+        table="acl";
+        key={
+            "hdr.ethernet.ether_type"=>ETHERNET_TYPE_ARP
+        };
+        action=send_to_cpu();
+        priority=4000;
     };
-    ctx.insert_flow(flow);
+    ctx.insert_flow(flow, device_id);
 }

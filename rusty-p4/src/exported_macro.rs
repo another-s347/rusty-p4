@@ -4,6 +4,7 @@ use smallvec::*;
 use std::net::IpAddr;
 use std::str::FromStr;
 
+#[macro_export]
 macro_rules! action_param {
     ($($x:tt)*) => {{
         let mut f = Vec::new();
@@ -12,16 +13,17 @@ macro_rules! action_param {
     }};
 }
 
+#[macro_export]
 macro_rules! action_params {
     ($m:ident,$p:ident:$v:expr,$($t:tt)*) => {
-        $m.push(NewFlowActionParam{
+        $m.push(FlowActionParam{
             name:stringify!($p),
             value:encode($v)
         });
         action_params!($m,$($t)*)
     };
     ($m:ident,$p:ident:$v:expr) => {
-        $m.push(NewFlowActionParam{
+        $m.push(FlowActionParam{
             name:stringify!($p),
             value:encode($v)
         });
@@ -29,6 +31,7 @@ macro_rules! action_params {
     ($m:ident,) => {};
 }
 
+#[macro_export]
 macro_rules! flow_tablematch {
     ($($x:tt)*) => {{
         let mut f = Vec::with_capacity(5);
@@ -37,224 +40,225 @@ macro_rules! flow_tablematch {
     }};
 }
 
+#[macro_export]
 macro_rules! flow_tablematches {
     // exact
     ($m:ident,$x:expr=>$y:tt,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:EXACT($y)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$y:tt) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:EXACT($y)
         });
     };
     ($m:ident,$x:expr=>$y:ident,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:EXACT($y)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$y:ident) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:EXACT($y)
         });
     };
     // exact ip
     ($m:ident,$x:expr=>ip($ip:expr),$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
-            value:EXACT(IpAddr::from_str($ip).unwrap())
+        $m.push(FlowMatch{
+            name:$x,
+            value:EXACT(std::net::IpAddr::from_str($ip).unwrap())
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>ip($ip:expr)) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
-            value:EXACT(IpAddr::from_str($ip).unwrap())
+            value:EXACT(std::net::IpAddr::from_str($ip).unwrap())
         });
     };
     // exact mac
     ($m:ident,$x:expr=>mac($mac:expr),$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:EXACT(MAC::of($ip))
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>mac($mac:expr)) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:EXACT(MAC::of($ip))
         });
     };
     // lpm
     ($m:ident,$x:expr=>$v:literal/$lpm:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:LPM($v,$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal/$lpm:literal) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:LPM($v,$lpm)
         });
     };
     ($m:ident,$x:expr=>$v:ident/$lpm:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:LPM($v,$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident/$lpm:literal) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:LPM($v,$lpm)
         });
     };
     // lpm ip
     ($m:ident,$x:expr=>ip($ip:expr)/$lpm:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
-            value:LPM(IpAddr::from_str($ip).unwrap(),$lpm)
+        $m.push(FlowMatch{
+            name:$x,
+            value:LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>ip($ip:expr)/$lpm:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
-            value:LPM(IpAddr::from_str($ip).unwrap(),$lpm)
+            value:LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
         });
     };
     // lpm mac
     ($m:ident,$x:expr=>mac($mac:expr)/$lpm:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
-            name:$x.to_string(),
+        $m.push(FlowMatch{
+            name:$x,
             value:LPM(MAC::of($mac),$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>mac($mac:expr)/$lpm:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:LPM(MAC::of($mac),$lpm)
         });
     };
     // ternary
     ($m:ident,$x:expr=>$v:literal&$ternary:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY($v,$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal&$ternary:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY($v,$ternary)
         });
     };
     ($m:ident,$x:expr=>$v:ident&$ternary:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY($v,$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident&$ternary:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY($v,$ternary)
         });
     };
     // ternary ip
     ($m:ident,$x:expr=>ip($ip:expr)&$ternary:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
-            value:TERNARY(IpAddr::from_str($ip).unwrap(),$ternary)
+            value:TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>ip($ip:expr)&$ternary:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
-            value:TERNARY(IpAddr::from_str($ip).unwrap(),$ternary)
+            value:TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
         });
     };
     // ternary mac
     ($m:ident,$x:expr=>mac($mac:expr)&$ternary:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY(MAC::of($mac),$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>mac($mac:expr)&$ternary:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:TERNARY(MAC::of($mac),$ternary)
         });
     };
     // range literal..literal
     ($m:ident,$x:expr=>$v:literal..$p:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal..$p:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
     };
     // range ident..literal
     ($m:ident,$x:expr=>$v:ident..$p:literal,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident..$p:literal) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
     };
     // range ident..ident
     ($m:ident,$x:expr=>$v:ident..$p:ident,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident..$p:ident) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
     };
     // range literal..ident
     ($m:ident,$x:expr=>$v:literal..$p:ident,$($z:tt)*) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal..$p:ident) => {
-        $m.push(NewFlowMatch{
+        $m.push(FlowMatch{
             name:$x,
             value:RANGE(encode($v),encode($p))
         });
@@ -267,14 +271,34 @@ macro_rules! flow {
     pipe=$pipe:expr;
     table=$table:expr;
     key={$($t:tt)*};
-    action=$action_name:ident($($pt:tt)*)
+    action=$action_name:ident($($pt:tt)*);
+    priority=$priority:expr;
     ) => {
-        NewFlow {
-            table: std::sync::Arc::new(NewFlowTable{
+        Flow {
+            table: std::sync::Arc::new(FlowTable{
                 name:concat!($pipe,'.',$table),
                 matches:flow_tablematch!($($t)*)
             }),
-            action: std::sync::Arc::new(NewFlowAction {
+            action: std::sync::Arc::new(FlowAction {
+                name:concat!($pipe,'.',stringify!($action_name)),
+                params:action_param!($($pt)*)
+            }),
+            metadata:0,
+            priority:$priority
+        }
+    };
+    (
+    pipe=$pipe:expr;
+    table=$table:expr;
+    key={$($t:tt)*};
+    action=$action_name:ident($($pt:tt)*);
+    ) => {
+        Flow {
+            table: std::sync::Arc::new(FlowTable{
+                name:concat!($pipe,'.',$table),
+                matches:flow_tablematch!($($t)*)
+            }),
+            action: std::sync::Arc::new(FlowAction {
                 name:concat!($pipe,'.',stringify!($action_name)),
                 params:action_param!($($pt)*)
             }),

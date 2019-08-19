@@ -1,7 +1,10 @@
+#[macro_use]
+extern crate rusty_p4;
+
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::str::FromStr;
-
+use rusty_p4::util::flow::*;
 use rusty_p4::util::value::*;
 
 use rusty_p4::p4rt::bmv2::Bmv2SwitchConnection;
@@ -50,40 +53,64 @@ fn write_tunnel_rules(
     dst_eth_addr: MAC,
     dst_ip_addr: Ipv4Addr,
 ) {
-    let table_entry = build_table_entry(
-        pipeconf.get_p4info(),
-        "MyIngress.ipv4_lpm",
-        &[("hdr.ipv4.dstAddr", LPM(dst_ip_addr, 32))],
-        false,
-        "MyIngress.myTunnel_ingress",
-        &[("dst_id", encode(tunnel_id))],
-        0,
-        0,
-    );
+//    let table_entry = build_table_entry(
+//        pipeconf.get_p4info(),
+//        "MyIngress.ipv4_lpm",
+//        &[("hdr.ipv4.dstAddr", LPM(dst_ip_addr, 32))],
+//        false,
+//        "MyIngress.myTunnel_ingress",
+//        &[("dst_id", encode(tunnel_id))],
+//        0,
+//        0,
+//    );
+    let table_entry = flow! {
+        pipe="MyIngress";
+        table="ipv4_lpm";
+        key= {
+            "hdr.ipv4.dstAddr"=>dst_ip_addr/32
+        };
+        action=myTunnel_ingress(dst_id:tunnel_id);
+    }.to_table_entry(&pipeconf,0);
 
     ingress_sw.write_table_entry(dbg!(table_entry));
 
-    let table_entry = build_table_entry(
-        pipeconf.get_p4info(),
-        "MyIngress.myTunnel_exact",
-        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
-        false,
-        "MyIngress.myTunnel_forward",
-        &[("port", encode(2u32))],
-        0,
-        0,
-    );
+//    let table_entry = build_table_entry(
+//        pipeconf.get_p4info(),
+//        "MyIngress.myTunnel_exact",
+//        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
+//        false,
+//        "MyIngress.myTunnel_forward",
+//        &[("port", encode(2u32))],
+//        0,
+//        0,
+//    );
+    let table_entry = flow! {
+        pipe="MyIngress";
+        table="myTunnel_exact";
+        key= {
+            "hdr.myTunnel.dst_id"=>tunnel_id
+        };
+        action=myTunnel_forward(port:2u32);
+    }.to_table_entry(&pipeconf,0);
     ingress_sw.write_table_entry(table_entry);
 
-    let table_entry = build_table_entry(
-        pipeconf.get_p4info(),
-        "MyIngress.myTunnel_exact",
-        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
-        false,
-        "MyIngress.myTunnel_egress",
-        &[("dstAddr", encode(dst_eth_addr)), ("port", encode(1u32))],
-        0,
-        0,
-    );
+//    let table_entry = build_table_entry(
+//        pipeconf.get_p4info(),
+//        "MyIngress.myTunnel_exact",
+//        &[("hdr.myTunnel.dst_id", EXACT(tunnel_id))],
+//        false,
+//        "MyIngress.myTunnel_egress",
+//        &[("dstAddr", encode(dst_eth_addr)), ("port", encode(1u32))],
+//        0,
+//        0,
+//    );
+    let table_entry = flow! {
+        pipe="MyIngress";
+        table="myTunnel_exact";
+        key= {
+            "hdr.myTunnel.dst_id"=>tunnel_id
+        };
+        action=myTunnel_egress(dstAddr:dst_eth_addr,port:1u32);
+    }.to_table_entry(&pipeconf,0);
     egress_sw.write_table_entry(table_entry);
 }

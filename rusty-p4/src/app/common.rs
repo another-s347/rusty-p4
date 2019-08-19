@@ -4,11 +4,11 @@ use crate::app::graph::DefaultGraph;
 use crate::context::ContextHandle;
 use crate::event::Event;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
-use crate::util::flow::{Flow, FlowOwned};
+use crate::util::flow::*;
 
 pub struct CommonState {
     pub devices: HashMap<DeviceID, Device>,
-    pub flows: HashMap<u64, HashSet<FlowOwned>>,
+    pub flows: HashMap<u64, HashSet<Flow>>,
     pub hosts: HashSet<Host>,
     pub graph: DefaultGraph,
     pub links: HashSet<Link>,

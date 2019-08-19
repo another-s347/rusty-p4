@@ -8,7 +8,7 @@ use log::{debug, error, info, trace, warn};
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::proto::p4runtime::PacketIn;
-use crate::util::flow::{Flow, FlowAction, FlowTable};
+use crate::util::flow::*;
 use crate::util::packet::data::Data;
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
@@ -52,24 +52,15 @@ impl P4app<CommonEvents> for Example {
         match event {
             CommonEvents::DeviceAdded(ref device) => {
                 info!(target:"Example App","device up {:?}", device);
-                let flow_table = FlowTable {
-                    name: "MyIngress.ipv4_lpm",
-                    matches: &[(
-                        "hdr.ipv4.dstAddr",
-                        LPM(Ipv4Addr::from_str("10.0.2.2").unwrap(), 32),
-                    )],
+                let flow = flow!{
+                    pipe="MyIngress";
+                    table="ipv4_lpm";
+                    key={
+                        "hdr.ipv4.dstAddr"=>ip("10.0.2.2")/32
+                    };
+                    action=myTunnel_ingress(dst_id:100u32);
                 };
-                let flow_action = FlowAction {
-                    name: "MyIngress.myTunnel_ingress",
-                    params: &[("dst_id", encode(100u32))],
-                };
-                let flow = Flow {
-                    device: device.id,
-                    table: flow_table,
-                    action: flow_action,
-                    priority: 0,
-                };
-                ctx.insert_flow(flow);
+                ctx.insert_flow(flow, device.id);
             }
             _ => {}
         }

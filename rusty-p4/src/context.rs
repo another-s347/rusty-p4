@@ -21,7 +21,7 @@ use crate::proto::p4runtime::*;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
 use crate::restore;
 use crate::restore::Restore;
-use crate::util::flow::{Flow, FlowOwned};
+use crate::util::flow::*;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
@@ -345,8 +345,7 @@ where
         }
     }
 
-    pub fn insert_flow(&self, flow: Flow) -> Result<FlowOwned, ContextError> {
-        let device = flow.device;
+    pub fn insert_flow(&self, mut flow: Flow, device:DeviceID) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
         let connections = self.connections.read().unwrap();
         let connection = connections.get(&device)
@@ -357,7 +356,8 @@ where
             table_entry,
         );
         connection.send_request_sync(&request).context(ContextErrorKind::ConnectionError)?;
-        Ok(flow.into_owned(hash))
+        flow.metadata=hash;
+        Ok(flow)
     }
 
     pub fn add_device(&self, name: String, address: String, device_id: u64, pipeconf:&str) {

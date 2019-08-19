@@ -4,7 +4,7 @@ use std::time::Duration;
 use futures::prelude::*;
 use futures03::prelude::*;
 use log::{info, trace, warn, debug, error};
-use crate::util::flow::{Flow, FlowTable, FlowAction};
+use crate::util::flow::*;
 use crate::util::value::{Value, MAC, EXACT};
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
@@ -124,19 +124,16 @@ pub fn on_device_added<E>(tasks:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,de
 }
 
 pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {
-    let flow = Flow {
-        device: device_id,
-        table: FlowTable {
-            name: "IngressPipeImpl.acl",
-            matches: &[("hdr.ethernet.ether_type",EXACT(0x861u16))]
-        },
-        action: FlowAction {
-            name: "send_to_cpu",
-            params: &[]
-        },
-        priority: 4000
+    let flow = flow!{
+        pipe="IngressPipeImpl";
+        table="acl";
+        key={
+            "hdr.ethernet.ether_type"=>0x861u16
+        };
+        action=send_to_cpu();
+        priority=4000;
     };
-    ctx.insert_flow(flow);
+    ctx.insert_flow(flow, device_id);
 }
 
 pub fn new_probe(cp:&ConnectPoint) -> Bytes

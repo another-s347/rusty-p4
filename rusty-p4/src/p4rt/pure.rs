@@ -5,7 +5,7 @@ use crate::p4rt::pipeconf::Pipeconf;
 use crate::proto::p4config::*;
 use crate::proto::p4config::P4Info;
 use crate::representation::Meter as MeterRep;
-use crate::util::flow::{NewFlowActionParam, NewFlowMatch};
+use crate::util::flow::{FlowActionParam, FlowMatch};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -108,10 +108,10 @@ pub fn new_set_meter_request(
 pub fn build_table_entry(
     p4info: &P4Info,
     table_name: &str,
-    match_fields: &[NewFlowMatch],
+    match_fields: &[FlowMatch],
     default_action: bool,
     action_name: &str,
-    action_params: &[NewFlowActionParam],
+    action_params: &[FlowActionParam],
     priority: i32,
     metadata: u64,
 ) -> TableEntry {
@@ -256,10 +256,10 @@ pub fn get_match_field_pb(
     let bitwidth = p4info_match.bitwidth;
     let byte_len = (bitwidth as f32 / 8.0).ceil() as usize;;
     let byte_len = byte_len as usize;
-    let x=p4info_match.r#match.map(|x|{
+    let x=p4info_match.r#match.as_ref().map(|x|{
         match x {
             match_field::Match::MatchType(x) => {
-                match (match_field::MatchType::from_i32(x),value) {
+                match (match_field::MatchType::from_i32(*x),value) {
                     (Some(match_field::MatchType::Exact), InnerValue::EXACT(v)) => {
                         //                assert_eq!(byte_len, v.len());
                         let v = adjust_value(v.clone(), byte_len);
