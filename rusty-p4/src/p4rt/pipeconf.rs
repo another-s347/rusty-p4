@@ -1,8 +1,9 @@
 use crate::p4rt::pure::{get_packin_egress_port_metaid, get_packout_egress_port_metaid};
-use crate::proto::p4info::P4Info;
+use crate::proto::p4config::P4Info;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::io::{BufReader, Read};
 
 #[derive(Clone)]
 pub struct Pipeconf {
@@ -16,8 +17,9 @@ pub struct Pipeconf {
 impl Pipeconf {
     pub fn new<T: AsRef<Path>>(name: &str, p4info_file_path: T, bmv2_file_path: T) -> Pipeconf {
         let mut file = std::fs::File::open(p4info_file_path).unwrap();
-        let mut is = protobuf::CodedInputStream::new(&mut file);
-        let p4info = protobuf::parse_from_reader(&mut is).unwrap();
+        let mut buf = vec![];
+        file.read_to_end(&mut buf).unwrap();
+        let p4info = prost::Message::decode(buf).unwrap();
         let packetout_id = get_packout_egress_port_metaid(&p4info).unwrap();
         let packetin_id = get_packin_egress_port_metaid(&p4info).unwrap();
         let id = crate::util::hash(name);

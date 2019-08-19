@@ -9,6 +9,6 @@
 //pub use rust_out::p4data as p4data;
 //pub use rust_out::p4config as p4config;
 //pub use rust_out::code as code;
-pub use rusty_p4_proto::proto as p4runtime;
-
-pub use rusty_p4_proto::proto::tmp as p4config;
+pub use rusty_p4_proto::proto::v1 as p4runtime;
+pub use rusty_p4_proto::proto::config::v1 as p4config;
+pub use rusty_p4_proto::proto::tmp as p4device_config;

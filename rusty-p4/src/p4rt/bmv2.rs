@@ -3,17 +3,16 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-
 use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::failure::ResultExt;
 use crate::p4rt::pipeconf::Pipeconf;
 use crate::p4rt::pure::adjust_value;
-use crate::proto::p4config::P4DeviceConfig;
-use crate::proto::p4info::P4Info;
+use crate::proto::p4device_config::P4DeviceConfig;
+use crate::proto::p4config::P4Info;
 use crate::proto::p4runtime::{
-    PacketMetadata, StreamMessageRequest, StreamMessageResponse, TableEntry,
+    PacketMetadata, StreamMessageRequest, StreamMessageResponse, TableEntry, stream_message_request
 };
-use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use crate::proto::p4runtime::P4RuntimeClient;
 use crate::representation::DeviceID;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -22,7 +21,8 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use futures03::compat::*;
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
-use protobuf::Message;
+use prost::Message;
+use rusty_p4_proto::proto::v1::{Uint128, ForwardingPipelineConfig, Update, MasterArbitrationUpdate, Entity};
 
 pub struct Bmv2SwitchConnection {
     pub name: String,
@@ -50,7 +50,7 @@ impl Bmv2SwitchConnection {
         let channelBuilder = grpcio::ChannelBuilder::new(Arc::new(environment));
         let channel = channelBuilder.connect(address);
 
-        let client_stub = crate::proto::p4runtime_grpc::P4RuntimeClient::new(channel);
+        let client_stub = crate::proto::p4runtime::P4RuntimeClient::new(channel);
 
         let (stream_channel_sink, stream_channel_receiver) = client_stub.stream_channel().unwrap();
 
@@ -66,10 +66,17 @@ impl Bmv2SwitchConnection {
     }
 
     pub fn master_arbitration_update(&mut self) -> Result<(), ConnectionError> {
-        let mut request = StreamMessageRequest::new();
-        request.mut_arbitration().device_id = self.device_id;
-        request.mut_arbitration().mut_election_id().high = 0;
-        request.mut_arbitration().mut_election_id().low = 1;
+        let request = StreamMessageRequest {
+            update: Some(stream_message_request::Update::Arbitration(MasterArbitrationUpdate {
+                device_id: self.device_id,
+                role: None,
+                election_id: Uint128 {
+                    high: 0,
+                    low: 1
+                }.into(),
+                status: None
+            }))
+        };
         self.stream_channel_sink
             .start_send((request, WriteFlags::default()));
 
@@ -92,15 +99,16 @@ impl Bmv2SwitchConnection {
     pub fn build_device_config(
         bmv2_json_file_path: &Path,
     ) -> Result<P4DeviceConfig, ConnectionError> {
-        let mut device_config = crate::proto::p4config::P4DeviceConfig::new();
-        device_config.set_reassign(true);
         let mut file =
             File::open(bmv2_json_file_path).context(ConnectionErrorKind::DeviceConfigFileError)?;
         let mut buffer = String::new();
         file.read_to_string(&mut buffer)
             .context(ConnectionErrorKind::DeviceConfigFileError)?;
-        device_config.set_device_data(buffer.into_bytes());
-        Ok(device_config)
+        Ok(P4DeviceConfig {
+            reassign: true,
+            extras: None,
+            device_data: buffer.into_bytes(),
+        })
     }
 
     pub fn set_forwarding_pipeline_config(
@@ -108,21 +116,23 @@ impl Bmv2SwitchConnection {
         p4info: &P4Info,
         bmv2_json_file_path: &Path,
     ) -> Result<(), ConnectionError> {
-        let mut request = crate::proto::p4runtime::SetForwardingPipelineConfigRequest::new();
-        request.mut_election_id().low = 1;
-        request.set_device_id(self.device_id);
-        let config = request.mut_config();
-
-        config.mut_p4info().clone_from(p4info);
-        config.set_p4_device_config(
-            Self::build_device_config(bmv2_json_file_path)?
-                .write_to_bytes()
-                .context(ConnectionErrorKind::DeviceConfigFileError)?,
-        );
-
-        request.set_action(
-            crate::proto::p4runtime::SetForwardingPipelineConfigRequest_Action::VERIFY_AND_COMMIT,
-        );
+        let device_config = Self::build_device_config(bmv2_json_file_path)?;
+        let mut device_config_buf = vec![0u8; device_config.encoded_len()];
+        device_config.encode(&mut device_config_buf);
+        let request = crate::proto::p4runtime::SetForwardingPipelineConfigRequest {
+            device_id: self.device_id,
+            role_id: 0,
+            election_id: Some(Uint128 {
+                high: 0,
+                low: 1,
+            }),
+            action: crate::proto::p4runtime::set_forwarding_pipeline_config_request::Action::VerifyAndCommit.into(),
+            config: Some(ForwardingPipelineConfig {
+                p4info: Some(p4info.clone()),
+                p4_device_config: device_config_buf,
+                cookie: None,
+            }),
+        };
         self.client
             .set_forwarding_pipeline_config(&request)
             .context(ConnectionErrorKind::GRPCSendError)?;
@@ -135,21 +145,23 @@ impl Bmv2SwitchConnection {
         p4info: &P4Info,
         bmv2_json_file_path: &Path,
     ) -> Result<(), ConnectionError> {
-        let mut request = crate::proto::p4runtime::SetForwardingPipelineConfigRequest::new();
-        request.mut_election_id().low = 1;
-        request.set_device_id(self.device_id);
-        let config = request.mut_config();
-
-        config.mut_p4info().clone_from(p4info);
-        config.set_p4_device_config(
-            Self::build_device_config(bmv2_json_file_path)?
-                .write_to_bytes()
-                .context(ConnectionErrorKind::DeviceConfigFileError)?,
-        );
-
-        request.set_action(
-            crate::proto::p4runtime::SetForwardingPipelineConfigRequest_Action::VERIFY_AND_COMMIT,
-        );
+        let device_config = Self::build_device_config(bmv2_json_file_path)?;
+        let mut device_config_buf = vec![0u8; device_config.encoded_len()];
+        device_config.encode(&mut device_config_buf);
+        let request = crate::proto::p4runtime::SetForwardingPipelineConfigRequest {
+            device_id: self.device_id,
+            role_id: 0,
+            election_id: Some(Uint128 {
+                high: 0,
+                low: 1,
+            }),
+            action: crate::proto::p4runtime::set_forwarding_pipeline_config_request::Action::VerifyAndCommit.into(),
+            config: Some(ForwardingPipelineConfig {
+                p4info: Some(p4info.clone()),
+                p4_device_config: device_config_buf,
+                cookie: None,
+            }),
+        };
         self.client
             .set_forwarding_pipeline_config_async(&request)
             .context(ConnectionErrorKind::GRPCSendError)?
@@ -161,20 +173,26 @@ impl Bmv2SwitchConnection {
     }
 
     pub fn write_table_entry(&self, table_entry: TableEntry) -> Result<(), ConnectionError> {
-        let mut request = crate::proto::p4runtime::WriteRequest::new();
-        request.set_device_id(self.device_id);
-        request.mut_election_id().low = 1;
-        let mut update = crate::proto::p4runtime::Update::new();
-        if table_entry.is_default_action {
-            update.set_field_type(crate::proto::p4runtime::Update_Type::MODIFY);
+        let update_type = if table_entry.is_default_action {
+            crate::proto::p4runtime::update::Type::Modify
         } else {
-            update.set_field_type(crate::proto::p4runtime::Update_Type::INSERT);
-        }
-        update
-            .mut_entity()
-            .mut_table_entry()
-            .clone_from(&table_entry);
-        request.updates.push(update);
+            crate::proto::p4runtime::update::Type::Insert
+        };
+        let mut request = crate::proto::p4runtime::WriteRequest {
+            device_id: self.device_id,
+            role_id: 0,
+            election_id: Some(Uint128 {
+                high: 0,
+                low: 1
+            }),
+            updates: vec![Update {
+                r#type: update_type as i32,
+                entity: Some(Entity {
+                    entity: Some(crate::proto::p4runtime::entity::Entity::TableEntry(table_entry.clone()))
+                })
+            }],
+            atomicity: 0
+        };
         self.client
             .write(dbg!(&request))
             .context(ConnectionErrorKind::GRPCSendError)?;

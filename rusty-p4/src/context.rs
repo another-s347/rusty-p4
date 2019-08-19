@@ -15,8 +15,9 @@ use crate::error::{ContextErrorKind, ContextError};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::pure::{new_packet_out_request, new_set_meter_request, new_write_table_entry};
-use crate::proto::p4runtime::{Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse, StreamMessageResponse_oneof_update, Uint128, Update, Update_Type, WriteRequest, WriteResponse};
-use crate::proto::p4runtime_grpc::P4RuntimeClient;
+use crate::proto::p4runtime::P4RuntimeClient;
+use crate::proto::p4runtime::*;
+//use crate::proto::p4runtime_grpc::P4RuntimeClient;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter};
 use crate::restore;
 use crate::restore::Restore;
@@ -215,10 +216,10 @@ where
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
                 match update {
-                    StreamMessageResponse_oneof_update::arbitration(masterUpdate) => {
+                    stream_message_response::Update::Arbitration(masterUpdate) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", masterUpdate);
                     }
-                    StreamMessageResponse_oneof_update::packet(packet) => {
+                    stream_message_response::Update::Packet(packet) => {
                         let port = packet.metadata.iter()
                             .find(|x|x.metadata_id==packet_in_metaid)
                             .map(|x|BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
@@ -231,13 +232,13 @@ where
                         };
                         packet_s.start_send(CoreEvent::PacketReceived(x)).unwrap();
                     }
-                    StreamMessageResponse_oneof_update::digest(p) => {
+                    stream_message_response::Update::Digest(p) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", p);
                     }
-                    StreamMessageResponse_oneof_update::idle_timeout_notification(n) => {
+                    stream_message_response::Update::IdleTimeoutNotification(n) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", n);
                     }
-                    StreamMessageResponse_oneof_update::other(what) => {
+                    stream_message_response::Update::Other(what) => {
                         debug!(target:"context", "StreaMessageResponse: {:#?}", what);
                 }
             }

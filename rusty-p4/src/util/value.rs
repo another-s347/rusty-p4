@@ -68,6 +68,10 @@ pub fn TERNARY<T: Encode, P: Encode>(v: T, mask: P) -> InnerValue {
     InnerValue::TERNARY(v.encode(), mask.encode())
 }
 
+pub fn RANGE<T:Encode,P:Encode>(v:T,p:P)->InnerValue {
+    InnerValue::RANGE(v.encode(),p.encode())
+}
+
 #[derive(Clone, Debug, Hash)]
 pub enum InnerValue {
     EXACT(Bytes),
