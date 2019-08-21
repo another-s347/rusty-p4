@@ -15,6 +15,7 @@ use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook}
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::app::common::CommonState;
+use crate::representation::DeviceType;
 //use futures::prelude::*;
 use futures03::prelude::*;
 use tokio::sync::oneshot::Sender;
@@ -22,18 +23,22 @@ use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use std::any::Any;
 
 pub struct LinkProbeLoader {
-    inner:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,
     interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
 }
 
-pub trait LinkProbeInterceptor {
-    fn new_flow(&self,device:DeviceID) -> Option<Flow>;
+#[derive(Clone)]
+pub struct LinkProbeState {
+    pub inner:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,
+    pub interceptor:Arc<HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>>
+}
+
+pub trait LinkProbeInterceptor: Sync + Send {
+    fn new_flow(&self,device:DeviceID) -> Flow;
 }
 
 impl LinkProbeLoader {
     pub fn new() -> Self {
         LinkProbeLoader {
-            inner: Arc::new(Mutex::new(Default::default())),
             interceptor: HashMap::new()
         }
     }
@@ -43,23 +48,30 @@ impl LinkProbeLoader {
         self.interceptor.insert(PipeconfID(pipeconf),Box::new(interceptor));
         self
     }
+
+    pub fn build(self) -> LinkProbeState {
+        LinkProbeState {
+            inner: Arc::new(Mutex::new(Default::default())),
+            interceptor: Arc::new(self.interceptor)
+        }
+    }
 }
 
-impl<A,E> P4appInstallable<A,E> for LinkProbeLoader
+impl<A,E> P4appInstallable<A,E> for LinkProbeState
     where E:Event
 {
     fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
-        let my_state = self.inner.clone();
+        let my_state = self.clone();
         extend_core.install_ether_hook(0x861,Box::new(on_probe_received));
         extend_core.install_device_added_hook("link probe",Box::new(move|device, state, ctx|{
             let s = my_state.clone();
             on_device_added(s,device,state,ctx)
         }));
-        let my_state = self.inner.clone();
+        let my_state = self.clone();
         extend_core.install_event_hook("link probe",Box::new(move|event:&E, state:&CommonState, ctx:&ContextHandle<E>|{
             match event.clone().into() {
                 CommonEvents::DeviceLost(device)=>{
-                    let mut s = my_state.lock().unwrap();
+                    let mut s = my_state.inner.lock().unwrap();
                     if let Some(list) = s.remove(&device) {
                         info!(target:"extend","cancel link probe task for device: {:?}",device);
                         for x in list {
@@ -90,9 +102,28 @@ pub fn on_probe_received<E>(data:Ethernet<Data>,cp:ConnectPoint,state:&CommonSta
     }
 }
 
-pub fn on_device_added<E>(tasks:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,device:&Device, state:&CommonState, ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(linkprobe_state:LinkProbeState,device:&Device, state:&CommonState, ctx:&ContextHandle<E>) where E:Event
 {
-    new_probe_interceptor(device.id,ctx);
+    let interceptor = match &device.typ {
+        DeviceType::MASTER {
+            socket_addr,
+            device_id,
+            pipeconf,
+        }=>{
+            if let Some(interceptor) = linkprobe_state.interceptor.get(pipeconf) {
+                interceptor
+            }
+            else {
+                return;
+            }
+        }
+        _=>{
+            warn!(target:"linkprobe","It is not a master device. link probe may not work.");
+            return;
+        }
+    };
+    let flow = interceptor.new_flow(device.id);
+    ctx.insert_flow(flow,device.id);
     let mut linkprobe_per_ports = Vec::new();
     for port in device.ports.iter().map(|x|x.number) {
         let cp = ConnectPoint {
@@ -119,22 +150,22 @@ pub fn on_device_added<E>(tasks:Arc<Mutex<HashMap<DeviceID,Vec<Sender<()>>>>>,de
     if !linkprobe_per_ports.is_empty() {
         info!(target:"linkprobe","start probe for device: {:?}",device.id);
     }
-    let mut tasks = tasks.lock().unwrap();
+    let mut tasks = linkprobe_state.inner.lock().unwrap();
     tasks.insert(device.id,linkprobe_per_ports);
 }
 
-pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {
-    let flow = flow!{
-        pipe="IngressPipeImpl";
-        table="acl";
-        key={
-            "hdr.ethernet.ether_type"=>0x861u16
-        };
-        action=send_to_cpu();
-        priority=4000;
-    };
-    ctx.insert_flow(flow, device_id);
-}
+//pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {
+//    let flow = flow!{
+//        pipe="IngressPipeImpl";
+//        table="acl";
+//        key={
+//            "hdr.ethernet.ether_type"=>0x861u16
+//        };
+//        action=send_to_cpu();
+//        priority=4000;
+//    };
+//    ctx.insert_flow(flow, device_id);
+//}
 
 pub fn new_probe(cp:&ConnectPoint) -> Bytes
 {
