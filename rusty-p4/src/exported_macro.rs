@@ -1,5 +1,5 @@
 use crate::util::flow::*;
-use crate::util::value::{encode, EXACT, LPM, MAC, TERNARY, RANGE};
+use crate::util::value::{encode, EXACT, LPM, MAC, RANGE, TERNARY};
 use smallvec::*;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -280,7 +280,7 @@ macro_rules! flow {
                 matches:flow_tablematch!($($t)*)
             }),
             action: std::sync::Arc::new(FlowAction {
-                name:concat!($pipe,'.',stringify!($action_name)),
+                name:stringify!($action_name),
                 params:action_param!($($pt)*)
             }),
             metadata:0,
@@ -299,7 +299,7 @@ macro_rules! flow {
                 matches:flow_tablematch!($($t)*)
             }),
             action: std::sync::Arc::new(FlowAction {
-                name:concat!($pipe,'.',stringify!($action_name)),
+                name:stringify!($action_name),
                 params:action_param!($($pt)*)
             }),
             metadata:0,

@@ -2,8 +2,11 @@ use log::{debug, error, info, trace, warn};
 
 use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::p4rt::pipeconf::Pipeconf;
-use crate::proto::p4config::*;
 use crate::proto::p4config::P4Info;
+use crate::proto::p4config::*;
+use crate::proto::p4runtime::{
+    field_match, stream_message_request, FieldMatch, StreamMessageRequest, TableEntry, WriteRequest,
+};
 use crate::representation::Meter as MeterRep;
 use crate::util::flow::{FlowActionParam, FlowMatch};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
@@ -13,8 +16,9 @@ use bytes::Bytes;
 use failure::ResultExt;
 use futures::{Future, Sink};
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
-use crate::proto::p4runtime::{TableEntry,WriteRequest,StreamMessageRequest,FieldMatch,field_match,stream_message_request};
-use rusty_p4_proto::proto::v1::{PacketOut, PacketMetadata, Uint128, Update, Entity, MeterEntry, MeterConfig, Index, TableAction};
+use rusty_p4_proto::proto::v1::{
+    Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,
+};
 
 pub fn new_write_table_entry(device_id: u64, table_entry: TableEntry) -> WriteRequest {
     let update_type = if table_entry.is_default_action {
@@ -25,17 +29,16 @@ pub fn new_write_table_entry(device_id: u64, table_entry: TableEntry) -> WriteRe
     let mut request = crate::proto::p4runtime::WriteRequest {
         device_id,
         role_id: 0,
-        election_id: Some(Uint128 {
-            high: 0,
-            low: 1
-        }),
+        election_id: Some(Uint128 { high: 0, low: 1 }),
         updates: vec![Update {
             r#type: update_type as i32,
             entity: Some(Entity {
-                entity: Some(crate::proto::p4runtime::entity::Entity::TableEntry(table_entry.clone()))
-            })
+                entity: Some(crate::proto::p4runtime::entity::Entity::TableEntry(
+                    table_entry.clone(),
+                )),
+            }),
         }],
-        atomicity: 0
+        atomicity: 0,
     };
     request
 }
@@ -60,11 +63,11 @@ pub fn new_packet_out_request(
         payload: packet.to_vec(),
         metadata: vec![PacketMetadata {
             metadata_id: pipeconf.packetout_egress_id,
-            value: adjust_value(Bytes::from(egress_port.to_be_bytes().as_ref()), 2).to_vec()
-        }]
+            value: adjust_value(Bytes::from(egress_port.to_be_bytes().as_ref()), 2).to_vec(),
+        }],
     };
     let request = StreamMessageRequest {
-        update: Some(stream_message_request::Update::Packet(packetOut))
+        update: Some(stream_message_request::Update::Packet(packetOut)),
     };
     request
 }
@@ -77,30 +80,30 @@ pub fn new_set_meter_request(
     let write_request: WriteRequest = WriteRequest {
         device_id,
         role_id: 0,
-        election_id: Some(Uint128 {
-            high: 0,
-            low: 1
-        }),
+        election_id: Some(Uint128 { high: 0, low: 1 }),
         updates: vec![Update {
             r#type: crate::proto::p4runtime::update::Type::Modify as i32,
             entity: Some(Entity {
-                entity: Some(crate::proto::p4runtime::entity::Entity::MeterEntry(MeterEntry {
-                    meter_id: get_meter_id(pipeconf.get_p4info(), &meter.name).ok_or(ConnectionError::from(
-                        ConnectionErrorKind::PipeconfError(format!("meter id not found for: {}", &meter.name)),
-                    ))?,
-                    index: Some(Index {
-                        index: meter.index
-                    }),
-                    config: Some(MeterConfig {
-                        cir: meter.cir,
-                        cburst: meter.cburst,
-                        pir: meter.pir,
-                        pburst: meter.pburst
-                    })
-                }))
-            })
+                entity: Some(crate::proto::p4runtime::entity::Entity::MeterEntry(
+                    MeterEntry {
+                        meter_id: get_meter_id(pipeconf.get_p4info(), &meter.name).ok_or(
+                            ConnectionError::from(ConnectionErrorKind::PipeconfError(format!(
+                                "meter id not found for: {}",
+                                &meter.name
+                            ))),
+                        )?,
+                        index: Some(Index { index: meter.index }),
+                        config: Some(MeterConfig {
+                            cir: meter.cir,
+                            cburst: meter.cburst,
+                            pir: meter.pir,
+                            pburst: meter.pburst,
+                        }),
+                    },
+                )),
+            }),
         }],
-        atomicity: 0
+        atomicity: 0,
     };
     Ok(write_request)
 }
@@ -118,7 +121,7 @@ pub fn build_table_entry(
     let action = if !action_name.is_empty() {
         let mut action = crate::proto::p4runtime::Action {
             action_id: get_actions_id(p4info, action_name).unwrap(),
-            params: vec![]
+            params: vec![],
         };
         if !action_params.is_empty() {
             for p in action_params {
@@ -131,8 +134,7 @@ pub fn build_table_entry(
             }
         }
         Some(action)
-    }
-    else {
+    } else {
         None
     };
 
@@ -140,7 +142,7 @@ pub fn build_table_entry(
         table_id: get_table_id(p4info, table_name).unwrap(),
         r#match: vec![],
         action: Some(TableAction {
-            r#type:action.map(crate::proto::p4runtime::table_action::Type::Action)
+            r#type: action.map(crate::proto::p4runtime::table_action::Type::Action),
         }),
         priority,
         controller_metadata: metadata,
@@ -148,7 +150,7 @@ pub fn build_table_entry(
         counter_data: None,
         is_default_action: default_action,
         idle_timeout_ns: 0,
-        time_since_last_hit: None
+        time_since_last_hit: None,
     };
 
     for m in match_fields {
@@ -256,54 +258,56 @@ pub fn get_match_field_pb(
     let bitwidth = p4info_match.bitwidth;
     let byte_len = (bitwidth as f32 / 8.0).ceil() as usize;;
     let byte_len = byte_len as usize;
-    let x=p4info_match.r#match.as_ref().map(|x|{
+    let x = p4info_match.r#match.as_ref().map(|x| {
         match x {
             match_field::Match::MatchType(x) => {
-                match (match_field::MatchType::from_i32(*x),value) {
+                match (match_field::MatchType::from_i32(*x), value) {
                     (Some(match_field::MatchType::Exact), InnerValue::EXACT(v)) => {
                         //                assert_eq!(byte_len, v.len());
                         let v = adjust_value(v.clone(), byte_len);
-                        field_match::FieldMatchType::Exact(crate::proto::p4runtime::field_match::Exact {
-                            value: v.to_vec()
-                        })
+                        field_match::FieldMatchType::Exact(
+                            crate::proto::p4runtime::field_match::Exact { value: v.to_vec() },
+                        )
                     }
                     (Some(match_field::MatchType::Lpm), InnerValue::LPM(v, l)) => {
                         assert_eq!(byte_len, v.len());
-                        field_match::FieldMatchType::Lpm(crate::proto::p4runtime::field_match::Lpm {
-                            value: v.to_vec(),
-                            prefix_len: *l
-                        })
+                        field_match::FieldMatchType::Lpm(
+                            crate::proto::p4runtime::field_match::Lpm {
+                                value: v.to_vec(),
+                                prefix_len: *l,
+                            },
+                        )
                     }
                     (Some(match_field::MatchType::Ternary), InnerValue::TERNARY(v, mask)) => {
                         assert_eq!(byte_len, v.len());
                         //                assert_eq!(byte_len, mask.len());
                         let mask = adjust_value(mask.clone(), byte_len);
-                        field_match::FieldMatchType::Ternary(crate::proto::p4runtime::field_match::Ternary {
-                            value: v.to_vec(),
-                            mask: mask.to_vec()
-                        })
+                        field_match::FieldMatchType::Ternary(
+                            crate::proto::p4runtime::field_match::Ternary {
+                                value: v.to_vec(),
+                                mask: mask.to_vec(),
+                            },
+                        )
                     }
                     (Some(match_field::MatchType::Range), InnerValue::RANGE(low, high)) => {
                         assert_eq!(byte_len, low.len());
                         assert_eq!(byte_len, high.len());
-                        field_match::FieldMatchType::Range(crate::proto::p4runtime::field_match::Range {
-                        low: low.to_vec(),
-                        high: high.to_vec()
-                        })
+                        field_match::FieldMatchType::Range(
+                            crate::proto::p4runtime::field_match::Range {
+                                low: low.to_vec(),
+                                high: high.to_vec(),
+                            },
+                        )
                     }
-                    _=>{
-                        panic!("what")
-                    }
+                    _ => panic!("what"),
                 }
             }
-            match_field::Match::OtherMatchType(_)=>{
-                panic!("unsupported")
-            }
+            match_field::Match::OtherMatchType(_) => panic!("unsupported"),
         }
     });
     let mut p4runtime_match = crate::proto::p4runtime::FieldMatch {
         field_id: p4info_match.id,
-        field_match_type: x
+        field_match_type: x,
     };
     return Some(p4runtime_match);
 }
@@ -369,7 +373,7 @@ pub fn get_action_param_pb(
     let value = adjust_value(value, bytes_len);
     let p4runtime_param = crate::proto::p4runtime::action::Param {
         param_id: p4info_param.id,
-        value: value.to_vec()
+        value: value.to_vec(),
     };
     return p4runtime_param;
 }

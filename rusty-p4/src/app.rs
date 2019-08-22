@@ -1,10 +1,6 @@
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
-use bytes::{Bytes, BytesMut};
-use futures03::future::Future;
-use log::{debug, error, info, trace, warn};
-
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::proto::p4runtime::PacketIn;
@@ -12,7 +8,11 @@ use crate::util::flow::*;
 use crate::util::packet::data::Data;
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
+use crate::util::value::EXACT;
 use crate::util::value::{encode, LPM};
+use bytes::{Bytes, BytesMut};
+use futures03::future::Future;
+use log::{debug, error, info, trace, warn};
 
 pub mod common;
 pub mod extended;
@@ -52,7 +52,7 @@ impl P4app<CommonEvents> for Example {
         match event {
             CommonEvents::DeviceAdded(ref device) => {
                 info!(target:"Example App","device up {:?}", device);
-                let flow = flow!{
+                let flow = flow! {
                     pipe="MyIngress";
                     table="ipv4_lpm";
                     key={

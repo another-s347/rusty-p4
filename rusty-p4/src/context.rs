@@ -3,19 +3,16 @@ use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
-use crate::p4rt::pure::{
-    new_packet_out_request, new_set_meter_request,
-    new_write_table_entry,
-};
-use crate::proto::p4runtime::{
-    Entity, Index, MeterEntry, PacketIn, StreamMessageRequest, StreamMessageResponse,
-    Uint128, Update, WriteRequest, WriteResponse, stream_message_response
-};
+use crate::p4rt::pure::{new_packet_out_request, new_set_meter_request, new_write_table_entry};
 use crate::proto::p4runtime::P4RuntimeClient;
+use crate::proto::p4runtime::{
+    stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
+    StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
+};
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter, MulticastGroup};
 use crate::restore;
 use crate::restore::Restore;
-use crate::util::flow::{Flow};
+use crate::util::flow::Flow;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
@@ -47,7 +44,7 @@ pub struct ContextConfig {
 #[derive(Clone)]
 pub struct Context<E> {
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    core_channel_sender: UnboundedSender<CoreRequest<E>>,
+    pub core_channel_sender: UnboundedSender<CoreRequest<E>>,
     event_sender: UnboundedSender<CoreEvent<E>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
@@ -64,9 +61,9 @@ pub struct ContextDriver<E, T> {
 }
 
 impl<E, T> ContextDriver<E, T>
-    where
-        E: Event,
-        T: P4app<E>,
+where
+    E: Event,
+    T: P4app<E>,
 {
     async fn run_request(mut r: UnboundedReceiver<CoreRequest<E>>, mut ctx: Context<E>) {
         while let Some(request) = r.next().await {
@@ -151,19 +148,19 @@ impl<E, T> ContextDriver<E, T>
                 }
                 CoreRequest::SetMulticastGroup(mc) => {
                     if let Some(c) = ctx.connections.write().unwrap().get_mut(&mc.device) {
-//                        let request = new_create_multicast_group_request(&c.pipeconf, 1, mc);
-//                        if request.is_err() {
-//                            error!(target:"context","set multicast group pipeconf error: {:?}",request.err().unwrap());
-//                            continue;
-//                        }
-//                        match c.p4runtime_client.write(&request.unwrap()) {
-//                            Ok(response) => {
-//                                info!(target:"context","set multicast group response: {:?}",response);
-//                            }
-//                            Err(e) => {
-//                                error!(target:"context","grpc send error: {:?}",e);
-//                            }
-//                        }
+                        //                        let request = new_create_multicast_group_request(&c.pipeconf, 1, mc);
+                        //                        if request.is_err() {
+                        //                            error!(target:"context","set multicast group pipeconf error: {:?}",request.err().unwrap());
+                        //                            continue;
+                        //                        }
+                        //                        match c.p4runtime_client.write(&request.unwrap()) {
+                        //                            Ok(response) => {
+                        //                                info!(target:"context","set multicast group response: {:?}",response);
+                        //                            }
+                        //                            Err(e) => {
+                        //                                error!(target:"context","grpc send error: {:?}",e);
+                        //                            }
+                        //                        }
                     } else {
                         error!(target:"context","SetMulticastGroup error: connection not found for device {:?}",&mc.device);
                     }
@@ -193,8 +190,8 @@ impl<E, T> ContextDriver<E, T>
 }
 
 impl<E> Context<E>
-    where
-        E: Event + Clone + 'static + Send,
+where
+    E: Event + Clone + 'static + Send,
 {
     pub async fn try_new<T>(
         pipeconf: HashMap<PipeconfID, Pipeconf>,
@@ -202,8 +199,8 @@ impl<E> Context<E>
         restore: Option<Restore>,
         config: ContextConfig,
     ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
-        where
-            T: P4app<E> + Send + 'static,
+    where
+        T: P4app<E> + Send + 'static,
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
@@ -230,14 +227,14 @@ impl<E> Context<E>
             r.restore(handle);
         }
 
-//        if config.enable_netconfiguration {
-//            let netconfiguration_server = netconfiguration::NetconfigServer::new();
-//            let core_sender = result.core_channel_sender.clone();
-//            tokio::spawn(netconfiguration::build_netconfig_server(
-//                netconfiguration_server,
-//                core_sender,
-//            ));
-//        }
+        //        if config.enable_netconfiguration {
+        //            let netconfiguration_server = netconfiguration::NetconfigServer::new();
+        //            let core_sender = result.core_channel_sender.clone();
+        //            tokio::spawn(netconfiguration::build_netconfig_server(
+        //                netconfiguration_server,
+        //                core_sender,
+        //            ));
+        //        }
 
         let driver = ContextDriver {
             core_request_receiver: r,
@@ -250,8 +247,8 @@ impl<E> Context<E>
     }
 
     pub fn get_handle(&self) -> ContextHandle<E>
-        where
-            E: Event,
+    where
+        E: Event,
     {
         ContextHandle::new(
             self.core_channel_sender.clone(),
@@ -394,8 +391,8 @@ pub struct ContextHandle<E> {
 }
 
 impl<E> ContextHandle<E>
-    where
-        E: Debug,
+where
+    E: Debug,
 {
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
@@ -413,7 +410,7 @@ impl<E> ContextHandle<E>
         }
     }
 
-    pub fn insert_flow(&self, mut flow: Flow, device:DeviceID) -> Result<Flow, ContextError> {
+    pub fn insert_flow(&self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
         let connections = self.connections.read().unwrap();
         let connection = connections.get(&device).ok_or(ContextError::from(
@@ -424,7 +421,7 @@ impl<E> ContextHandle<E>
         connection
             .send_request_sync(&request)
             .context(ContextErrorKind::ConnectionError)?;
-        flow.metadata=hash;
+        flow.metadata = hash;
         Ok(flow)
     }
 
