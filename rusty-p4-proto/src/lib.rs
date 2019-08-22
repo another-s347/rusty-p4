@@ -8,10 +8,6 @@ pub mod proto {
             include!("p4.config.v1.rs");
         }
     }
-
-    pub mod tmp {
-        include!("p4.tmp.rs");
-    }
 }
 
 pub mod google {

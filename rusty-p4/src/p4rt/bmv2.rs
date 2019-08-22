@@ -3,7 +3,6 @@ use crate::failure::ResultExt;
 use crate::p4rt::pipeconf::Pipeconf;
 use crate::p4rt::pure::adjust_value;
 use crate::proto::p4config::P4Info;
-use crate::proto::p4device_config::P4DeviceConfig;
 use crate::proto::p4runtime::P4RuntimeClient;
 use crate::proto::p4runtime::{
     stream_message_request, PacketMetadata, StreamMessageRequest, StreamMessageResponse, TableEntry,
@@ -95,21 +94,6 @@ impl Bmv2SwitchConnection {
             .start_send((request, WriteFlags::default()))
             .context(ConnectionErrorKind::GRPCSendError)?;
         Ok(())
-    }
-
-    pub fn build_device_config(
-        bmv2_json_file_path: &Path,
-    ) -> Result<P4DeviceConfig, ConnectionError> {
-        let mut file =
-            File::open(bmv2_json_file_path).context(ConnectionErrorKind::DeviceConfigFileError)?;
-        let mut buffer = String::new();
-        file.read_to_string(&mut buffer)
-            .context(ConnectionErrorKind::DeviceConfigFileError)?;
-        Ok(P4DeviceConfig {
-            reassign: true,
-            extras: None,
-            device_data: buffer.into_bytes(),
-        })
     }
 
     pub fn set_forwarding_pipeline_config(
