@@ -1,4 +1,5 @@
-/target
+target/
+example/target/
 **/*.rs.bk
 py_out/
 grpc_out/
