@@ -154,19 +154,6 @@ pub fn on_device_added<E>(linkprobe_state:LinkProbeState,device:&Device, state:&
     tasks.insert(device.id,linkprobe_per_ports);
 }
 
-//pub fn new_probe_interceptor<E>(device_id:DeviceID,ctx:&ContextHandle<E>) where E:Event {
-//    let flow = flow!{
-//        pipe="IngressPipeImpl";
-//        table="acl";
-//        key={
-//            "hdr.ethernet.ether_type"=>0x861u16
-//        };
-//        action=send_to_cpu();
-//        priority=4000;
-//    };
-//    ctx.insert_flow(flow, device_id);
-//}
-
 pub fn new_probe(cp:&ConnectPoint) -> Bytes
 {
     let probe = serde_json::to_vec(cp).unwrap();

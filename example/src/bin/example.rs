@@ -12,6 +12,8 @@ use rusty_p4::util::value::EXACT;
 use std::path::Path;
 use tokio;
 use rusty_p4::app::linkprobe::{LinkProbeLoader, LinkProbeInterceptor};
+use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
+use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::restore::Restore;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::DeviceID;
@@ -36,6 +38,20 @@ impl LinkProbeInterceptor for SimpleLinkProbeInterceptor {
     }
 }
 
+impl ArpInterceptor for SimpleLinkProbeInterceptor {
+    fn new_flow(&self, device: DeviceID) -> Flow {
+        flow! {
+            pipe="IngressPipeImpl";
+            table="acl";
+            key={
+                "hdr.ethernet.ether_type"=>ETHERNET_TYPE_ARP
+            };
+            action=send_to_cpu();
+            priority=4000;
+        }
+    }
+}
+
 #[tokio::main]
 pub async fn main() {
     flexi_logger::Logger::with_str("debug").start().unwrap();
@@ -51,7 +67,17 @@ pub async fn main() {
 
     let restore = Restore::new("state.json");
 
-    let app = P4appBuilder::new(ExampleExtended {}).with(LinkProbeLoader::new().build())
+    let app = P4appBuilder::new(ExampleExtended {})
+        .with(
+            LinkProbeLoader::new()
+                .with_interceptor("simple",SimpleLinkProbeInterceptor{})
+                .build()
+        )
+        .with(
+            ProxyArpLoader::new()
+                .with_interceptor("simple",SimpleLinkProbeInterceptor{})
+                .build()
+        )
         .build();
 
     let (mut context,driver) = Context::try_new(pipeconfs, app, Some(restore), ContextConfig::default()).await.unwrap();

@@ -2,7 +2,8 @@ use crate::app::common::CommonState;
 use crate::app::extended::{P4appExtendedCore, P4appInstallable};
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, CoreRequest, Event};
-use crate::representation::{ConnectPoint, Device, DeviceID, Host};
+use crate::p4rt::pipeconf::PipeconfID;
+use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
 use crate::util::flow::*;
 use crate::util::packet::arp::ETHERNET_TYPE_ARP;
 use crate::util::packet::data::Data;
@@ -13,23 +14,61 @@ use bytes::Bytes;
 use futures::prelude::*;
 use futures03::prelude::*;
 use log::{debug, error, info, trace, warn};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
-pub struct ProxyArpLoader {}
+#[derive(Clone)]
+pub struct ProxyArpState {
+    pub interceptor: Arc<HashMap<PipeconfID, Box<dyn ArpInterceptor>>>,
+}
+
+pub struct ProxyArpLoader {
+    interceptor: HashMap<PipeconfID, Box<dyn ArpInterceptor>>,
+}
+
+pub trait ArpInterceptor: Sync + Send {
+    fn new_flow(&self, device: DeviceID) -> Flow;
+}
 
 impl ProxyArpLoader {
     pub fn new() -> Self {
-        ProxyArpLoader {}
+        ProxyArpLoader {
+            interceptor: Default::default(),
+        }
+    }
+
+    pub fn with_interceptor<T: 'static>(mut self, pipeconf: &str, interceptor: T) -> Self
+    where
+        T: ArpInterceptor,
+    {
+        let pipeconf = crate::util::hash(pipeconf);
+        self.interceptor
+            .insert(PipeconfID(pipeconf), Box::new(interceptor));
+        self
+    }
+
+    pub fn build(self) -> ProxyArpState {
+        ProxyArpState {
+            interceptor: Arc::new(self.interceptor),
+        }
     }
 }
 
-impl<A, E> P4appInstallable<A, E> for ProxyArpLoader
+impl<A, E> P4appInstallable<A, E> for ProxyArpState
 where
     E: Event,
 {
     fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
+        let s = self.clone();
         extend_core.install_ether_hook(0x806, Box::new(on_arp_received));
-        extend_core.install_device_added_hook("proxy arp", Box::new(on_device_added));
+        extend_core.install_device_added_hook(
+            "proxy arp",
+            Box::new(move |device, state, ctx| {
+                let s = s.clone();
+                on_device_added(s, device, state, ctx)
+            }),
+        );
     }
 }
 
@@ -128,18 +167,40 @@ pub fn on_arp_received<E>(
     }
 }
 
-pub fn on_device_added<E>(device: &Device, state: &CommonState, ctx: &ContextHandle<E>)
-where
+pub fn on_device_added<E>(
+    proxyarp_state: ProxyArpState,
+    device: &Device,
+    state: &CommonState,
+    ctx: &ContextHandle<E>,
+) where
     E: Event,
 {
-    new_arp_interceptor(device.id, ctx);
+    let interceptor = match &device.typ {
+        DeviceType::MASTER {
+            socket_addr,
+            device_id,
+            pipeconf,
+        } => {
+            if let Some(interceptor) = proxyarp_state.interceptor.get(pipeconf) {
+                interceptor
+            } else {
+                return;
+            }
+        }
+        _ => {
+            warn!(target:"linkprobe","It is not a master device. Proxy arp may not work.");
+            return;
+        }
+    };
+    let flow = interceptor.new_flow(device.id);
+    ctx.insert_flow(flow, device.id);
 }
 
 pub fn new_arp_interceptor<E>(device_id: DeviceID, ctx: &ContextHandle<E>)
 where
     E: Event,
 {
-    let flow = flow!{
+    let flow = flow! {
         pipe="IngressPipeImpl";
         table="acl";
         key={
