@@ -85,6 +85,7 @@ impl CommonState {
     }
 }
 
+#[derive(Debug)]
 pub enum MergeResult<T> {
     ADDED(T),
     MERGED,

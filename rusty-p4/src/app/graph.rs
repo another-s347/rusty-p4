@@ -298,128 +298,128 @@ fn test_incr() {
     }
 }
 
-#[test]
-fn test_defaultgraph() {
-    let mut graph: DefaultGraph = DefaultGraph::new();
-    let d0 = Device {
-        name: "0".to_string(),
-        ports: Default::default(),
-        typ: DeviceType::VIRTUAL,
-        device_id: 0,
-        index: 0,
-    };
-    let cp0 = ConnectPoint {
-        device: "0".to_string(),
-        port: 1,
-    };
-    let d1 = Device {
-        name: "1".to_string(),
-        ports: Default::default(),
-        typ: DeviceType::VIRTUAL,
-        device_id: 0,
-        index: 0,
-    };
-    let cp1 = ConnectPoint {
-        device: "1".to_string(),
-        port: 1,
-    };
-    let d2 = Device {
-        name: "2".to_string(),
-        ports: Default::default(),
-        typ: DeviceType::VIRTUAL,
-        device_id: 0,
-        index: 0,
-    };
-    let cp2 = ConnectPoint {
-        device: "2".to_string(),
-        port: 1,
-    };
-    let d3 = Device {
-        name: "3".to_string(),
-        ports: Default::default(),
-        typ: DeviceType::VIRTUAL,
-        device_id: 0,
-        index: 0,
-    };
-    let cp3 = ConnectPoint {
-        device: "3".to_string(),
-        port: 1,
-    };
-    let d4 = Device {
-        name: "4".to_string(),
-        ports: Default::default(),
-        typ: DeviceType::VIRTUAL,
-        device_id: 0,
-        index: 0,
-    };
-    let cp4 = ConnectPoint {
-        device: "4".to_string(),
-        port: 1,
-    };
-    graph.add_device(&d0);
-    graph.add_device(&d1);
-    graph.add_device(&d2);
-    graph.add_device(&d3);
-    graph.add_device(&d4);
-    let link = Link {
-        src: cp0.clone(),
-        dst: cp1.clone(),
-    };
-    graph.add_link(
-        &Link {
-            src: cp0.clone(),
-            dst: cp1.clone(),
-        },
-        10,
-    );
-    graph.add_link(
-        &Link {
-            src: cp0.clone(),
-            dst: cp3.clone(),
-        },
-        5,
-    );
-    graph.add_link(
-        &Link {
-            src: cp1.clone(),
-            dst: cp3.clone(),
-        },
-        3,
-    );
-    graph.add_link(
-        &Link {
-            src: cp1.clone(),
-            dst: cp2.clone(),
-        },
-        1,
-    );
-    graph.add_link(
-        &Link {
-            src: cp2.clone(),
-            dst: cp4.clone(),
-        },
-        4,
-    );
-    graph.add_link(
-        &Link {
-            src: cp3.clone(),
-            dst: cp2.clone(),
-        },
-        9,
-    );
-    graph.add_link(
-        &Link {
-            src: cp3.clone(),
-            dst: cp4.clone(),
-        },
-        2,
-    );
-    graph.add_link(
-        &Link {
-            src: cp4.clone(),
-            dst: cp0.clone(),
-        },
-        7,
-    );
-    dbg!(graph.get_path(&d0, &d2));
-}
+//#[test]
+//fn test_defaultgraph() {
+//    let mut graph: DefaultGraph = DefaultGraph::new();
+//    let d0 = Device {
+//        name: "0".to_string(),
+//        ports: Default::default(),
+//        typ: DeviceType::VIRTUAL,
+//        device_id: 0,
+//        index: 0,
+//    };
+//    let cp0 = ConnectPoint {
+//        device: "0".to_string(),
+//        port: 1,
+//    };
+//    let d1 = Device {
+//        name: "1".to_string(),
+//        ports: Default::default(),
+//        typ: DeviceType::VIRTUAL,
+//        device_id: 0,
+//        index: 0,
+//    };
+//    let cp1 = ConnectPoint {
+//        device: "1".to_string(),
+//        port: 1,
+//    };
+//    let d2 = Device {
+//        name: "2".to_string(),
+//        ports: Default::default(),
+//        typ: DeviceType::VIRTUAL,
+//        device_id: 0,
+//        index: 0,
+//    };
+//    let cp2 = ConnectPoint {
+//        device: "2".to_string(),
+//        port: 1,
+//    };
+//    let d3 = Device {
+//        name: "3".to_string(),
+//        ports: Default::default(),
+//        typ: DeviceType::VIRTUAL,
+//        device_id: 0,
+//        index: 0,
+//    };
+//    let cp3 = ConnectPoint {
+//        device: "3".to_string(),
+//        port: 1,
+//    };
+//    let d4 = Device {
+//        name: "4".to_string(),
+//        ports: Default::default(),
+//        typ: DeviceType::VIRTUAL,
+//        device_id: 0,
+//        index: 0,
+//    };
+//    let cp4 = ConnectPoint {
+//        device: "4".to_string(),
+//        port: 1,
+//    };
+//    graph.add_device(&d0);
+//    graph.add_device(&d1);
+//    graph.add_device(&d2);
+//    graph.add_device(&d3);
+//    graph.add_device(&d4);
+//    let link = Link {
+//        src: cp0.clone(),
+//        dst: cp1.clone(),
+//    };
+//    graph.add_link(
+//        &Link {
+//            src: cp0.clone(),
+//            dst: cp1.clone(),
+//        },
+//        10,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp0.clone(),
+//            dst: cp3.clone(),
+//        },
+//        5,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp1.clone(),
+//            dst: cp3.clone(),
+//        },
+//        3,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp1.clone(),
+//            dst: cp2.clone(),
+//        },
+//        1,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp2.clone(),
+//            dst: cp4.clone(),
+//        },
+//        4,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp3.clone(),
+//            dst: cp2.clone(),
+//        },
+//        9,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp3.clone(),
+//            dst: cp4.clone(),
+//        },
+//        2,
+//    );
+//    graph.add_link(
+//        &Link {
+//            src: cp4.clone(),
+//            dst: cp0.clone(),
+//        },
+//        7,
+//    );
+//    dbg!(graph.get_path(&d0, &d2));
+//}

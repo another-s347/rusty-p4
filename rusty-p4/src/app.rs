@@ -56,7 +56,7 @@ impl P4app<CommonEvents> for Example {
                     pipe="MyIngress";
                     table="ipv4_lpm";
                     key={
-                        "hdr.ipv4.dstAddr"=>ip("10.0.2.2")/32
+                        "hdr.ipv4.dstAddr"=>ip"10.0.2.2"/32
                     };
                     action=myTunnel_ingress(dst_id:100u32);
                 };

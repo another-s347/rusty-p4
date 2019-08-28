@@ -1,9 +1,3 @@
-use crate::util::flow::*;
-use crate::util::value::{encode, EXACT, LPM, MAC, RANGE, TERNARY};
-use smallvec::*;
-use std::net::IpAddr;
-use std::str::FromStr;
-
 #[macro_export]
 macro_rules! action_param {
     ($($x:tt)*) => {{
@@ -16,16 +10,16 @@ macro_rules! action_param {
 #[macro_export]
 macro_rules! action_params {
     ($m:ident,$p:ident:$v:expr,$($t:tt)*) => {
-        $m.push(FlowActionParam{
+        $m.push($crate::util::flow::FlowActionParam{
             name:stringify!($p),
-            value:encode($v)
+            value:$crate::util::value::encode($v)
         });
         action_params!($m,$($t)*)
     };
     ($m:ident,$p:ident:$v:expr) => {
-        $m.push(FlowActionParam{
+        $m.push($crate::util::flow::FlowActionParam{
             name:stringify!($p),
-            value:encode($v)
+            value:$crate::util::value::encode($v)
         });
     };
     ($m:ident,) => {};
@@ -43,224 +37,226 @@ macro_rules! flow_tablematch {
 #[macro_export]
 macro_rules! flow_tablematches {
     // exact
-    ($m:ident,$x:expr=>$y:tt,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$y:expr,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT($y)
+            value:$crate::util::value::EXACT($y)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$y:tt) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$y:expr) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT($y)
+            value:$crate::util::value::EXACT($y)
         });
     };
     ($m:ident,$x:expr=>$y:ident,$($z:tt)*) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT($y)
+            value:$crate::util::value::EXACT($y)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$y:ident) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT($y)
+            value:$crate::util::value::EXACT($y)
         });
     };
     // exact ip
-    ($m:ident,$x:expr=>ip($ip:expr),$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT(std::net::IpAddr::from_str($ip).unwrap())
+            value:$crate::util::value::EXACT(std::net::IpAddr::from_str($ip).unwrap())
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>ip($ip:expr)) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT(std::net::IpAddr::from_str($ip).unwrap())
+            value:$crate::util::value::EXACT(std::net::IpAddr::from_str($ip).unwrap())
         });
     };
     // exact mac
-    ($m:ident,$x:expr=>mac($mac:expr),$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT(MAC::of($ip))
+            value:$crate::util::value::EXACT($crate::util::value::MAC::of($ip))
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>mac($mac:expr)) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:EXACT(MAC::of($ip))
+            value:$crate::util::value::EXACT($crate::util::value::MAC::of($ip))
         });
     };
     // lpm
     ($m:ident,$x:expr=>$v:literal/$lpm:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM($v,$lpm)
+            value:$crate::util::value::LPM($v,$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal/$lpm:literal) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM($v,$lpm)
+            value:$crate::util::value::LPM($v,$lpm)
         });
     };
     ($m:ident,$x:expr=>$v:ident/$lpm:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM($v,$lpm)
+            value:$crate::util::value::LPM($v,$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident/$lpm:literal) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM($v,$lpm)
+            value:$crate::util::value::LPM($v,$lpm)
         });
     };
     // lpm ip
-    ($m:ident,$x:expr=>ip($ip:expr)/$lpm:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal/$lpm:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
+            value:$crate::util::value::LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>ip($ip:expr)/$lpm:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal/$lpm:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
+            value:$crate::util::value::LPM(std::net::IpAddr::from_str($ip).unwrap(),$lpm)
         });
     };
     // lpm mac
-    ($m:ident,$x:expr=>mac($mac:expr)/$lpm:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal/$lpm:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM(MAC::of($mac),$lpm)
+            value:$crate::util::value::LPM($crate::util::value::MAC::of($mac),$lpm)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>mac($mac:expr)/$lpm:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal/$lpm:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:LPM(MAC::of($mac),$lpm)
+            value:$crate::util::value::LPM($crate::util::value::MAC::of($mac),$lpm)
         });
     };
     // ternary
     ($m:ident,$x:expr=>$v:literal&$ternary:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY($v,$ternary)
+            value:$crate::util::value::TERNARY($v,$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:literal&$ternary:literal) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY($v,$ternary)
+            value:$crate::util::value::TERNARY($v,$ternary)
         });
     };
     ($m:ident,$x:expr=>$v:ident&$ternary:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY($v,$ternary)
+            value:$crate::util::value::TERNARY($v,$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
     ($m:ident,$x:expr=>$v:ident&$ternary:literal) => {
-        $m.push(FlowMatch{
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY($v,$ternary)
+            value:$crate::util::value::TERNARY($v,$ternary)
         });
     };
     // ternary ip
-    ($m:ident,$x:expr=>ip($ip:expr)&$ternary:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal&$ternary:literal,$($z:tt)*) => {
+        use std::str::FromStr;
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
+            value:$crate::util::value::TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>ip($ip:expr)&$ternary:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>ip$ip:literal&$ternary:literal) => {
+        use std::str::FromStr;
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
+            value:$crate::util::value::TERNARY(std::net::IpAddr::from_str($ip).unwrap(),$ternary)
         });
     };
     // ternary mac
-    ($m:ident,$x:expr=>mac($mac:expr)&$ternary:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal&$ternary:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY(MAC::of($mac),$ternary)
+            value:$crate::util::value::TERNARY($crate::util::value::MAC::of($mac),$ternary)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>mac($mac:expr)&$ternary:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>mac$mac:literal&$ternary:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:TERNARY(MAC::of($mac),$ternary)
+            value:$crate::util::value::TERNARY($crate::util::value::MAC::of($mac),$ternary)
         });
     };
     // range literal..literal
-    ($m:ident,$x:expr=>$v:literal..$p:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:literal to $p:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:literal..$p:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:literal to $p:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
     };
     // range ident..literal
-    ($m:ident,$x:expr=>$v:ident..$p:literal,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:ident to $p:literal,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:ident..$p:literal) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:ident to $p:literal) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
     };
     // range ident..ident
-    ($m:ident,$x:expr=>$v:ident..$p:ident,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:ident to $p:ident,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:ident..$p:ident) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:ident to $p:ident) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
     };
     // range literal..ident
-    ($m:ident,$x:expr=>$v:literal..$p:ident,$($z:tt)*) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:literal to $p:ident,$($z:tt)*) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
         flow_tablematches!($m,$($z)*)
     };
-    ($m:ident,$x:expr=>$v:literal..$p:ident) => {
-        $m.push(FlowMatch{
+    ($m:ident,$x:expr=>$v:literal to $p:ident) => {
+        $m.push($crate::util::flow::FlowMatch{
             name:$x,
-            value:RANGE(encode($v),encode($p))
+            value:$crate::util::value::RANGE($v,$p)
         });
     };
 }
@@ -272,14 +268,14 @@ macro_rules! flow {
     table=$table:expr;
     key={$($t:tt)*};
     action=$action_name:ident($($pt:tt)*);
-    priority=$priority:expr;
+    priority=$priority:expr$(;)?
     ) => {
-        Flow {
-            table: std::sync::Arc::new(FlowTable{
+        $crate::util::flow::Flow {
+            table: std::sync::Arc::new($crate::util::flow::FlowTable{
                 name:concat!($pipe,'.',$table),
                 matches:flow_tablematch!($($t)*)
             }),
-            action: std::sync::Arc::new(FlowAction {
+            action: std::sync::Arc::new($crate::util::flow::FlowAction {
                 name:stringify!($action_name),
                 params:action_param!($($pt)*)
             }),
@@ -291,14 +287,14 @@ macro_rules! flow {
     pipe=$pipe:expr;
     table=$table:expr;
     key={$($t:tt)*};
-    action=$action_name:ident($($pt:tt)*);
+    action=$action_name:ident($($pt:tt)*)$(;)?
     ) => {
-        Flow {
-            table: std::sync::Arc::new(FlowTable{
+        $crate::util::flow::Flow {
+            table: std::sync::Arc::new($crate::util::flow::FlowTable{
                 name:concat!($pipe,'.',$table),
                 matches:flow_tablematch!($($t)*)
             }),
-            action: std::sync::Arc::new(FlowAction {
+            action: std::sync::Arc::new($crate::util::flow::FlowAction {
                 name:stringify!($action_name),
                 params:action_param!($($pt)*)
             }),
@@ -326,8 +322,8 @@ fn test_macro() {
         pipe="MyIngress";
         table = "xxxx";
         key = {
-             "aaaa"=>ip("10.0.0.1")&0b1111,
-             "bbbb"=>0x123..0x456
+             "aaaa"=>ip"10.0.0.1"&0b1111,
+             "bbbb"=>0x123 to 0x456
         };
         action = action_name(abcd:0x1234,xyz:0x445)
     };
