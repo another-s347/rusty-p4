@@ -15,6 +15,8 @@ pub enum ContextErrorKind {
     DeviceNotConnected { device: DeviceID },
     #[fail(display = "Internal connection error.")]
     ConnectionError,
+    #[fail(display = "Entity cannot be converted to proto.")]
+    EntityIsNone,
 }
 
 impl Fail for ContextError {

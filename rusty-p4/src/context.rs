@@ -1,15 +1,16 @@
 use crate::app::P4app;
+use crate::entity::UpdateType;
 use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
-use crate::p4rt::pure::{new_packet_out_request, new_set_meter_request, new_write_table_entry};
+use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
 use crate::proto::p4runtime::P4RuntimeClient;
 use crate::proto::p4runtime::{
     stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
 };
-use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Meter, MulticastGroup};
+use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::restore;
 use crate::restore::Restore;
 use crate::util::flow::Flow;
@@ -127,42 +128,19 @@ where
                         error!(target:"context","PacketOut error: connection not found for device {:?}.", connect_point.device);
                     }
                 }
-                CoreRequest::SetMeter(meter) => {
-                    if let Some(c) = ctx.connections.write().unwrap().get_mut(&meter.device) {
-                        let request = new_set_meter_request(&c.pipeconf, 1, &meter);
-                        if request.is_err() {
-                            error!(target:"context","set meter pipeconf error: {:?}",request.err().unwrap());
-                            continue;
-                        }
-                        match c.p4runtime_client.write(&request.unwrap()) {
+                CoreRequest::SetEntity { device, entity, op } => {
+                    if let Some(c) = ctx.connections.read().unwrap().get(&device) {
+                        let request = new_set_entity_request(1, entity, op);
+                        match c.p4runtime_client.write(&request) {
                             Ok(response) => {
-                                debug!(target:"context","set meter response: {:?}",response);
+                                debug!(target:"context","set entity response: {:?}",response);
                             }
                             Err(e) => {
                                 error!(target:"context","grpc send error: {:?}",e);
                             }
                         }
                     } else {
-                        error!(target:"context","SetMeter error: connection not found for device {:?}",&meter.device);
-                    }
-                }
-                CoreRequest::SetMulticastGroup(mc) => {
-                    if let Some(c) = ctx.connections.write().unwrap().get_mut(&mc.device) {
-                        //                        let request = new_create_multicast_group_request(&c.pipeconf, 1, mc);
-                        //                        if request.is_err() {
-                        //                            error!(target:"context","set multicast group pipeconf error: {:?}",request.err().unwrap());
-                        //                            continue;
-                        //                        }
-                        //                        match c.p4runtime_client.write(&request.unwrap()) {
-                        //                            Ok(response) => {
-                        //                                info!(target:"context","set multicast group response: {:?}",response);
-                        //                            }
-                        //                            Err(e) => {
-                        //                                error!(target:"context","grpc send error: {:?}",e);
-                        //                            }
-                        //                        }
-                    } else {
-                        error!(target:"context","SetMulticastGroup error: connection not found for device {:?}",&mc.device);
+                        error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
                     }
                 }
             }
@@ -467,15 +445,27 @@ where
             .unwrap();
     }
 
-    pub fn set_meter(&self, meter: Meter) {
-        self.sender
-            .unbounded_send(CoreRequest::SetMeter(meter))
-            .unwrap();
-    }
-
-    pub fn set_multicast_group(&self, mc: MulticastGroup) {
-        self.sender
-            .unbounded_send(CoreRequest::SetMulticastGroup(mc))
-            .unwrap();
+    pub fn set_entity<T: crate::entity::ToEntity>(
+        &self,
+        device: DeviceID,
+        update_type: UpdateType,
+        entity: &T,
+    ) -> Result<(), ContextError> {
+        let connections = self.connections.read().unwrap();
+        let connection = connections.get(&device).ok_or(ContextError::from(
+            ContextErrorKind::DeviceNotConnected { device },
+        ))?;
+        if let Some(entity) = entity.to_proto_entity(&connection.pipeconf) {
+            self.sender
+                .unbounded_send(CoreRequest::SetEntity {
+                    device,
+                    entity,
+                    op: update_type,
+                })
+                .unwrap();
+            Ok(())
+        } else {
+            Err(ContextError::from(ContextErrorKind::EntityIsNone))
+        }
     }
 }

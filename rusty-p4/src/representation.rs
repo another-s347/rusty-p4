@@ -112,17 +112,6 @@ impl PartialEq for ConnectPoint {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Meter {
-    pub device: DeviceID,
-    pub name: String,
-    pub index: i64,
-    pub cburst: i64,
-    pub cir: i64,
-    pub pburst: i64,
-    pub pir: i64,
-}
-
 #[derive(Copy, Clone, Hash, Eq)]
 pub struct Link {
     pub src: ConnectPoint,
@@ -139,17 +128,4 @@ impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
         self.src == other.src && self.dst == other.dst
     }
-}
-
-#[derive(Clone, Hash, Debug)]
-pub struct MulticastGroup {
-    pub device: DeviceID,
-    pub id: u32,
-    pub replica: Vec<Replica>,
-}
-
-#[derive(Clone, Hash, Debug)]
-pub struct Replica {
-    pub port: u32,
-    pub instance: u32,
 }

@@ -7,7 +7,6 @@ use crate::proto::p4config::*;
 use crate::proto::p4runtime::{
     field_match, stream_message_request, FieldMatch, StreamMessageRequest, TableEntry, WriteRequest,
 };
-use crate::representation::Meter as MeterRep;
 use crate::util::flow::{FlowActionParam, FlowMatch};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
@@ -72,40 +71,21 @@ pub fn new_packet_out_request(
     request
 }
 
-pub fn new_set_meter_request(
-    pipeconf: &Pipeconf,
+pub fn new_set_entity_request(
     device_id: u64,
-    meter: &MeterRep,
-) -> Result<WriteRequest, ConnectionError> {
-    let write_request: WriteRequest = WriteRequest {
+    entity: Entity,
+    update_type: crate::proto::p4runtime::update::Type,
+) -> WriteRequest {
+    WriteRequest {
         device_id,
         role_id: 0,
         election_id: Some(Uint128 { high: 0, low: 1 }),
         updates: vec![Update {
-            r#type: crate::proto::p4runtime::update::Type::Modify as i32,
-            entity: Some(Entity {
-                entity: Some(crate::proto::p4runtime::entity::Entity::MeterEntry(
-                    MeterEntry {
-                        meter_id: get_meter_id(pipeconf.get_p4info(), &meter.name).ok_or(
-                            ConnectionError::from(ConnectionErrorKind::PipeconfError(format!(
-                                "meter id not found for: {}",
-                                &meter.name
-                            ))),
-                        )?,
-                        index: Some(Index { index: meter.index }),
-                        config: Some(MeterConfig {
-                            cir: meter.cir,
-                            cburst: meter.cburst,
-                            pir: meter.pir,
-                            pburst: meter.pburst,
-                        }),
-                    },
-                )),
-            }),
+            r#type: update_type as i32,
+            entity: Some(entity),
         }],
         atomicity: 0,
-    };
-    Ok(write_request)
+    }
 }
 
 pub fn build_table_entry(
