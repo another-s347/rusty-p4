@@ -1,10 +1,8 @@
 [package]
 name = "rusty-p4-proto"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 prost = "0.5"

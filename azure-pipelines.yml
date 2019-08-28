@@ -1,0 +1,9 @@
+stages:
+ - template: azure/stages.yml@templates
+
+resources:
+  repositories:
+    - repository: rusty-p4
+      type: github
+      name: crate-ci/azure-pipelines
+      endpoint: github

@@ -1,9 +1,8 @@
 [package]
 name = "rusty-p4"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["skye"]
 edition = "2018"
-build=false
 
 [dependencies]
 prost = "0.5"
@@ -16,7 +15,6 @@ hex = "0.3"
 tokio = { version="0.2.0-alpha.2" , features = ["rt-full"] }
 bytes = "0.4.12"
 futures03 = { package="futures-preview", version = "0.3.0-alpha.18", features = ["async-await", "nightly", "compat"]}
-# hyper = { git="https://github.com/hyperium/hyper.git", optional = true }
 log = "0.4"
 bitfield = "0.13"
 serde = { version = "1.0", features = ["derive"] }
