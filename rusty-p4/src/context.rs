@@ -1,4 +1,5 @@
 use crate::app::P4app;
+use crate::context::driver::ContextDriver;
 use crate::entity::UpdateType;
 use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
@@ -36,6 +37,8 @@ use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 
 pub mod driver;
+pub mod handle;
+pub use handle::ContextHandle;
 
 #[derive(Copy, Clone, Default)]
 pub struct ContextConfig {
@@ -52,119 +55,6 @@ pub struct Context<E> {
     removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     restore: Option<Restore>,
     config: ContextConfig,
-}
-
-pub struct ContextDriver<E, T> {
-    pub core_request_receiver: UnboundedReceiver<CoreRequest<E>>,
-    pub event_receiver: UnboundedReceiver<CoreEvent<E>>,
-    pub app: T,
-    pub ctx: Context<E>,
-}
-
-impl<E, T> ContextDriver<E, T>
-where
-    E: Event,
-    T: P4app<E>,
-{
-    async fn run_request(mut r: UnboundedReceiver<CoreRequest<E>>, mut ctx: Context<E>) {
-        while let Some(request) = r.next().await {
-            trace!(target:"context","{:#?}",request);
-            match request {
-                CoreRequest::AddDevice { ref device, reply } => {
-                    let name = &device.name;
-                    match device.typ {
-                        DeviceType::MASTER {
-                            ref socket_addr,
-                            device_id,
-                            pipeconf,
-                        } => {
-                            let pipeconf_obj = ctx.pipeconf.get(&pipeconf);
-                            if pipeconf_obj.is_none() {
-                                error!(target:"context","pipeconf not found: {:?}",pipeconf);
-                                continue;
-                            }
-                            let pipeconf = pipeconf_obj.unwrap().clone();
-                            let bmv2connection =
-                                Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
-                            let result = ctx.add_connection(bmv2connection, &pipeconf).await;
-                            if result.is_err() {
-                                error!(target:"context","add connection fail: {:?}",result.err().unwrap());
-                                continue;
-                            }
-                            if let Some(r) = ctx.restore.as_mut() {
-                                r.add_device(device.clone());
-                            }
-                        }
-                        _ => {}
-                    }
-                    ctx.event_sender
-                        .send(CoreEvent::Event(
-                            CommonEvents::DeviceAdded(device.clone()).into(),
-                        ))
-                        .await
-                        .unwrap();
-                }
-                CoreRequest::Event(e) => {
-                    ctx.event_sender.send(CoreEvent::Event(e)).await.unwrap();
-                }
-                CoreRequest::PacketOut {
-                    connect_point,
-                    packet,
-                } => {
-                    if let Some(c) = ctx
-                        .connections
-                        .write()
-                        .unwrap()
-                        .get_mut(&connect_point.device)
-                    {
-                        let request =
-                            new_packet_out_request(&c.pipeconf, connect_point.port, packet);
-                        let result = c.send_stream_request(request);
-                        if result.is_err() {
-                            error!(target:"context","packet out err {:?}", result.err().unwrap());
-                        }
-                    } else {
-                        // find device name
-                        error!(target:"context","PacketOut error: connection not found for device {:?}.", connect_point.device);
-                    }
-                }
-                CoreRequest::SetEntity { device, entity, op } => {
-                    if let Some(c) = ctx.connections.read().unwrap().get(&device) {
-                        let request = new_set_entity_request(1, entity, op);
-                        match c.p4runtime_client.write(&request) {
-                            Ok(response) => {
-                                debug!(target:"context","set entity response: {:?}",response);
-                            }
-                            Err(e) => {
-                                error!(target:"context","grpc send error: {:?}",e);
-                            }
-                        }
-                    } else {
-                        error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
-                    }
-                }
-            }
-        }
-    }
-
-    async fn run_event(mut r: UnboundedReceiver<CoreEvent<E>>, mut app: T, ctx: ContextHandle<E>) {
-        while let Some(x) = r.next().await {
-            match x {
-                CoreEvent::PacketReceived(packet) => {
-                    app.on_packet(packet, &ctx);
-                }
-                CoreEvent::Event(e) => {
-                    app.on_event(e, &ctx);
-                }
-            }
-        }
-    }
-
-    pub async fn run_to_end(self) {
-        let handle = self.ctx.get_handle();
-        tokio::spawn(Self::run_request(self.core_request_receiver, self.ctx));
-        Self::run_event(self.event_receiver, self.app, handle).await;
-    }
 }
 
 impl<E> Context<E>
@@ -204,15 +94,6 @@ where
         if let Some(r) = result.restore.as_mut() {
             r.restore(handle);
         }
-
-        //        if config.enable_netconfiguration {
-        //            let netconfiguration_server = netconfiguration::NetconfigServer::new();
-        //            let core_sender = result.core_channel_sender.clone();
-        //            tokio::spawn(netconfiguration::build_netconfig_server(
-        //                netconfiguration_server,
-        //                core_sender,
-        //            ));
-        //        }
 
         let driver = ContextDriver {
             core_request_receiver: r,
@@ -357,115 +238,5 @@ impl Connection {
             .p4runtime_client
             .write(request)
             .context(ContextErrorKind::ConnectionError)?)
-    }
-}
-
-pub struct ContextHandle<E> {
-    pub sender: UnboundedSender<CoreRequest<E>>,
-    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
-    id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-    removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-}
-
-impl<E> ContextHandle<E>
-where
-    E: Debug,
-{
-    pub fn new(
-        sender: UnboundedSender<CoreRequest<E>>,
-        connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
-        id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-        removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-        pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    ) -> ContextHandle<E> {
-        ContextHandle {
-            sender,
-            pipeconf,
-            connections,
-            id_to_name,
-            removed_id_to_name,
-        }
-    }
-
-    pub fn insert_flow(&self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
-        let hash = crate::util::hash(&flow);
-        let connections = self.connections.read().unwrap();
-        let connection = connections.get(&device).ok_or(ContextError::from(
-            ContextErrorKind::DeviceNotConnected { device },
-        ))?;
-        let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
-        let request = new_write_table_entry(connection.device_id, table_entry);
-        connection
-            .send_request_sync(&request)
-            .context(ContextErrorKind::ConnectionError)?;
-        flow.metadata = hash;
-        Ok(flow)
-    }
-
-    pub fn add_device(&self, name: String, address: String, device_id: u64, pipeconf: &str) {
-        let id = crate::util::hash(&name);
-        let pipeconf = crate::util::hash(pipeconf);
-        let device = Device {
-            id: DeviceID(id),
-            name,
-            ports: Default::default(),
-            typ: DeviceType::MASTER {
-                socket_addr: address,
-                device_id,
-                pipeconf: PipeconfID(pipeconf),
-            },
-            device_id,
-            index: 0,
-        };
-        self.sender
-            .unbounded_send(CoreRequest::AddDevice {
-                device,
-                reply: None,
-            })
-            .unwrap()
-    }
-
-    pub fn send_event<T: Into<E>>(&self, event: T) {
-        self.sender
-            .unbounded_send(CoreRequest::Event(event.into()))
-            .unwrap();
-    }
-
-    pub fn send_request(&self, request: CoreRequest<E>) {
-        self.sender.unbounded_send(request).unwrap();
-    }
-
-    pub fn send_packet(&self, to: ConnectPoint, packet: Bytes) {
-        self.sender
-            .unbounded_send(CoreRequest::PacketOut {
-                connect_point: to,
-                packet,
-            })
-            .unwrap();
-    }
-
-    pub fn set_entity<T: crate::entity::ToEntity>(
-        &self,
-        device: DeviceID,
-        update_type: UpdateType,
-        entity: &T,
-    ) -> Result<(), ContextError> {
-        let connections = self.connections.read().unwrap();
-        let connection = connections.get(&device).ok_or(ContextError::from(
-            ContextErrorKind::DeviceNotConnected { device },
-        ))?;
-        if let Some(entity) = entity.to_proto_entity(&connection.pipeconf) {
-            self.sender
-                .unbounded_send(CoreRequest::SetEntity {
-                    device,
-                    entity,
-                    op: update_type,
-                })
-                .unwrap();
-            Ok(())
-        } else {
-            Err(ContextError::from(ContextErrorKind::EntityIsNone))
-        }
     }
 }
