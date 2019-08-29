@@ -14,6 +14,7 @@ use bytes::{Bytes, BytesMut};
 use futures03::future::Future;
 use log::{debug, error, info, trace, warn};
 
+pub mod async_app;
 pub mod common;
 pub mod extended;
 pub mod graph;

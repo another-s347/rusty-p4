@@ -37,6 +37,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 
+#[derive(Clone)]
 pub struct ContextHandle<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
