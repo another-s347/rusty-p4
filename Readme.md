@@ -1,3 +1,7 @@
+[![Build Status](https://s347419313.visualstudio.com/rusty-p4/_apis/build/status/rusty-p4-CI?branchName=dev)](https://s347419313.visualstudio.com/rusty-p4/_build/latest?definitionId=6&branchName=dev)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+
 # Work in Progress
 
 I hope I can finish this.

@@ -1,8 +1,11 @@
 [package]
 name = "rusty-p4"
 version = "0.1.0-alpha.1"
-authors = ["skye"]
+authors = ["s347419313 <s347419313@gmail.com>"]
 edition = "2018"
+license = "apache-2.0"
+readme = "Readme.md"
+repository = "https://github.com/another-s347/rusty-p4"
 
 [dependencies]
 prost = "0.5"
