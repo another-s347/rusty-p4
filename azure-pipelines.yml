@@ -1,9 +1,72 @@
 stages:
- - template: azure/stages.yml@templates
+  - stage: cargo_nightly_check
+    displayName: Compilation check nightly
+    jobs:
+      - template: azure/cargo-check.yml@templates
+        parameters:
+          name: cargo_check
+          benches: false
+          setup: []
+          all_features: true
+          rust: nightly
+#  - ${{ if ne('false', parameters.minrust) }}:
+#      # This represents the minimum Rust version supported.
+#      # Tests are not run as tests may require newer versions of rust.
+#      - stage: ${{ format('{0}msrv', parameters.prefix) }}
+#        ${{ if ne(parameters.prefix, '') }}:
+#          displayName: "${{ format('Minimum supported Rust version: {1} ({0})', parameters.prefix, parameters.minrust) }}"
+#        ${{ if eq(parameters.prefix, '') }}:
+#          displayName: "${{ format('Minimum supported Rust version: {0}', parameters.minrust) }}"
+#        dependsOn: []
+#        jobs:
+#          - template: cargo-check.yml
+#            parameters:
+#              rust: ${{ parameters.minrust }}
+#              setup: ${{ parameters.setup }}
+#              all_features: ${{ parameters.check_all_features }}
+  - stage: cargo_nightly_test
+    displayName: Test suite nightly
+    dependsOn: cargo_nightly_check
+    jobs:
+      - template: azure/test.yml@templates
+        parameters:
+          envs: {}
+          setup: []
+          test_ignored: false
+          single_threaded: false
+          nightly_feature: ''
+          features: ''
+          rust: nightly
+          cross: true
+#  - stage: ${{ format('{0}style', parameters.prefix) }}
+#    ${{ if ne(parameters.prefix, '') }}:
+#      displayName: ${{ format('Style linting ({0})', parameters.prefix) }}
+#    ${{ if eq(parameters.prefix, '') }}:
+#      displayName: Style linting
+#    dependsOn: ${{ format('{0}check', parameters.prefix) }}
+#    jobs:
+#      - template: style.yml
+#        parameters:
+#          setup: ${{ parameters.setup }}
+#  - ${{ if ne('', parameters.codecov_token) }}:
+#      - stage: ${{ format('{0}coverage', parameters.prefix) }}
+#        ${{ if ne(parameters.prefix, '') }}:
+#          displayName: ${{ format('Code coverage ({0})', parameters.prefix) }}
+#        ${{ if eq(parameters.prefix, '') }}:
+#          displayName: Code coverage
+#        dependsOn: ${{ format('{0}test', parameters.prefix) }}
+#        jobs:
+#          - template: coverage.yml
+#            parameters:
+#              codecov_token: ${{ parameters.codecov_token }}
+#              envs: ${{ parameters.envs }}
+#              setup: ${{ parameters.setup }}
+#              nightly: ${{ parameters.nightly_coverage }}
+#              features: ${{ parameters.test_features }}
 
 resources:
   repositories:
-    - repository: rusty-p4
+    - repository: templates
       type: github
       name: crate-ci/azure-pipelines
-      endpoint: github
+      endpoint: another-s347
