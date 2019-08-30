@@ -4,7 +4,25 @@ pub mod clone_session;
 pub mod meter;
 pub mod multicast_group;
 pub type ProtoEntity = crate::proto::p4runtime::Entity;
-pub type UpdateType = crate::proto::p4runtime::update::Type;
+
+#[derive(Debug)]
+pub enum UpdateType {
+    Insert,
+    Modify,
+    Delete,
+    Unspecified,
+}
+
+impl Into<crate::proto::p4runtime::update::Type> for UpdateType {
+    fn into(self) -> crate::proto::p4runtime::update::Type {
+        match self {
+            UpdateType::Insert => crate::proto::p4runtime::update::Type::Insert,
+            UpdateType::Modify => crate::proto::p4runtime::update::Type::Modify,
+            UpdateType::Delete => crate::proto::p4runtime::update::Type::Delete,
+            UpdateType::Unspecified => crate::proto::p4runtime::update::Type::Unspecified,
+        }
+    }
+}
 
 pub trait ToEntity {
     fn to_proto_entity(&self, pipeconf: &Pipeconf) -> Option<ProtoEntity>;

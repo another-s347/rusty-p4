@@ -116,7 +116,7 @@ where
                 }
                 CoreRequest::SetEntity { device, entity, op } => {
                     if let Some(c) = ctx.connections.read().unwrap().get(&device) {
-                        let request = new_set_entity_request(1, entity, op);
+                        let request = new_set_entity_request(1, entity, op.into());
                         match c.p4runtime_client.write(&request) {
                             Ok(response) => {
                                 debug!(target:"context","set entity response: {:?}",response);
