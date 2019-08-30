@@ -92,13 +92,17 @@ pub fn on_arp_received<E>(
         ArpOp::Request => {
             let host = Host {
                 mac: arp.sender_mac,
-                ip: arp.sender_ip.into(),
+                ip: Some(arp.sender_ip.into()),
                 location: cp,
             };
             if !state.hosts.contains(&host) {
                 ctx.send_event(CommonEvents::HostDetected(host));
             }
-            if let Some(arp_target) = state.hosts.iter().find(|x| x.ip == arp.target_ip) {
+            if let Some(arp_target) = state
+                .hosts
+                .iter()
+                .find(|x| x.ip == Some(arp.target_ip.into()))
+            {
                 let arp_reply = Arp {
                     hw_type: 1,
                     proto_type: 0x800,
@@ -106,7 +110,7 @@ pub fn on_arp_received<E>(
                     proto_addr_len: 4,
                     opcode: ArpOp::Reply,
                     sender_mac: arp_target.mac,
-                    sender_ip: arp_target.ip,
+                    sender_ip: arp_target.get_ipv4_address().unwrap(),
                     target_mac: arp.sender_mac,
                     target_ip: arp.sender_ip,
                 };
@@ -156,7 +160,7 @@ pub fn on_arp_received<E>(
         ArpOp::Reply => {
             let host = Host {
                 mac: arp.sender_mac,
-                ip: arp.sender_ip.into(),
+                ip: Some(arp.sender_ip.into()),
                 location: cp,
             };
             ctx.send_event(CommonEvents::HostDetected(host));

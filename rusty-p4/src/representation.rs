@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Device {
@@ -35,8 +35,38 @@ impl Hash for DeviceID {
 #[derive(Copy, Eq, Hash, Clone, Debug)]
 pub struct Host {
     pub mac: MAC,
-    pub ip: Ipv4Addr,
+    pub ip: Option<IpAddr>,
     pub location: ConnectPoint,
+}
+
+impl Host {
+    pub fn get_ipv4_address(&self) -> Option<Ipv4Addr> {
+        match self.ip {
+            Some(IpAddr::V4(v4)) => Some(v4),
+            _ => None,
+        }
+    }
+
+    pub fn get_ipv6_address(&self) -> Option<Ipv6Addr> {
+        match self.ip {
+            Some(IpAddr::V6(v6)) => Some(v6),
+            _ => None,
+        }
+    }
+
+    pub fn has_ipv4_address(&self) -> bool {
+        match self.ip {
+            Some(IpAddr::V4(v4)) => true,
+            _ => false,
+        }
+    }
+
+    pub fn has_ipv6_address(&self) -> bool {
+        match self.ip {
+            Some(IpAddr::V6(v6)) => true,
+            _ => false,
+        }
+    }
 }
 
 impl PartialEq for Host {
