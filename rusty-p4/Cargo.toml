@@ -1,11 +1,14 @@
 [package]
 name = "rusty-p4"
 version = "0.1.0-alpha.1"
-authors = ["s347419313 <s347419313@gmail.com>"]
+authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
-license = "apache-2.0"
+license = "Apache-2.0"
 readme = "Readme.md"
 repository = "https://github.com/another-s347/rusty-p4"
+keywords = ["SDN", "Network", "P4"]
+categories = ["Network programming"]
+description = "A (WIP) library for writing P4 controller in Rust."
 
 [dependencies]
 prost = "0.5"
@@ -13,15 +16,12 @@ grpcio = "0.5.0-alpha.4"
 rusty-p4-proto = "0.1.0-alpha.1"
 futures = "^0.1.15"
 byteorder = "1.3.2"
-libc = "0.2"
 hex = "0.3"
 tokio = { version="0.2.0-alpha.2" , features = ["rt-full"] }
 bytes = "0.4.12"
 futures03 = { package="futures-preview", version = "0.3.0-alpha.18", features = ["async-await", "nightly", "compat"]}
 log = "0.4"
-bitfield = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ctrlc = { version = "3.0", features = ["termination"] }
 failure = "0.1.5"
-smallvec = "0.6"

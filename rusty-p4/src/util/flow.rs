@@ -5,12 +5,12 @@ use crate::representation::DeviceID;
 use crate::util::value::{InnerValue, Value};
 use bytes::Bytes;
 use failure::_core::fmt::Debug;
-use smallvec::SmallVec;
+//use smallvec::SmallVec;
 use std::fmt::Formatter;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-#[derive(Debug,Hash)]
+#[derive(Debug, Hash)]
 pub struct Flow {
     pub table: Arc<FlowTable>,
     pub action: Arc<FlowAction>,
@@ -34,33 +34,33 @@ impl Flow {
     }
 }
 
-#[derive(Debug,Hash)]
+#[derive(Debug, Hash)]
 pub struct FlowTable {
     pub name: &'static str,
     pub matches: Vec<FlowMatch>,
 }
 
-#[derive(Clone, Debug,Hash)]
+#[derive(Clone, Debug, Hash)]
 pub struct FlowMatch {
     pub name: &'static str,
     pub value: InnerValue,
 }
 
-unsafe impl smallvec::Array for FlowMatch {
-    type Item = FlowMatch;
-
-    fn size() -> usize {
-        std::mem::size_of::<FlowMatch>()
-    }
-
-    fn ptr(&self) -> *const Self::Item {
-        self as *const FlowMatch
-    }
-
-    fn ptr_mut(&mut self) -> *mut Self::Item {
-        self as *mut FlowMatch
-    }
-}
+//unsafe impl smallvec::Array for FlowMatch {
+//    type Item = FlowMatch;
+//
+//    fn size() -> usize {
+//        std::mem::size_of::<FlowMatch>()
+//    }
+//
+//    fn ptr(&self) -> *const Self::Item {
+//        self as *const FlowMatch
+//    }
+//
+//    fn ptr_mut(&mut self) -> *mut Self::Item {
+//        self as *mut FlowMatch
+//    }
+//}
 
 impl FlowTable {
     // TODO: Const generic.
@@ -69,124 +69,30 @@ impl FlowTable {
     }
 }
 
-#[derive(Debug,Hash)]
+#[derive(Debug, Hash)]
 pub struct FlowAction {
     pub name: &'static str,
     pub params: Vec<FlowActionParam>,
 }
 
-#[derive(Debug,Hash)]
+#[derive(Debug, Hash)]
 pub struct FlowActionParam {
     pub name: &'static str,
     pub value: Bytes,
 }
 
-unsafe impl smallvec::Array for FlowActionParam {
-    type Item = FlowActionParam;
-
-    fn size() -> usize {
-        std::mem::size_of::<FlowActionParam>()
-    }
-
-    fn ptr(&self) -> *const Self::Item {
-        self as *const FlowActionParam
-    }
-
-    fn ptr_mut(&mut self) -> *mut Self::Item {
-        self as *mut FlowActionParam
-    }
-}
-
-//#[derive(Debug, Clone, Hash)]
-//pub struct Flow<'a> {
-//    pub device: DeviceID,
-//    pub table: FlowTable<'a>,
-//    pub action: FlowAction<'a>,
-//    pub priority: i32,
-//}
+//unsafe impl smallvec::Array for FlowActionParam {
+//    type Item = FlowActionParam;
 //
-//#[derive(Debug, Clone)]
-//pub struct FlowOwned {
-//    pub device: DeviceID,
-//    pub table: FlowTableOwned,
-//    pub action: FlowActionOwned,
-//    pub priority: i32,
-//    pub metadata: u64,
-//}
-//
-//impl<'a> Flow<'a> {
-//    pub fn to_table_entry(&self, pipeconf: &Pipeconf, metadata: u64) -> TableEntry {
-//        //        let table_entry = build_table_entry(
-//        //            pipeconf.get_p4info(),
-//        //            self.table.name,
-//        //            self.table.matches,
-//        //            false,
-//        //            self.action.name,
-//        //            self.action.params,
-//        //            self.priority,
-//        //            metadata,
-//        //        );
-//        //        table_entry
-//        unimplemented!()
+//    fn size() -> usize {
+//        std::mem::size_of::<FlowActionParam>()
 //    }
 //
-//    pub fn into_owned(self, metadata: u64) -> FlowOwned {
-//        FlowOwned {
-//            device: self.device,
-//            table: self.table.into_owned(),
-//            action: self.action.to_owned(),
-//            priority: self.priority,
-//            metadata,
-//        }
+//    fn ptr(&self) -> *const Self::Item {
+//        self as *const FlowActionParam
 //    }
-//}
 //
-//#[derive(Clone, Debug, Hash)]
-//pub struct FlowTable<'a> {
-//    pub name: &'static str,
-//    pub matches: &'a [(&'static str, InnerValue)],
-//}
-//
-//impl<'a> FlowTable<'a> {
-//    pub fn into_owned(self) -> FlowTableOwned {
-//        let mut static_table: Vec<(&'static str, InnerValue)> = vec![];
-//        for m in self.matches {
-//            static_table.push((*m).clone());
-//        }
-//        FlowTableOwned {
-//            name: self.name,
-//            matches: static_table,
-//        }
+//    fn ptr_mut(&mut self) -> *mut Self::Item {
+//        self as *mut FlowActionParam
 //    }
-//}
-//
-//#[derive(Clone, Debug)]
-//pub struct FlowTableOwned {
-//    pub name: &'static str,
-//    pub matches: Vec<(&'static str, InnerValue)>,
-//}
-//
-//#[derive(Clone, Debug, Hash)]
-//pub struct FlowAction<'a> {
-//    pub name: &'static str,
-//    pub params: &'a [(&'static str, Vec<u8>)],
-//}
-//
-//impl<'a> FlowAction<'a> {
-//    pub fn to_owned(&self) -> FlowActionOwned {
-//        let mut static_action: Vec<(&'static str, Vec<u8>)> = vec![];
-//        for m in self.params {
-//            static_action.push((*m).clone());
-//        }
-//        FlowActionOwned {
-//            name: self.name,
-//            params: static_action,
-//        }
-//    }
-//}
-//
-//#[derive(Clone, Debug)]
-//pub struct FlowActionOwned {
-//    pub name: &'static str,
-//    pub params: Vec<(&'static str, Vec<u8>)>,
 //}

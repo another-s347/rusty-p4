@@ -1,11 +1,6 @@
 #![allow(warnings)]
 #![feature(option_flattening)]
-#![feature(async_await)]
-#![feature(specialization)]
-#![feature(const_generics)]
 
-#[macro_use]
-extern crate bitfield;
 #[macro_use]
 extern crate serde_json;
 #[macro_use]

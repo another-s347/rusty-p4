@@ -98,10 +98,6 @@ impl NetconfigServer {
     }
 }
 
-async fn hello(_: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    Ok(Response::new(Body::from("Hello World!")))
-}
-
 pub async fn build_netconfig_server<E>(server: NetconfigServer, core_event_sender:UnboundedSender<CoreRequest<E>>)
     where E:Event+Clone+Send+'static
 {

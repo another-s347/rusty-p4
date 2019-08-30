@@ -1,14 +1,18 @@
 [package]
 name = "rusty-p4-northbound"
 version = "0.1.0-alpha.1"
-authors = ["skye"]
+authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
-build=false
+license = "Apache-2.0"
+repository = "https://github.com/another-s347/rusty-p4"
+keywords = ["SDN", "Network", "P4"]
+categories = ["Network programming"]
+description = "Northbound impl collection for rusty-p4."
 
 [dependencies]
 bytes = "0.4.12"
 futures = { package="futures-preview", version = "0.3.0-alpha.18", features = ["async-await", "nightly", "compat"]}
-hyper = { git="https://github.com/hyperium/hyper.git" }
+hyper = { git="https://github.com/hyperium/hyper.git", rev = "7b1d6d71b7e15dfab47010a56a6ca295697dfe10" }
 rusty-p4 = { path="../rusty-p4" }
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
