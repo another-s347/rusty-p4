@@ -46,6 +46,7 @@ pub enum CommonEvents {
     LinkDetected(Link),
     LinkLost(Link),
     HostDetected(Host),
+    HostUpdate(Host),
     HostLost(Host),
-    Other {},
+    Other,
 }

@@ -13,7 +13,7 @@ pub struct AsyncAppsBase<E> {
 }
 
 pub trait AsyncApp<E>: Send + Sync {
-    fn on_start(&self, ctx: &ContextHandle<E>);
+    fn on_start(&self, ctx: &ContextHandle<E>) {}
 
     fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
         Some(packet)
@@ -70,5 +70,26 @@ where
             }
         });
         None
+    }
+}
+
+struct SyncWrap<A> {
+    inner: Mutex<A>
+}
+
+impl<A, E> AsyncApp<E> for SyncWrap<A> where A:P4app<E>,E:Event {
+    fn on_start(&self, ctx: &ContextHandle<E>) {
+        let mut a = self.inner.lock().unwrap();
+        a.on_start(ctx);
+    }
+
+    fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
+        let mut a = self.inner.lock().unwrap();
+        a.on_packet(packet,ctx)
+    }
+
+    fn on_event(&self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+        let mut a = self.inner.lock().unwrap();
+        a.on_event(event,ctx)
     }
 }
