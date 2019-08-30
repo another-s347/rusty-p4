@@ -4,7 +4,6 @@ version = "0.1.0-alpha.1"
 authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
 license = "Apache-2.0"
-readme = "Readme.md"
 repository = "https://github.com/another-s347/rusty-p4"
 keywords = ["SDN", "Network", "P4"]
 categories = ["Network programming"]
