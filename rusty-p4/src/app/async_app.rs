@@ -38,7 +38,7 @@ where
         });
     }
 
-    fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<E>) {
+    fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
         let mut apps = self.apps.clone();
         let my_ctx:ContextHandle<E> = ctx.clone();
         tokio::spawn(async move {
@@ -52,9 +52,10 @@ where
                 }
             }
         });
+        None
     }
 
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) {
+    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
         let mut apps = self.apps.clone();
         let my_ctx:ContextHandle<E> = ctx.clone();
         tokio::spawn(async move {
@@ -68,5 +69,6 @@ where
                 }
             }
         });
+        None
     }
 }

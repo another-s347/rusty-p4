@@ -90,7 +90,11 @@ where
     A: P4appExtended<E>,
     E: Event,
 {
-    fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<E>) {
+    fn on_packet(
+        self: &mut Self,
+        packet: PacketReceived,
+        ctx: &ContextHandle<E>,
+    ) -> Option<PacketReceived> {
         let bytes = BytesMut::from(packet.packet.payload.clone());
         let device = self.common.devices.get(&packet.from.device);
         let state = &self.common;
@@ -109,9 +113,10 @@ where
         } else {
             error!(target:"extend","device not found with id: {:?}", packet.from.device);
         }
+        None
     }
 
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) {
+    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
         let common: CommonEvents = event.clone().into();
         match common {
             CommonEvents::DeviceAdded(device) => {
@@ -195,6 +200,7 @@ where
             h(&event, state, ctx);
         });
         self.extension.on_event(event, &self.common, ctx);
+        None
     }
 }
 

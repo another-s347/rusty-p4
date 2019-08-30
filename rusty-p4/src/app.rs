@@ -22,15 +22,23 @@ pub mod linkprobe;
 pub mod proxyarp;
 pub mod statistic;
 
-pub trait P4app<E>: Send + 'static
+pub trait P4app<E>: 'static
 where
     E: Event,
 {
     fn on_start(self: &mut Self, ctx: &ContextHandle<E>) {}
 
-    fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<E>) {}
+    fn on_packet(
+        self: &mut Self,
+        packet: PacketReceived,
+        ctx: &ContextHandle<E>,
+    ) -> Option<PacketReceived> {
+        Some(packet)
+    }
 
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) {}
+    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+        Some(event)
+    }
 }
 
 pub struct Example {
@@ -38,7 +46,11 @@ pub struct Example {
 }
 
 impl P4app<CommonEvents> for Example {
-    fn on_packet(self: &mut Self, packet: PacketReceived, ctx: &ContextHandle<CommonEvents>) {
+    fn on_packet(
+        self: &mut Self,
+        packet: PacketReceived,
+        ctx: &ContextHandle<CommonEvents>,
+    ) -> Option<PacketReceived> {
         let packet = BytesMut::from(packet.packet.payload);
         let parsed: Option<Ethernet<Data>> = Ethernet::from_bytes(packet);
         if let Some(ethernet) = parsed {
@@ -47,9 +59,14 @@ impl P4app<CommonEvents> for Example {
         } else {
             warn!(target:"Example App","packet parse fail");
         }
+        None
     }
 
-    fn on_event(self: &mut Self, event: CommonEvents, ctx: &ContextHandle<CommonEvents>) {
+    fn on_event(
+        self: &mut Self,
+        event: CommonEvents,
+        ctx: &ContextHandle<CommonEvents>,
+    ) -> Option<CommonEvents> {
         match event {
             CommonEvents::DeviceAdded(ref device) => {
                 info!(target:"Example App","device up {:?}", device);
@@ -65,5 +82,6 @@ impl P4app<CommonEvents> for Example {
             }
             _ => {}
         }
+        None
     }
 }
