@@ -21,6 +21,7 @@ pub mod graph;
 pub mod linkprobe;
 pub mod proxyarp;
 pub mod statistic;
+pub mod sync_app;
 
 pub trait P4app<E>: Send + 'static
 where
