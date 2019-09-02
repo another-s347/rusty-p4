@@ -39,6 +39,7 @@ use tokio::runtime::Runtime;
 pub mod driver;
 pub mod handle;
 pub use handle::ContextHandle;
+use std::convert::TryInto;
 
 #[derive(Copy, Clone, Default)]
 pub struct ContextConfig {
@@ -184,7 +185,7 @@ where
                 .forward(connection.stream_channel_sink.sink_map_err(move |e| {
                     dbg!(e);
                     error_sender
-                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into()));
+                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()));
                     let mut conns = obj.connections.write().unwrap();
                     conns.remove(&id);
                     let mut map = obj.id_to_name.write().unwrap();

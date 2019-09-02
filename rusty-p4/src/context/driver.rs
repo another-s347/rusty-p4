@@ -85,7 +85,7 @@ where
                     }
                     ctx.event_sender
                         .send(CoreEvent::Event(
-                            CommonEvents::DeviceAdded(device.clone()).into(),
+                            CommonEvents::DeviceAdded(device.clone()).into_e(),
                         ))
                         .await
                         .unwrap();

@@ -104,9 +104,9 @@ where
             .unwrap()
     }
 
-    pub fn send_event<T: Into<E>>(&self, event: T) {
+    pub fn send_event(&self, event: E) {
         self.sender
-            .unbounded_send(CoreRequest::Event(event.into()))
+            .unbounded_send(CoreRequest::Event(event))
             .unwrap();
     }
 

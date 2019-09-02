@@ -34,9 +34,30 @@ pub enum CoreRequest<E> {
     },
 }
 
-pub trait Event: Clone + Debug + Send + 'static + From<CommonEvents> + Into<CommonEvents> {}
+pub trait Event: Clone + Debug + Send + 'static {
+    fn from_common(c: CommonEvents) -> Self;
 
-impl Event for CommonEvents {}
+    fn try_to_common(&self) -> Option<&CommonEvents>;
+}
+
+impl Event for CommonEvents {
+    fn from_common(c: CommonEvents) -> Self {
+        c
+    }
+
+    fn try_to_common(&self) -> Option<&CommonEvents> {
+        Some(self)
+    }
+}
+
+impl CommonEvents {
+    pub fn into_e<E>(self) -> E
+    where
+        E: Event,
+    {
+        E::from_common(self)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum CommonEvents {
