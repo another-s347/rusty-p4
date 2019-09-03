@@ -1,14 +1,19 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::app::async_app::AsyncAppsBuilder;
 use crate::app::graph::DefaultGraph;
+use crate::app::sync_app::SyncAppsBuilder;
 use crate::app::P4app;
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
 use crate::util::flow::*;
 use crate::util::value::MAC;
+use failure::_core::cell::RefCell;
 use log::{info, warn};
 use std::convert::TryInto;
+use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct CommonState {
     pub devices: HashMap<DeviceID, Device>,
@@ -184,4 +189,15 @@ where
             Some(event)
         }
     }
+}
+
+fn test<E>()
+where
+    E: Event,
+{
+    let mut async_builder: AsyncAppsBuilder<E> = super::async_app::AsyncAppsBuilder::new();
+    let commonstate_async_service =
+        async_builder.with_sync_service(1, "common state", CommonState::new());
+    let mut sync_builder: SyncAppsBuilder<E> = super::sync_app::SyncAppsBuilder::new();
+    let commonstate_service = sync_builder.with_service(1, "common state", CommonState::new());
 }

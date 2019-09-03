@@ -23,7 +23,7 @@ pub mod graph;
 pub mod statistic;
 pub mod sync_app;
 
-pub trait P4app<E>: Send + 'static
+pub trait P4app<E>: 'static
 where
     E: Event,
 {

@@ -2,8 +2,12 @@ use crate::app::async_app::AsyncApp;
 use crate::app::P4app;
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
+use failure::_core::cell::RefCell;
 use failure::_core::marker::PhantomData;
+use std::any::Any;
+use std::cell::Ref;
 use std::collections::LinkedList;
+use std::ops::Deref;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -16,23 +20,50 @@ impl<E> SyncAppsBuilder<E>
 where
     E: Event,
 {
-    pub fn with_async<T>(&mut self, mut priority: u8, name: &'static str, app: T)
-    where
-        T: AsyncApp<E>,
-    {
-        let mut iter = self.apps.iter_mut();
-        while let Some((p, name, _)) = iter.next() {
-            if priority > *p {
-                iter.insert_next((priority, name, Box::new(AsyncWrap::new(app))));
-                break;
-            } else if priority == *p {
-                priority -= 1;
-                break;
-            }
+    pub fn new() -> SyncAppsBuilder<E> {
+        SyncAppsBuilder {
+            apps: LinkedList::new(),
         }
     }
 
-    pub fn with<T>(&mut self, mut priority: u8, name: &'static str, app: T)
+    pub fn with_async<T>(&mut self, priority: u8, name: &'static str, app: T)
+    where
+        T: AsyncApp<E>,
+    {
+        self.insert(priority, name, AsyncWrap::new(app));
+    }
+
+    pub fn with<T>(&mut self, priority: u8, name: &'static str, app: T)
+    where
+        T: P4app<E>,
+    {
+        self.insert(priority, name, app);
+    }
+
+    pub fn with_async_service<T>(
+        &mut self,
+        priority: u8,
+        name: &'static str,
+        app: T,
+    ) -> Rc<RefCell<AsyncWrap<T>>>
+    where
+        T: AsyncApp<E>,
+    {
+        let app = Rc::new(RefCell::new(AsyncWrap::new(app)));
+        self.insert(priority, name, app.clone());
+        app
+    }
+
+    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Rc<RefCell<T>>
+    where
+        T: P4app<E>,
+    {
+        let app = Rc::new(RefCell::new(app));
+        self.insert(priority, name, app.clone());
+        app
+    }
+
+    fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: T)
     where
         T: P4app<E>,
     {
@@ -113,7 +144,29 @@ where
     }
 }
 
-struct AsyncWrap<A> {
+impl<A, E> P4app<E> for Rc<RefCell<A>>
+where
+    A: P4app<E>,
+    E: Event,
+{
+    fn on_start(self: &mut Self, ctx: &ContextHandle<E>) {
+        self.borrow_mut().on_start(ctx)
+    }
+
+    fn on_packet(
+        self: &mut Self,
+        packet: PacketReceived,
+        ctx: &ContextHandle<E>,
+    ) -> Option<PacketReceived> {
+        self.borrow_mut().on_packet(packet, ctx)
+    }
+
+    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+        self.borrow_mut().on_event(event, ctx)
+    }
+}
+
+pub struct AsyncWrap<A> {
     inner: A,
 }
 
