@@ -1,17 +1,17 @@
 use crate::context::ContextHandle;
-use crate::event::{Event, CoreRequest, CommonEvents};
+use crate::event::{Event, CoreRequest, CommonEvents, PacketReceived};
 use std::time::Duration;
 use futures::prelude::*;
 use futures03::prelude::*;
 use log::{info, trace, warn, debug, error};
 use crate::util::flow::*;
 use crate::util::value::{Value, MAC, EXACT};
-use crate::util::packet::Ethernet;
+use crate::util::packet::{Ethernet, PacketRef};
 use crate::util::packet::Packet;
 use bytes::Bytes;
-use crate::util::packet::data::Data;
+use crate::util::packet::data::{Data, DataRef};
 use crate::representation::{Device, ConnectPoint, Link, DeviceID};
-use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook};
+//use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use crate::app::common::CommonState;
@@ -21,6 +21,8 @@ use futures03::prelude::*;
 use tokio::sync::oneshot::Sender;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use std::any::Any;
+use crate::app::async_app::AsyncApp;
+use crate::util::packet::ethernet::EthernetRef;
 
 pub struct LinkProbeLoader {
     interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
@@ -57,52 +59,50 @@ impl LinkProbeLoader {
     }
 }
 
-impl<A,E> P4appInstallable<A,E> for LinkProbeState
-    where E:Event
-{
-    fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
-        let my_state = self.clone();
-        extend_core.install_ether_hook(0x861,Box::new(on_probe_received));
-        extend_core.install_device_added_hook("link probe",Box::new(move|device, state, ctx|{
-            let s = my_state.clone();
-            on_device_added(s,device,state,ctx)
-        }));
-        let my_state = self.clone();
-        extend_core.install_event_hook("link probe",Box::new(move|event:&E, state:&CommonState, ctx:&ContextHandle<E>|{
-            match event.clone().into() {
-                CommonEvents::DeviceLost(device)=>{
-                    let mut s = my_state.inner.lock().unwrap();
-                    if let Some(list) = s.remove(&device) {
-                        info!(target:"extend","cancel link probe task for device: {:?}",device);
-                        for x in list {
-                            x.send(());
-                        }
-                    }
+impl<E> AsyncApp<E> for LinkProbeState where E:Event {
+    fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
+        match EthernetRef::<DataRef>::from_bytes(packet.get_packet_bytes()) {
+            Some(ref ethernet) if ethernet.ether_type==0x861 => {
+                let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload.inner);
+                if let Ok(from) = probe {
+                    let this = packet.from;
+                    let from = from.to_owned();
+                    ctx.send_event(CommonEvents::LinkDetected(Link {
+                        src: from,
+                        dst: this
+                    }).into_e());
+                    return None;
                 }
-                _=>{
-
+                else {
+                    error!(target:"linkprobe","invalid probe == {:?}",probe);
                 }
             }
-        }));
+            _ => {}
+        }
+        Some(packet)
+    }
+
+    fn on_event(&self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+        match event.try_to_common() {
+            Some(CommonEvents::DeviceAdded(device)) => {
+                on_device_added(self,device,ctx);
+            }
+            Some(CommonEvents::DeviceLost(device)) => {
+                let mut s = self.inner.lock().unwrap();
+                if let Some(list) = s.remove(&device) {
+                    info!(target:"extend","cancel link probe task for device: {:?}",device);
+                    for x in list {
+                        x.send(());
+                    }
+                }
+            }
+            _=>{}
+        }
+        Some(event)
     }
 }
 
-pub fn on_probe_received<E>(data:Ethernet<Data>,cp:ConnectPoint,state:&CommonState,ctx:&ContextHandle<E>) where E:Event {
-    let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&data.payload.0);
-    if let Ok(from) = probe {
-        let this = cp;
-        let from = from.to_owned();
-        ctx.send_event(CommonEvents::LinkDetected(Link {
-            src: from,
-            dst: this
-        }));
-    }
-    else {
-        error!(target:"linkprobe","invalid probe == {:?}",probe);
-    }
-}
-
-pub fn on_device_added<E>(linkprobe_state:LinkProbeState,device:&Device, state:&CommonState, ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&ContextHandle<E>) where E:Event
 {
     let interceptor = match &device.typ {
         DeviceType::MASTER {
