@@ -5,6 +5,7 @@ use failure::_core::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
+use log::{info,trace,debug};
 
 pub struct AsyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,
@@ -43,6 +44,10 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         where
             T: AsyncApp<E>,
     {
+        if self.apps.is_empty() {
+            self.apps.push_front((priority,name,app));
+            return;
+        }
         let mut iter = self.apps.iter_mut();
         while let Some((p, name, _)) = iter.next() {
             if priority > *p {
@@ -110,6 +115,7 @@ impl<E> P4app<E> for AsyncAppsBase<E>
         tokio::spawn(async move {
             let mut p = packet;
             for (_, name, app) in apps.iter() {
+                trace!(target:"async app base","executing {}",name);
                 if let Some(packet) = app.on_packet(p, &my_ctx) {
                     p = packet;
                 } else {

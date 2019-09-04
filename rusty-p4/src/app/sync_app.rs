@@ -67,6 +67,10 @@ where
     where
         T: P4app<E>,
     {
+        if self.apps.is_empty() {
+            self.apps.push_front((priority, name, Box::new(app)));
+            return;
+        }
         let mut iter = self.apps.iter_mut();
         while let Some((p, name, _)) = iter.next() {
             if priority > *p {
