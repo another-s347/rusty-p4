@@ -55,13 +55,13 @@ impl AsyncApp<CommonEvents> for Benchmark {
             ctx.send_packet(ConnectPoint {
                 device: packet.from.device,
                 port: 2
-            }, Bytes::from(packet.packet.payload));
+            }, Bytes::from(packet.into_packet_bytes()));
         }
         else if packet.from.port==2 {
             ctx.send_packet(ConnectPoint {
                 device: packet.from.device,
                 port: 1
-            }, Bytes::from(packet.packet.payload));
+            }, Bytes::from(packet.into_packet_bytes()));
         }
         None
     }

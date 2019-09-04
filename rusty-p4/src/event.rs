@@ -16,6 +16,16 @@ pub struct PacketReceived {
     pub from: ConnectPoint,
 }
 
+impl PacketReceived {
+    pub fn into_packet_bytes(self) -> Vec<u8> {
+        self.packet.payload
+    }
+
+    pub fn get_packet_bytes(&self) -> &[u8] {
+        &self.packet.payload
+    }
+}
+
 #[derive(Debug)]
 pub enum CoreRequest<E> {
     AddDevice {
