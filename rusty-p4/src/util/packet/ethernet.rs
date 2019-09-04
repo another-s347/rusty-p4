@@ -1,8 +1,11 @@
 use byteorder::ByteOrder;
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::util::packet::Packet;
+use crate::util::packet::{Packet, PacketRef};
 use crate::util::value::MAC;
+use nom::bytes::complete::take;
+use nom::IResult;
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
@@ -11,6 +14,17 @@ pub struct Ethernet<P> {
     pub dst: MAC,
     pub ether_type: u16,
     pub payload: P,
+}
+
+pub struct EthernetRef<'a, P>
+where
+    P: PacketRef<'a>,
+{
+    pub src: &'a [u8; 6],
+    pub dst: &'a [u8; 6],
+    pub ether_type: u16,
+    pub payload: P,
+    pub inner: &'a [u8],
 }
 
 impl<P> Debug for Ethernet<P> {
@@ -72,4 +86,34 @@ impl<P> Ethernet<P> {
             false
         }
     }
+}
+
+impl<'a, P> PacketRef<'a> for EthernetRef<'a, P>
+where
+    P: PacketRef<'a>,
+{
+    type Payload = P;
+
+    fn from_bytes(input: &'a [u8]) -> Option<Self> {
+        let (b, dst) = take_mac(input).ok()?;
+        let (b, src) = take_mac(b).ok()?;
+        let (b, ether_type) = nom::number::complete::be_u16::<()>(b).ok()?;
+        let payload = P::from_bytes(b)?;
+        Some(EthernetRef {
+            src,
+            dst,
+            ether_type,
+            payload,
+            inner: input,
+        })
+    }
+
+    fn into_bytes(self) -> &'a [u8] {
+        self.inner
+    }
+}
+
+fn take_mac(input: &[u8]) -> IResult<&[u8], &[u8; 6]> {
+    let (b, t) = take(6usize)(input)?;
+    Ok((b, <&[u8; 6]>::try_from(t).unwrap()))
 }
