@@ -6,13 +6,13 @@ extern crate rusty_p4;
 use rusty_p4::p4rt;
 use rusty_p4::util::flow::*;
 use rusty_p4::context::{Context, ContextHandle};
-use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
+//use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
 use rusty_p4::restore;
 use rusty_p4::util::value::EXACT;
 use std::path::Path;
 use tokio;
-use rusty_p4::app::linkprobe::{LinkProbeLoader, LinkProbeInterceptor};
-use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
+//use rusty_p4::app::linkprobe::{LinkProbeLoader, LinkProbeInterceptor};
+//use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
 use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::restore::Restore;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
@@ -24,16 +24,33 @@ use rusty_p4::event::{CommonEvents, PacketReceived};
 use rusty_p4::app::common::CommonState;
 use log::{info};
 use bytes::Bytes;
+use rusty_p4::app::async_app::{AsyncAppsBuilder, AsyncApp};
+use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
+use std::sync::{RwLock, Arc};
+use std::time::{Instant, Duration};
+use tokio::timer::Interval;
 
-pub struct Benchmark {}
+pub struct Benchmark {
+    bytes:Arc<AtomicUsize>,
+}
 
-impl P4appExtended<CommonEvents> for Benchmark {
-    fn on_packet(
-        self: &mut Self,
-        packet: PacketReceived,
-        ctx: &ContextHandle<CommonEvents>,
-        state: &CommonState,
-    ) {
+impl AsyncApp<CommonEvents> for Benchmark {
+    fn on_start(&self, ctx: &ContextHandle<CommonEvents>) {
+        let bytes = self.bytes.clone();
+        tokio::spawn(async move {
+            let mut interval = Interval::new_interval(Duration::from_secs(1));
+            loop {
+                interval.next().await;
+                let old_value = bytes.swap(0,Ordering::Acquire) as f64;
+                println!("transfer {} Mbits/sec", old_value*8.0/(1024.0*1024.0));
+            }
+        });
+    }
+
+    fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<CommonEvents>) -> Option<PacketReceived> {
+//        println!("transfer");
+        let b = packet.packet.payload.len();
+        self.bytes.fetch_add(b, Ordering::AcqRel);
         if packet.from.port==1 {
             ctx.send_packet(ConnectPoint {
                 device: packet.from.device,
@@ -46,6 +63,7 @@ impl P4appExtended<CommonEvents> for Benchmark {
                 port: 1
             }, Bytes::from(packet.packet.payload));
         }
+        None
     }
 }
 
@@ -62,7 +80,11 @@ pub async fn main() {
     let mut pipeconfs = HashMap::new();
     pipeconfs.insert(pipeconf.get_id(),pipeconf);
 
-    let app = P4appBuilder::new(Benchmark {}).build();
+    let mut app_builder = AsyncAppsBuilder::new();
+    app_builder.with(1,"benchmark",Benchmark {
+        bytes: Arc::new(AtomicUsize::new(0)),
+    });
+    let app = app_builder.build();
 
     let (mut context,driver) = Context::try_new(pipeconfs, app, None, ContextConfig::default()).await.unwrap();
 
