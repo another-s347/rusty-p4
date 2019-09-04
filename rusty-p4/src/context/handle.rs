@@ -67,13 +67,22 @@ where
     }
 
     pub fn insert_flow(&self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
+        self.set_flow(flow, device, UpdateType::Insert)
+    }
+
+    pub fn set_flow(
+        &self,
+        mut flow: Flow,
+        device: DeviceID,
+        update: UpdateType,
+    ) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
         let connections = self.connections.read().unwrap();
         let connection = connections.get(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
-        let request = new_write_table_entry(connection.device_id, table_entry);
+        let request = new_write_table_entry(connection.device_id, table_entry, update);
         connection
             .send_request_sync(&request)
             .context(ContextErrorKind::ConnectionError)?;

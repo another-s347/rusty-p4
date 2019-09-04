@@ -1,5 +1,6 @@
 use log::{debug, error, info, trace, warn};
 
+use crate::entity::UpdateType;
 use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::p4rt::pipeconf::Pipeconf;
 use crate::proto::p4config::P4Info;
@@ -19,11 +20,15 @@ use rusty_p4_proto::proto::v1::{
     Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,
 };
 
-pub fn new_write_table_entry(device_id: u64, table_entry: TableEntry) -> WriteRequest {
+pub fn new_write_table_entry(
+    device_id: u64,
+    table_entry: TableEntry,
+    update: UpdateType,
+) -> WriteRequest {
     let update_type = if table_entry.is_default_action {
         crate::proto::p4runtime::update::Type::Modify
     } else {
-        crate::proto::p4runtime::update::Type::Insert
+        update.into()
     };
     let mut request = crate::proto::p4runtime::WriteRequest {
         device_id,
