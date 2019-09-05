@@ -107,7 +107,7 @@ pub async fn build_netconfig_server<E>(server: NetconfigServer, core_event_sende
             let p = s.clone();
             Ok::<_, hyper::Error>(service_fn(move |req:Request<Body>| {
                 let body = req.into_body();
-                let len = body.content_length().unwrap();
+                let len = body.size_hint().exact().unwrap();
                 let buffer = BytesMut::with_capacity(len as usize);
                 let y = p.clone();
                 rt::spawn(body.fold(buffer,|mut x,y|{
