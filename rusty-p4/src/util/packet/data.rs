@@ -1,32 +1,8 @@
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::util::packet::{Packet, PacketRef};
+use crate::util::packet::Packet;
 
-#[derive(Clone, Debug)]
-pub struct Data(pub Bytes);
-
-#[derive(Clone, Debug)]
-pub struct DataRef<'a> {
-    pub inner: &'a [u8],
-}
-
-impl Packet for Data {
-    type Payload = ();
-
-    fn bytes_hint(&self) -> usize {
-        self.0.len()
-    }
-
-    fn from_bytes(b: BytesMut) -> Option<Self> {
-        Some(Data(b.freeze()))
-    }
-
-    fn into_bytes(self) -> Bytes {
-        self.0
-    }
-}
-
-impl<'a> PacketRef<'a> for &'a [u8] {
+impl<'a> Packet<'a> for &'a [u8] {
     type Payload = ();
 
     fn self_bytes_hint(&self) -> usize {

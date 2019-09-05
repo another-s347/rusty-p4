@@ -9,24 +9,11 @@ pub mod data;
 pub mod ethernet;
 pub mod ip;
 
-pub trait Packet
-where
-    Self: std::marker::Sized,
-{
-    type Payload;
-
-    fn bytes_hint(&self) -> usize;
-
-    fn from_bytes(b: BytesMut) -> Option<Self>;
-
-    fn into_bytes(self) -> Bytes;
-}
-
-pub trait PacketRef<'a>
+pub trait Packet<'a>
 where
     Self: Sized,
 {
-    type Payload: PacketRef<'a>;
+    type Payload: Packet<'a>;
 
     fn self_bytes_hint(&self) -> usize;
 
@@ -57,23 +44,7 @@ where
     }
 }
 
-impl Packet for () {
-    type Payload = ();
-
-    fn bytes_hint(&self) -> usize {
-        0
-    }
-
-    fn from_bytes(b: BytesMut) -> Option<Self> {
-        Some(())
-    }
-
-    fn into_bytes(self) -> Bytes {
-        Bytes::new()
-    }
-}
-
-impl<'a> PacketRef<'a> for () {
+impl<'a> Packet<'a> for () {
     type Payload = ();
 
     fn self_bytes_hint(&self) -> usize {

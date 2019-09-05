@@ -6,10 +6,9 @@ use futures03::prelude::*;
 use log::{info, trace, warn, debug, error};
 use crate::util::flow::*;
 use crate::util::value::{Value, MAC, EXACT};
-use crate::util::packet::{Ethernet, PacketRef};
+use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use bytes::Bytes;
-use crate::util::packet::data::{Data, DataRef};
 use crate::representation::{Device, ConnectPoint, Link, DeviceID};
 //use crate::app::extended::{P4appInstallable, P4appExtendedCore, EtherPacketHook};
 use std::sync::{Arc, Mutex};
@@ -22,7 +21,6 @@ use tokio::sync::oneshot::Sender;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use std::any::Any;
 use crate::app::async_app::AsyncApp;
-use crate::util::packet::ethernet::EthernetRef;
 
 pub struct LinkProbeLoader {
     interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
@@ -61,7 +59,7 @@ impl LinkProbeLoader {
 
 impl<E> AsyncApp<E> for LinkProbeState where E:Event {
     fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
-        match EthernetRef::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
+        match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
             Some(ref ethernet) if ethernet.ether_type==0x861 => {
                 let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload);
                 if let Ok(from) = probe {
@@ -157,10 +155,10 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&C
 pub fn new_probe(cp:&ConnectPoint) -> Bytes
 {
     let probe = serde_json::to_vec(cp).unwrap();
-    EthernetRef {
+    Ethernet {
         src: &[0x12,0x34,0x56,0x12,0x34,0x56],
         dst: MAC::broadcast().as_ref(),
         ether_type: 0x861,
-        payload: Bytes::from(probe).as_ref()
+        payload: probe.as_ref()
     }.write_to_bytes()
 }

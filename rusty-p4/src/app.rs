@@ -5,7 +5,6 @@ use crate::context::ContextHandle;
 use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::proto::p4runtime::PacketIn;
 use crate::util::flow::*;
-use crate::util::packet::data::Data;
 use crate::util::packet::Ethernet;
 use crate::util::packet::Packet;
 use crate::util::value::EXACT;
@@ -52,8 +51,7 @@ impl P4app<CommonEvents> for Example {
         packet: PacketReceived,
         ctx: &ContextHandle<CommonEvents>,
     ) -> Option<PacketReceived> {
-        let packet = BytesMut::from(packet.packet.payload);
-        let parsed: Option<Ethernet<Data>> = Ethernet::from_bytes(packet);
+        let parsed: Option<Ethernet<&[u8]>> = Ethernet::from_bytes(packet.get_packet_bytes());
         if let Some(ethernet) = parsed {
             self.counter += 1;
             info!(target:"Example App","Counter == {}, ethernet type == {:x}", self.counter, ethernet.ether_type);
