@@ -9,7 +9,6 @@ use std::fmt::Formatter;
 
 pub struct Value;
 
-pub struct MACString(pub String);
 #[derive(Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct MAC(pub [u8; 6]);
 
@@ -49,6 +48,14 @@ impl MAC {
         let mut s = [0u8; 6];
         s.copy_from_slice(b.as_ref());
         MAC(s)
+    }
+
+    pub fn display_slice(b: &[u8; 6], f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            b[0], b[1], b[2], b[3], b[4], b[5]
+        )
     }
 }
 
@@ -161,7 +168,6 @@ impl Encode for u16 {
 
 impl Encode for MAC {
     fn encode(self) -> Bytes {
-        //        Bytes::f
         Bytes::from(self.0.as_ref())
     }
 }

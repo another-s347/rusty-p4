@@ -20,8 +20,10 @@ impl<'a, P> Debug for Ethernet<'a, P> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         write!(
             f,
-            "\nsrc: {:?}\ndst: {:?}\ntype: {:x}",
-            self.src, self.dst, self.ether_type
+            "\nsrc: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}\ndst: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}\ntype: {:x}",
+            self.src[0], self.src[1], self.src[2], self.src[3], self.src[4], self.src[5],
+            self.dst[0], self.dst[1], self.dst[2], self.dst[3], self.dst[4], self.dst[5],
+            self.ether_type
         )
     }
 }
