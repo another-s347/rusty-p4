@@ -1,5 +1,5 @@
 use crate::app::async_app::AsyncApp;
-use crate::app::P4app;
+use crate::app::{P4app, Service};
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
 use failure::_core::cell::RefCell;
@@ -40,27 +40,22 @@ where
         self.insert(priority, name, app);
     }
 
-    pub fn with_async_service<T>(
-        &mut self,
-        priority: u8,
-        name: &'static str,
-        app: T,
-    ) -> Rc<RefCell<AsyncWrap<T>>>
+    pub fn with_async_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T>
     where
         T: AsyncApp<E>,
     {
         let app = Rc::new(RefCell::new(AsyncWrap::new(app)));
         self.insert(priority, name, app.clone());
-        app
+        Service::SyncFromAsyncWrap(app)
     }
 
-    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Rc<RefCell<T>>
+    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T>
     where
         T: P4app<E>,
     {
         let app = Rc::new(RefCell::new(app));
         self.insert(priority, name, app.clone());
-        app
+        Service::Sync(app)
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: T)
@@ -171,7 +166,7 @@ where
 }
 
 pub struct AsyncWrap<A> {
-    inner: A,
+    pub(crate) inner: A,
 }
 
 impl<A, E> P4app<E> for AsyncWrap<A>

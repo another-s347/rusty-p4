@@ -1,4 +1,4 @@
-use crate::app::P4app;
+use crate::app::{P4app, Service};
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
 use failure::_core::marker::PhantomData;
@@ -26,18 +26,18 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         self.insert(priority,name,Arc::new(Mutex::new(app)));
     }
 
-    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Arc<T> where T: AsyncApp<E> {
+    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T> where T: AsyncApp<E> {
         let obj = Arc::new(app);
         let t: Arc<T> = obj.clone();
         self.insert(priority,name,obj);
-        t
+        Service::Async(t)
     }
 
-    pub fn with_sync_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Arc<Mutex<T>> where T: P4app<E> + Send {
+    pub fn with_sync_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T> where T: P4app<E> + Send {
         let a = Arc::new(Mutex::new(app));
         let b: Arc<Mutex<T>> = a.clone();
         self.insert(priority,name,a);
-        b
+        Service::AsyncFromSyncWrap(b)
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: Arc<T>)
