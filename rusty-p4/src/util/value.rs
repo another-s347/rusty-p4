@@ -15,9 +15,7 @@ pub struct MAC(pub [u8; 6]);
 
 impl From<BytesMut> for MAC {
     fn from(b: BytesMut) -> Self {
-        let mut s = [0u8; 6];
-        s.copy_from_slice(b.as_ref());
-        MAC(s)
+        Self::from_slice(b.as_ref())
     }
 }
 
@@ -41,6 +39,22 @@ impl MAC {
 
     pub fn is_multicast(&self) -> bool {
         self.0[0] == 0x33 && self.0[1] == 0x33
+    }
+
+    pub fn as_ref(&self) -> &[u8; 6] {
+        &self.0
+    }
+
+    pub fn from_slice(b: &[u8]) -> MAC {
+        let mut s = [0u8; 6];
+        s.copy_from_slice(b.as_ref());
+        MAC(s)
+    }
+}
+
+impl AsRef<[u8]> for MAC {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -72,8 +86,8 @@ pub fn TERNARY<T: Encode, P: Encode>(v: T, mask: P) -> InnerValue {
     InnerValue::TERNARY(v.encode(), mask.encode())
 }
 
-pub fn RANGE<T:Encode,P:Encode>(v:T,p:P)->InnerValue {
-    InnerValue::RANGE(v.encode(),p.encode())
+pub fn RANGE<T: Encode, P: Encode>(v: T, p: P) -> InnerValue {
+    InnerValue::RANGE(v.encode(), p.encode())
 }
 
 #[derive(Clone, Debug, Hash)]

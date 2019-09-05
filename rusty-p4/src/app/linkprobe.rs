@@ -61,9 +61,9 @@ impl LinkProbeLoader {
 
 impl<E> AsyncApp<E> for LinkProbeState where E:Event {
     fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
-        match EthernetRef::<DataRef>::from_bytes(packet.get_packet_bytes()) {
+        match EthernetRef::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
             Some(ref ethernet) if ethernet.ether_type==0x861 => {
-                let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload.inner);
+                let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload);
                 if let Ok(from) = probe {
                     let this = packet.from;
                     let from = from.to_owned();
@@ -157,10 +157,10 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&C
 pub fn new_probe(cp:&ConnectPoint) -> Bytes
 {
     let probe = serde_json::to_vec(cp).unwrap();
-    Ethernet {
-        src: MAC([0x12,0x34,0x56,0x12,0x34,0x56]),
-        dst: MAC::broadcast(),
+    EthernetRef {
+        src: &[0x12,0x34,0x56,0x12,0x34,0x56],
+        dst: MAC::broadcast().as_ref(),
         ether_type: 0x861,
-        payload: Data(Bytes::from(probe))
-    }.into_bytes()
+        payload: Bytes::from(probe).as_ref()
+    }.write_to_bytes()
 }

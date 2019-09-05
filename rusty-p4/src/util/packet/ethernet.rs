@@ -24,7 +24,6 @@ where
     pub dst: &'a [u8; 6],
     pub ether_type: u16,
     pub payload: P,
-    pub inner: &'a [u8],
 }
 
 impl<P> Debug for Ethernet<P> {
@@ -42,6 +41,10 @@ where
     P: Packet,
 {
     type Payload = P;
+
+    fn bytes_hint(&self) -> usize {
+        14
+    }
 
     fn from_bytes(mut b: BytesMut) -> Option<Self> {
         if b.len() < 14 {
@@ -94,6 +97,10 @@ where
 {
     type Payload = P;
 
+    fn self_bytes_hint(&self) -> usize {
+        14
+    }
+
     fn from_bytes(input: &'a [u8]) -> Option<Self> {
         let (b, dst) = take_mac(input).ok()?;
         let (b, src) = take_mac(b).ok()?;
@@ -104,12 +111,17 @@ where
             dst,
             ether_type,
             payload,
-            inner: input,
         })
     }
 
-    fn into_bytes(self) -> &'a [u8] {
-        self.inner
+    fn write_self_to_buf<T: BufMut>(&self, mut buf: T) {
+        buf.put_slice(self.dst);
+        buf.put_slice(self.src);
+        buf.put_u16_be(self.ether_type);
+    }
+
+    fn get_payload(&self) -> Option<&Self::Payload> {
+        Some(&self.payload)
     }
 }
 
