@@ -92,12 +92,7 @@ where
                     connect_point,
                     packet,
                 } => {
-                    if let Some(c) = ctx
-                        .connections
-                        .write()
-                        .unwrap()
-                        .get_mut(&connect_point.device)
-                    {
+                    if let Some(c) = ctx.connections.read().unwrap().get(&connect_point.device) {
                         let request =
                             new_packet_out_request(&c.pipeconf, connect_point.port, packet);
                         let result = c.send_stream_request(request);
