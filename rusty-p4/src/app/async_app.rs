@@ -1,20 +1,23 @@
-use crate::app::{P4app, Service};
+use crate::app::{P4app, Service, DefaultServiceStorage};
 use crate::context::ContextHandle;
-use crate::event::{Event, PacketReceived};
-use failure::_core::marker::PhantomData;
+use crate::event::{Event, PacketReceived, CommonEvents};
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use log::{info,trace,debug};
+use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 
 pub struct AsyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,
+    services: Vec<DefaultServiceStorage>,
 }
 
 impl<E> AsyncAppsBuilder<E> where E: Event {
     pub fn new() -> AsyncAppsBuilder<E> {
         AsyncAppsBuilder {
-            apps: LinkedList::new()
+            apps: LinkedList::new(),
+            services: Vec::new()
         }
     }
 
@@ -30,14 +33,18 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         let obj = Arc::new(app);
         let t: Arc<T> = obj.clone();
         self.insert(priority,name,obj);
-        Service::Async(t)
+        let service = Service::Async(t);
+        self.services.push(service.clone().to_async_storage());
+        service
     }
 
     pub fn with_sync_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T> where T: P4app<E> + Send {
         let a = Arc::new(Mutex::new(app));
         let b: Arc<Mutex<T>> = a.clone();
         self.insert(priority,name,a);
-        Service::AsyncFromSyncWrap(b)
+        let service = Service::AsyncFromSyncWrap(b);
+        self.services.push(service.clone().to_sync_wrap_storage());
+        service
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: Arc<T>)
@@ -157,5 +164,25 @@ impl<A, E> AsyncApp<E> for Mutex<A> where A: P4app<E> + Send, E: Event {
     fn on_event(&self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
         let mut a = self.lock().unwrap();
         a.on_event(event, ctx)
+    }
+}
+
+pub struct ExampleAsyncApp {
+    counter: AtomicUsize
+}
+
+impl AsyncApp<CommonEvents> for ExampleAsyncApp {
+
+}
+
+impl ExampleAsyncApp {
+    pub fn test(&self) {
+        println!("ExampleAsyncApp counter={:?}",self.counter);
+    }
+
+    pub fn new() -> ExampleAsyncApp {
+        ExampleAsyncApp {
+            counter:AtomicUsize::new(0)
+        }
     }
 }

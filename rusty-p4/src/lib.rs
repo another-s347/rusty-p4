@@ -1,6 +1,7 @@
 #![allow(warnings)]
 #![feature(option_flattening)]
 #![feature(linked_list_extras)]
+#![feature(specialization)]
 #[macro_use]
 extern crate serde_json;
 #[macro_use]

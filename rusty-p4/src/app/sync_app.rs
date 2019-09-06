@@ -1,12 +1,12 @@
 use crate::app::async_app::AsyncApp;
-use crate::app::{P4app, Service};
+use crate::app::{DefaultServiceStorage, P4app, Service};
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
-use failure::_core::cell::RefCell;
-use failure::_core::marker::PhantomData;
 use std::any::Any;
 use std::cell::Ref;
+use std::cell::RefCell;
 use std::collections::LinkedList;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct SyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Box<dyn P4app<E>>)>,
+    services: Vec<DefaultServiceStorage>,
 }
 
 impl<E> SyncAppsBuilder<E>
@@ -23,6 +24,7 @@ where
     pub fn new() -> SyncAppsBuilder<E> {
         SyncAppsBuilder {
             apps: LinkedList::new(),
+            services: Vec::new(),
         }
     }
 
@@ -46,7 +48,9 @@ where
     {
         let app = Rc::new(RefCell::new(AsyncWrap::new(app)));
         self.insert(priority, name, app.clone());
-        Service::SyncFromAsyncWrap(app)
+        let service = Service::SyncFromAsyncWrap(app);
+        self.services.push(service.clone().to_sync_storage());
+        service
     }
 
     pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T>
@@ -55,7 +59,9 @@ where
     {
         let app = Rc::new(RefCell::new(app));
         self.insert(priority, name, app.clone());
-        Service::Sync(app)
+        let service = Service::Sync(app);
+        self.services.push(service.clone().to_sync_storage());
+        service
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: T)
