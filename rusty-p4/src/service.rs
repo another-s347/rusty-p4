@@ -102,20 +102,20 @@ impl<'a, T> Deref for ServiceGuard<'a, T> {
 }
 
 pub trait ServiceStorage<T> {
-    fn to_service(self) -> Option<Service<T>>;
+    fn to_service(&self) -> Option<Service<T>>;
 }
 
 default impl<T> ServiceStorage<T> for DefaultServiceStorage
 where
     T: 'static,
 {
-    fn to_service(self) -> Option<Service<T>> {
+    fn to_service(&self) -> Option<Service<T>> {
         match self {
-            DefaultServiceStorage::Sync(i) => {
-                Some(Service::Sync(Rc::downcast::<RefCell<T>>(i).unwrap()))
-            }
+            DefaultServiceStorage::Sync(i) => Some(Service::Sync(
+                Rc::downcast::<RefCell<T>>(i.clone()).unwrap(),
+            )),
             DefaultServiceStorage::SyncFromAsyncWrap(i) => Some(Service::SyncFromAsyncWrap(
-                Rc::downcast::<RefCell<AsyncWrap<T>>>(i).unwrap(),
+                Rc::downcast::<RefCell<AsyncWrap<T>>>(i.clone()).unwrap(),
             )),
             DefaultServiceStorage::Async(i) => None,
             DefaultServiceStorage::AsyncFromSyncWrap(i) => None,
@@ -127,15 +127,19 @@ impl<T> ServiceStorage<T> for DefaultServiceStorage
 where
     T: Send + Sync + 'static,
 {
-    fn to_service(self) -> Option<Service<T>> {
+    fn to_service(&self) -> Option<Service<T>> {
         Some(match self {
-            DefaultServiceStorage::Sync(i) => Service::Sync(Rc::downcast::<RefCell<T>>(i).unwrap()),
-            DefaultServiceStorage::SyncFromAsyncWrap(i) => {
-                Service::SyncFromAsyncWrap(Rc::downcast::<RefCell<AsyncWrap<T>>>(i).unwrap())
+            DefaultServiceStorage::Sync(i) => {
+                Service::Sync(Rc::downcast::<RefCell<T>>(i.clone()).unwrap())
             }
-            DefaultServiceStorage::Async(i) => Service::Async(Arc::downcast::<T>(i).unwrap()),
+            DefaultServiceStorage::SyncFromAsyncWrap(i) => Service::SyncFromAsyncWrap(
+                Rc::downcast::<RefCell<AsyncWrap<T>>>(i.clone()).unwrap(),
+            ),
+            DefaultServiceStorage::Async(i) => {
+                Service::Async(Arc::downcast::<T>(i.clone()).unwrap())
+            }
             DefaultServiceStorage::AsyncFromSyncWrap(i) => {
-                Service::AsyncFromSyncWrap(Arc::downcast::<Mutex<T>>(i).unwrap())
+                Service::AsyncFromSyncWrap(Arc::downcast::<Mutex<T>>(i.clone()).unwrap())
             }
         })
     }

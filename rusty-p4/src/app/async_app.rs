@@ -4,21 +4,23 @@ use crate::event::{Event, PacketReceived, CommonEvents};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::collections::LinkedList;
+use std::collections::{LinkedList, HashMap};
 use log::{info,trace,debug};
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
-use crate::service::{DefaultServiceStorage, Service};
+use crate::service::{DefaultServiceStorage, Service, ServiceStorage};
+use std::any::{TypeId, Any};
+use crate::service;
 
 pub struct AsyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,
-    services: Vec<DefaultServiceStorage>,
+    services: HashMap<TypeId,DefaultServiceStorage>,
 }
 
 impl<E> AsyncAppsBuilder<E> where E: Event {
     pub fn new() -> AsyncAppsBuilder<E> {
         AsyncAppsBuilder {
             apps: LinkedList::new(),
-            services: Vec::new()
+            services: HashMap::new()
         }
     }
 
@@ -30,22 +32,28 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         self.insert(priority,name,Arc::new(Mutex::new(app)));
     }
 
-    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T> where T: AsyncApp<E> {
+    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Option<Service<T>> where T: AsyncApp<E> {
+        if self.services.contains_key(&TypeId::of::<T>()) {
+            return None;
+        }
         let obj = Arc::new(app);
         let t: Arc<T> = obj.clone();
         self.insert(priority,name,obj);
         let service = Service::Async(t);
-        self.services.push(service.clone().to_async_storage());
-        service
+        self.services.insert(TypeId::of::<T>(),service.clone().to_async_storage());
+        Some(service)
     }
 
-    pub fn with_sync_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T> where T: P4app<E> + Send {
+    pub fn with_sync_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Option<Service<T>> where T: P4app<E> + Send {
+        if self.services.contains_key(&TypeId::of::<T>()) {
+            return None;
+        }
         let a = Arc::new(Mutex::new(app));
         let b: Arc<Mutex<T>> = a.clone();
         self.insert(priority,name,a);
         let service = Service::AsyncFromSyncWrap(b);
-        self.services.push(service.clone().to_sync_wrap_storage());
-        service
+        self.services.insert(TypeId::of::<T>(),service.clone().to_sync_wrap_storage());
+        Some(service)
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: Arc<T>)
@@ -74,6 +82,34 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
             vec.push(item);
         }
         AsyncAppsBase::new(vec)
+    }
+}
+
+default impl<T,E> ServiceStorage<T> for AsyncAppsBuilder<E>
+    where
+    T: 'static, service::DefaultServiceStorage: service::ServiceStorage<T>
+{
+    fn to_service(&self) -> Option<Service<T>> {
+        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
+            t.to_service()
+        }
+        else {
+            None
+        }
+    }
+}
+
+impl<T,E> ServiceStorage<T> for AsyncAppsBuilder<E>
+    where
+        T: 'static + Send + Sync, service::DefaultServiceStorage: service::ServiceStorage<T>
+{
+    fn to_service(&self) -> Option<Service<T>> {
+        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
+            t.to_service()
+        }
+        else {
+            None
+        }
     }
 }
 

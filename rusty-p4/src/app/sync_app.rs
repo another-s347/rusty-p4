@@ -2,11 +2,12 @@ use crate::app::async_app::AsyncApp;
 use crate::app::P4app;
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
-use crate::service::{DefaultServiceStorage, Service};
-use std::any::Any;
+use crate::service;
+use crate::service::{DefaultServiceStorage, Service, ServiceStorage};
+use std::any::{Any, TypeId};
 use std::cell::Ref;
 use std::cell::RefCell;
-use std::collections::LinkedList;
+use std::collections::{HashMap, LinkedList};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -15,7 +16,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct SyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Box<dyn P4app<E>>)>,
-    services: Vec<DefaultServiceStorage>,
+    services: HashMap<TypeId, DefaultServiceStorage>,
 }
 
 impl<E> SyncAppsBuilder<E>
@@ -25,7 +26,7 @@ where
     pub fn new() -> SyncAppsBuilder<E> {
         SyncAppsBuilder {
             apps: LinkedList::new(),
-            services: Vec::new(),
+            services: HashMap::new(),
         }
     }
 
@@ -43,26 +44,44 @@ where
         self.insert(priority, name, app);
     }
 
-    pub fn with_async_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T>
+    pub fn with_async_service<T>(
+        &mut self,
+        priority: u8,
+        name: &'static str,
+        app: T,
+    ) -> Option<Service<T>>
     where
         T: AsyncApp<E>,
     {
+        if self.services.contains_key(&TypeId::of::<T>()) {
+            return None;
+        }
         let app = Rc::new(RefCell::new(AsyncWrap::new(app)));
         self.insert(priority, name, app.clone());
         let service = Service::SyncFromAsyncWrap(app);
-        self.services.push(service.clone().to_sync_storage());
-        service
+        self.services
+            .insert(TypeId::of::<T>(), service.clone().to_sync_storage());
+        Some(service)
     }
 
-    pub fn with_service<T>(&mut self, priority: u8, name: &'static str, app: T) -> Service<T>
+    pub fn with_service<T>(
+        &mut self,
+        priority: u8,
+        name: &'static str,
+        app: T,
+    ) -> Option<Service<T>>
     where
         T: P4app<E>,
     {
+        if self.services.contains_key(&TypeId::of::<T>()) {
+            return None;
+        }
         let app = Rc::new(RefCell::new(app));
         self.insert(priority, name, app.clone());
         let service = Service::Sync(app);
-        self.services.push(service.clone().to_sync_storage());
-        service
+        self.services
+            .insert(TypeId::of::<T>(), service.clone().to_sync_storage());
+        Some(service)
     }
 
     fn insert<T>(&mut self, mut priority: u8, name: &'static str, app: T)
@@ -91,6 +110,34 @@ where
             vec.push(item);
         }
         SyncAppsBase::new(vec)
+    }
+}
+
+default impl<T, E> ServiceStorage<T> for SyncAppsBuilder<E>
+where
+    T: 'static,
+    service::DefaultServiceStorage: service::ServiceStorage<T>,
+{
+    fn to_service(&self) -> Option<Service<T>> {
+        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
+            t.to_service()
+        } else {
+            None
+        }
+    }
+}
+
+impl<T, E> ServiceStorage<T> for SyncAppsBuilder<E>
+where
+    T: 'static + Send + Sync,
+    service::DefaultServiceStorage: service::ServiceStorage<T>,
+{
+    fn to_service(&self) -> Option<Service<T>> {
+        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
+            t.to_service()
+        } else {
+            None
+        }
     }
 }
 
