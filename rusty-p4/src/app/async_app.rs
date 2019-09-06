@@ -12,14 +12,14 @@ use std::any::{TypeId, Any};
 use crate::service;
 
 pub struct AsyncAppsBuilder<E> {
-    apps: LinkedList<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,
+    apps: Vec<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,
     services: HashMap<TypeId,DefaultServiceStorage>,
 }
 
 impl<E> AsyncAppsBuilder<E> where E: Event {
     pub fn new() -> AsyncAppsBuilder<E> {
         AsyncAppsBuilder {
-            apps: LinkedList::new(),
+            apps: Vec::new(),
             services: HashMap::new()
         }
     }
@@ -60,28 +60,13 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         where
             T: AsyncApp<E>,
     {
-        if self.apps.is_empty() {
-            self.apps.push_front((priority,name,app));
-            return;
-        }
-        let mut iter = self.apps.iter_mut();
-        while let Some((p, name, _)) = iter.next() {
-            if priority > *p {
-                iter.insert_next((priority, name, app));
-                break;
-            } else if priority == *p {
-                priority -= 1;
-                break;
-            }
-        }
+        self.apps.push((priority,name,app));
     }
 
     pub fn build(mut self) -> AsyncAppsBase<E> {
-        let mut vec = Vec::with_capacity(self.apps.len());
-        while let Some(item) = self.apps.pop_back() {
-            vec.push(item);
-        }
-        AsyncAppsBase::new(vec)
+        self.apps.sort_by_key(|(x,_,_)|*x);
+        self.apps.reverse();
+        AsyncAppsBase::new(self.apps)
     }
 }
 

@@ -62,6 +62,10 @@ where
                             device_id,
                             pipeconf,
                         } => {
+                            if ctx.connections.read().unwrap().contains_key(&device.id) {
+                                error!(target:"context","Device with name existed: {:?}",device.name);
+                                continue;
+                            }
                             let pipeconf_obj = ctx.pipeconf.get(&pipeconf);
                             if pipeconf_obj.is_none() {
                                 error!(target:"context","pipeconf not found: {:?}",pipeconf);

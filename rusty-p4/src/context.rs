@@ -65,7 +65,7 @@ where
         config: ContextConfig,
     ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
     where
-        T: P4app<E> + Send + 'static,
+        T: P4app<E> + 'static,
     {
         let (app_s, app_r) = futures03::channel::mpsc::unbounded();
 
@@ -161,8 +161,8 @@ where
                 }
             }
             Ok(())
-        }).map_err(|e| {
-            dbg!(e);
+        }).map_err(move|e| {
+            error!("Connection {}: {:#?}",name,e);
         }));
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
