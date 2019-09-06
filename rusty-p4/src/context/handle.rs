@@ -6,7 +6,9 @@ use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
 use crate::p4rt::bmv2::Bmv2SwitchConnection;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
-use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
+use crate::p4rt::pure::{
+    new_packet_out_request, new_set_entity_request, new_write_table_entry, table_entry_to_entity,
+};
 use crate::proto::p4runtime::P4RuntimeClient;
 use crate::proto::p4runtime::{
     stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
@@ -38,10 +40,8 @@ use tokio::runtime::Runtime;
 #[derive(Clone)]
 pub struct ContextHandle<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
-    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
-    id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-    removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
+    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
 impl<E> ContextHandle<E>
@@ -51,16 +51,12 @@ where
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
         connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
-        id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-        removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> ContextHandle<E> {
         ContextHandle {
             sender,
-            pipeconf,
             connections,
-            id_to_name,
-            removed_id_to_name,
+            pipeconf,
         }
     }
 
@@ -80,10 +76,13 @@ where
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
-        let request = new_write_table_entry(connection.device_id, table_entry, update);
-        connection
-            .send_request_sync(&request)
-            .context(ContextErrorKind::ConnectionError)?;
+        self.sender
+            .unbounded_send(CoreRequest::SetEntity {
+                device,
+                entity: table_entry_to_entity(table_entry),
+                op: update,
+            })
+            .unwrap();
         flow.metadata = hash;
         Ok(flow)
     }

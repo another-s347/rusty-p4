@@ -143,7 +143,15 @@ pub fn build_table_entry(
         table_entry.r#match.push(entry)
     }
 
-    return table_entry;
+    table_entry
+}
+
+pub fn table_entry_to_entity(table_entry: TableEntry) -> Entity {
+    Entity {
+        entity: Some(crate::proto::p4runtime::entity::Entity::TableEntry(
+            table_entry,
+        )),
+    }
 }
 
 pub fn get_table<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Table> {

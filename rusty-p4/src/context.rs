@@ -103,8 +103,6 @@ where
         ContextHandle::new(
             self.core_channel_sender.clone(),
             self.connections.clone(),
-            self.id_to_name.clone(),
-            self.removed_id_to_name.clone(),
             self.pipeconf.clone(),
         )
     }
