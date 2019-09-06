@@ -18,4 +18,5 @@ pub mod p4rt;
 pub mod proto;
 pub mod representation;
 pub mod restore;
+pub mod service;
 pub mod util;

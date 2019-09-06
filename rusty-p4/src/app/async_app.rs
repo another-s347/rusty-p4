@@ -1,4 +1,4 @@
-use crate::app::{P4app, Service, DefaultServiceStorage};
+use crate::app::{P4app};
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived, CommonEvents};
 use std::marker::PhantomData;
@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use log::{info,trace,debug};
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
+use crate::service::{DefaultServiceStorage, Service};
 
 pub struct AsyncAppsBuilder<E> {
     apps: LinkedList<(u8, &'static str, Arc<dyn AsyncApp<E>>)>,

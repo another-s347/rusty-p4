@@ -1,7 +1,8 @@
 use crate::app::async_app::AsyncApp;
-use crate::app::{DefaultServiceStorage, P4app, Service};
+use crate::app::P4app;
 use crate::context::ContextHandle;
 use crate::event::{Event, PacketReceived};
+use crate::service::{DefaultServiceStorage, Service};
 use std::any::Any;
 use std::cell::Ref;
 use std::cell::RefCell;
