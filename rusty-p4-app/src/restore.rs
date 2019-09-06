@@ -8,13 +8,13 @@ use rusty_p4::representation::{Device, DeviceID};
 use serde::{Deserialize, Serialize};
 use serde_json::*;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RestoreState {
     pub devices: HashMap<DeviceID, Device>,
 }
@@ -32,6 +32,10 @@ where
     E: Event,
 {
     fn on_start(self: &mut Self, ctx: &ContextHandle<E>) {
+        self.file.seek(SeekFrom::Start(0));
+        self.file.set_len(0);
+        serde_json::to_writer_pretty(&mut self.file, &self.state).unwrap();
+        self.file.flush().unwrap();
         for (_, device) in self.state.devices.drain() {
             match device.typ {
                 DeviceType::MASTER {
@@ -51,7 +55,8 @@ where
                     self.state.devices.insert(device.id, device.clone());
                     self.file.seek(SeekFrom::Start(0));
                     self.file.set_len(0);
-                    serde_json::to_writer_pretty(&mut self.file, &self.state);
+                    serde_json::to_writer_pretty(&mut self.file, &self.state).unwrap();
+                    self.file.flush().unwrap();
                 }
             }
             Some(CommonEvents::DeviceLost(device)) => {
@@ -59,7 +64,9 @@ where
                     self.state.devices.remove(device);
                     self.file.seek(SeekFrom::Start(0));
                     self.file.set_len(0);
-                    serde_json::to_writer_pretty(&mut self.file, &self.state);
+                    println!("write lost");
+                    serde_json::to_writer_pretty(&mut self.file, &self.state).unwrap();
+                    self.file.flush().unwrap();
                 }
             }
             _ => {}
@@ -75,7 +82,11 @@ pub struct Restore {
 
 impl Restore {
     pub fn new<T: AsRef<Path>>(path: T) -> Restore {
-        if let Ok(file_existed) = File::open(&path) {
+        if let Ok(file_existed) = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .open(path.as_ref())
+        {
             if let Ok(state) = serde_json::from_reader(&file_existed) {
                 Restore {
                     state,

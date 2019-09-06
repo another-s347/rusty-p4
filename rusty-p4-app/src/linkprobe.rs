@@ -111,6 +111,7 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&C
                 interceptor
             }
             else {
+                warn!(target:"linkprobe","Pipeconf interceptor not found. link probe may not work.");
                 return;
             }
         }

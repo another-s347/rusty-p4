@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub struct SyncAppsBuilder<E> {
-    apps: LinkedList<(u8, &'static str, Box<dyn P4app<E>>)>,
+    apps: Vec<(u8, &'static str, Box<dyn P4app<E>>)>,
     services: HashMap<TypeId, DefaultServiceStorage>,
 }
 
@@ -25,7 +25,7 @@ where
 {
     pub fn new() -> SyncAppsBuilder<E> {
         SyncAppsBuilder {
-            apps: LinkedList::new(),
+            apps: Vec::new(),
             services: HashMap::new(),
         }
     }
@@ -88,28 +88,13 @@ where
     where
         T: P4app<E>,
     {
-        if self.apps.is_empty() {
-            self.apps.push_front((priority, name, Box::new(app)));
-            return;
-        }
-        let mut iter = self.apps.iter_mut();
-        while let Some((p, name, _)) = iter.next() {
-            if priority > *p {
-                iter.insert_next((priority, name, Box::new(app)));
-                break;
-            } else if priority == *p {
-                priority -= 1;
-                break;
-            }
-        }
+        self.apps.push((priority, name, Box::new(app)));
     }
 
     pub fn build(mut self) -> SyncAppsBase<E> {
-        let mut vec = Vec::with_capacity(self.apps.len());
-        while let Some(item) = self.apps.pop_back() {
-            vec.push(item);
-        }
-        SyncAppsBase::new(vec)
+        self.apps.sort_by_key(|(x, _, _)| *x);
+        self.apps.reverse();
+        SyncAppsBase::new(self.apps)
     }
 }
 

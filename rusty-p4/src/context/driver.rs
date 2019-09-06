@@ -77,6 +77,9 @@ where
                             let result = ctx.add_connection(bmv2connection, &pipeconf).await;
                             if result.is_err() {
                                 error!(target:"context","add connection fail: {:?}",result.err().unwrap());
+                                ctx.event_sender.send(CoreEvent::Event(
+                                    CommonEvents::DeviceLost(device.id).into_e(),
+                                ));
                                 continue;
                             }
                         }

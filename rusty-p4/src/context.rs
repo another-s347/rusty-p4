@@ -130,6 +130,7 @@ where
         let name = connection.name.clone();
         let id = connection.inner_id;
         let packet_in_metaid = pipeconf.packetin_ingress_id;
+        let mut event_sender = self.event_sender.clone();
         connection.client.spawn(connection.stream_channel_receiver.for_each(move |x| {
             if let Some(update) = x.update {
                 match update {
@@ -163,6 +164,7 @@ where
             Ok(())
         }).map_err(move|e| {
             error!("Connection {}: {:#?}",name,e);
+            event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()));
         }));
 
         let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
