@@ -21,7 +21,5 @@ bytes = "0.4.12"
 futures03 = { package="futures-preview", version = "0.3.0-alpha.18", features = ["async-await", "nightly", "compat"]}
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-ctrlc = { version = "3.0", features = ["termination"] }
 failure = "0.1.5"
 nom = "5"

@@ -33,8 +33,6 @@ use crate::proto::p4runtime::{
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
-use crate::restore;
-use crate::restore::Restore;
 use crate::util::flow::Flow;
 
 use super::Context;
@@ -76,9 +74,6 @@ where
                             if result.is_err() {
                                 error!(target:"context","add connection fail: {:?}",result.err().unwrap());
                                 continue;
-                            }
-                            if let Some(r) = ctx.restore.as_mut() {
-                                r.add_device(device.clone());
                             }
                         }
                         _ => {}

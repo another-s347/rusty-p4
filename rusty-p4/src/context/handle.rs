@@ -13,8 +13,6 @@ use crate::proto::p4runtime::{
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
-use crate::restore;
-use crate::restore::Restore;
 use crate::util::flow::Flow;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -101,6 +99,34 @@ where
                 socket_addr: address,
                 device_id,
                 pipeconf: PipeconfID(pipeconf),
+            },
+            device_id,
+            index: 0,
+        };
+        self.sender
+            .unbounded_send(CoreRequest::AddDevice {
+                device,
+                reply: None,
+            })
+            .unwrap()
+    }
+
+    pub fn add_device_with_pipeconf_id(
+        &self,
+        name: String,
+        address: String,
+        device_id: u64,
+        pipeconf: PipeconfID,
+    ) {
+        let id = crate::util::hash(&name);
+        let device = Device {
+            id: DeviceID(id),
+            name,
+            ports: Default::default(),
+            typ: DeviceType::MASTER {
+                socket_addr: address,
+                device_id,
+                pipeconf,
             },
             device_id,
             index: 0,

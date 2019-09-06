@@ -12,8 +12,6 @@ use crate::proto::p4runtime::{
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
-use crate::restore;
-use crate::restore::Restore;
 use crate::util::flow::Flow;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -54,7 +52,6 @@ pub struct Context<E> {
     connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-    restore: Option<Restore>,
     config: ContextConfig,
 }
 
@@ -65,7 +62,6 @@ where
     pub async fn try_new<T>(
         pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
-        restore: Option<Restore>,
         config: ContextConfig,
     ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
     where
@@ -82,7 +78,6 @@ where
             connections: Arc::new(RwLock::new(HashMap::new())),
             id_to_name: Arc::new(RwLock::new(HashMap::new())),
             removed_id_to_name: Arc::new(RwLock::new(HashMap::new())),
-            restore,
             config,
         };
         let context_handle = obj.get_handle();
@@ -90,11 +85,6 @@ where
         let mut result = obj.clone();
 
         app.on_start(&context_handle);
-
-        let handle = result.get_handle();
-        if let Some(r) = result.restore.as_mut() {
-            r.restore(handle);
-        }
 
         let driver = ContextDriver {
             core_request_receiver: r,
@@ -192,9 +182,6 @@ where
                     if let Some(old) = map.remove(&id) {
                         let mut removed_map = obj.id_to_name.write().unwrap();
                         removed_map.insert(id, old);
-                    }
-                    if let Some(r) = obj.restore.as_mut() {
-                        r.remove_device(id);
                     }
                 }))
                 .map(|_| ()),

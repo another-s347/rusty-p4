@@ -2,9 +2,7 @@
 #![feature(option_flattening)]
 #![feature(linked_list_extras)]
 #![feature(specialization)]
-#![feature(bind_by_move_pattern_guards)]
-#[macro_use]
-extern crate serde_json;
+
 #[macro_use]
 extern crate failure;
 
@@ -18,6 +16,5 @@ pub mod event;
 pub mod p4rt;
 pub mod proto;
 pub mod representation;
-pub mod restore;
 pub mod service;
 pub mod util;

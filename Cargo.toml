@@ -3,6 +3,7 @@
 members = [
     "rusty-p4",
     "rusty-p4-northbound",
+    "rusty-p4-app"
 ]
 
 exclude = [

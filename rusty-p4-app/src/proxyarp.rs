@@ -1,21 +1,19 @@
-use crate::app::async_app::AsyncApp;
-use crate::app::common::CommonState;
-use crate::app::linkprobe::LinkProbeState;
-use crate::app::P4app;
-use crate::context::ContextHandle;
-use crate::event::{CommonEvents, CoreRequest, Event, PacketReceived};
-use crate::p4rt::pipeconf::PipeconfID;
-use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
-use crate::service::{Service, ServiceStorage};
-use crate::util::flow::*;
-use crate::util::packet::arp::ETHERNET_TYPE_ARP;
-use crate::util::packet::Packet;
-use crate::util::packet::{arp::ArpOp, Arp, Ethernet};
-use crate::util::value::{Value, EXACT, MAC};
 use bytes::Bytes;
 use futures::prelude::*;
-use futures03::prelude::*;
 use log::{debug, error, info, trace, warn};
+use rusty_p4::app::async_app::AsyncApp;
+use rusty_p4::app::common::CommonState;
+use rusty_p4::app::P4app;
+use rusty_p4::context::ContextHandle;
+use rusty_p4::event::{CommonEvents, CoreRequest, Event, PacketReceived};
+use rusty_p4::p4rt::pipeconf::PipeconfID;
+use rusty_p4::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
+use rusty_p4::service::{Service, ServiceStorage};
+use rusty_p4::util::flow::*;
+use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
+use rusty_p4::util::packet::Packet;
+use rusty_p4::util::packet::{arp::ArpOp, Arp, Ethernet};
+use rusty_p4::util::value::{Value, EXACT, MAC};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,7 +43,7 @@ impl ProxyArpLoader {
     where
         T: ArpInterceptor,
     {
-        let pipeconf = crate::util::hash(pipeconf);
+        let pipeconf = rusty_p4::util::hash(pipeconf);
         self.interceptor
             .insert(PipeconfID(pipeconf), Box::new(interceptor));
         self
