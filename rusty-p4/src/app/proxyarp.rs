@@ -1,12 +1,14 @@
+use crate::app::async_app::AsyncApp;
 use crate::app::common::CommonState;
-use crate::app::extended::{P4appExtendedCore, P4appInstallable};
+use crate::app::linkprobe::LinkProbeState;
+use crate::app::P4app;
 use crate::context::ContextHandle;
-use crate::event::{CommonEvents, CoreRequest, Event};
+use crate::event::{CommonEvents, CoreRequest, Event, PacketReceived};
 use crate::p4rt::pipeconf::PipeconfID;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
+use crate::service::{Service, ServiceStorage};
 use crate::util::flow::*;
 use crate::util::packet::arp::ETHERNET_TYPE_ARP;
-use crate::util::packet::data::Data;
 use crate::util::packet::Packet;
 use crate::util::packet::{arp::ArpOp, Arp, Ethernet};
 use crate::util::value::{Value, EXACT, MAC};
@@ -21,6 +23,7 @@ use std::time::Duration;
 #[derive(Clone)]
 pub struct ProxyArpState {
     pub interceptor: Arc<HashMap<PipeconfID, Box<dyn ArpInterceptor>>>,
+    pub commonstate_service: Service<CommonState>,
 }
 
 pub struct ProxyArpLoader {
@@ -48,32 +51,67 @@ impl ProxyArpLoader {
         self
     }
 
-    pub fn build(self) -> ProxyArpState {
+    pub fn build<B>(self, app_builder: &B) -> ProxyArpState
+    where
+        B: ServiceStorage<CommonState>,
+    {
         ProxyArpState {
             interceptor: Arc::new(self.interceptor),
+            commonstate_service: app_builder.to_service().unwrap(),
         }
     }
 }
 
-impl<A, E> P4appInstallable<A, E> for ProxyArpState
+impl<E> P4app<E> for ProxyArpState
 where
     E: Event,
 {
-    fn install(&mut self, extend_core: &mut P4appExtendedCore<A, E>) {
-        let s = self.clone();
-        extend_core.install_ether_hook(0x806, Box::new(on_arp_received));
-        extend_core.install_device_added_hook(
-            "proxy arp",
-            Box::new(move |device, state, ctx| {
-                let s = s.clone();
-                on_device_added(s, device, state, ctx)
-            }),
-        );
+    fn on_packet(
+        self: &mut Self,
+        packet: PacketReceived,
+        ctx: &ContextHandle<E>,
+    ) -> Option<PacketReceived> {
+        match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
+            Some(ethernet) if ethernet.ether_type == 0x806 => {
+                on_arp_received(ethernet, packet.from, &self.commonstate_service.get(), ctx);
+                return None;
+            }
+            _ => {}
+        }
+        Some(packet)
+    }
+
+    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+        match event.try_to_common() {
+            Some(CommonEvents::DeviceAdded(device)) => {
+                let interceptor = match &device.typ {
+                    DeviceType::MASTER {
+                        socket_addr,
+                        device_id,
+                        pipeconf,
+                    } => {
+                        if let Some(interceptor) = self.interceptor.get(pipeconf) {
+                            interceptor
+                        } else {
+                            return Some(event);
+                        }
+                    }
+                    _ => {
+                        warn!(target:"linkprobe","It is not a master device. Proxy arp may not work.");
+                        return Some(event);
+                    }
+                };
+                let flow = interceptor.new_flow(device.id);
+                ctx.insert_flow(flow, device.id);
+            }
+            _ => {}
+        }
+        Some(event)
     }
 }
 
 pub fn on_arp_received<E>(
-    data: Ethernet<Data>,
+    data: Ethernet<&[u8]>,
     cp: ConnectPoint,
     state: &CommonState,
     ctx: &ContextHandle<E>,
@@ -82,26 +120,27 @@ pub fn on_arp_received<E>(
 {
     let device = cp.device;
     let data = data.payload;
-    let arp = Arp::from_bytes(data.clone().0.into());
+    let arp = Arp::from_bytes(data);
     if arp.is_none() {
         error!(target:"proxyarp","invalid arp packet");
         return;
     }
     let arp = arp.unwrap();
+    let arp_sender_mac = MAC::from_slice(arp.sender_mac);
     match arp.opcode {
         ArpOp::Request => {
             let host = Host {
-                mac: arp.sender_mac,
-                ip: Some(arp.sender_ip.into()),
+                mac: arp.get_sender_mac(),
+                ip: Some(arp.get_sender_ipv4().unwrap().into()),
                 location: cp,
             };
             if !state.hosts.contains(&host) {
-                ctx.send_event(CommonEvents::HostDetected(host));
+                ctx.send_event(CommonEvents::HostDetected(host).into_e());
             }
             if let Some(arp_target) = state
                 .hosts
                 .iter()
-                .find(|x| x.ip == Some(arp.target_ip.into()))
+                .find(|x| x.ip == Some(arp.get_target_ipv4().unwrap().into()))
             {
                 let arp_reply = Arp {
                     hw_type: 1,
@@ -109,18 +148,18 @@ pub fn on_arp_received<E>(
                     hw_addr_len: 6,
                     proto_addr_len: 4,
                     opcode: ArpOp::Reply,
-                    sender_mac: arp_target.mac,
-                    sender_ip: arp_target.get_ipv4_address().unwrap(),
-                    target_mac: arp.sender_mac,
+                    sender_mac: arp_target.mac.as_ref(),
+                    sender_ip: &arp_target.get_ipv4_address().unwrap().octets(),
+                    target_mac: arp_sender_mac.as_ref(),
                     target_ip: arp.sender_ip,
                 };
                 let packet = Ethernet {
-                    src: arp_target.mac,
-                    dst: arp.sender_mac,
+                    src: arp_target.mac.as_ref(),
+                    dst: arp_sender_mac.as_ref(),
                     ether_type: 0x806,
                     payload: arp_reply,
                 }
-                .into_bytes();
+                .write_to_bytes();
                 ctx.sender
                     .unbounded_send(CoreRequest::PacketOut {
                         connect_point: cp,
@@ -129,12 +168,12 @@ pub fn on_arp_received<E>(
                     .unwrap();
             } else {
                 let packet = Ethernet {
-                    src: arp.sender_mac,
-                    dst: MAC::broadcast(),
+                    src: arp_sender_mac.as_ref(),
+                    dst: MAC::broadcast().as_ref(),
                     ether_type: 0x806,
                     payload: data,
                 }
-                .into_bytes();
+                .write_to_bytes();
                 state
                     .devices
                     .iter()
@@ -159,59 +198,14 @@ pub fn on_arp_received<E>(
         }
         ArpOp::Reply => {
             let host = Host {
-                mac: arp.sender_mac,
-                ip: Some(arp.sender_ip.into()),
+                mac: arp_sender_mac,
+                ip: Some(arp.get_sender_ipv4().unwrap().into()),
                 location: cp,
             };
-            ctx.send_event(CommonEvents::HostDetected(host));
+            ctx.send_event(CommonEvents::HostDetected(host).into_e());
         }
         ArpOp::Unknown(op) => {
             error!(target:"proxyarp","unknown arp op code: {}", op);
         }
     }
-}
-
-pub fn on_device_added<E>(
-    proxyarp_state: ProxyArpState,
-    device: &Device,
-    state: &CommonState,
-    ctx: &ContextHandle<E>,
-) where
-    E: Event,
-{
-    let interceptor = match &device.typ {
-        DeviceType::MASTER {
-            socket_addr,
-            device_id,
-            pipeconf,
-        } => {
-            if let Some(interceptor) = proxyarp_state.interceptor.get(pipeconf) {
-                interceptor
-            } else {
-                return;
-            }
-        }
-        _ => {
-            warn!(target:"linkprobe","It is not a master device. Proxy arp may not work.");
-            return;
-        }
-    };
-    let flow = interceptor.new_flow(device.id);
-    ctx.insert_flow(flow, device.id);
-}
-
-pub fn new_arp_interceptor<E>(device_id: DeviceID, ctx: &ContextHandle<E>)
-where
-    E: Event,
-{
-    let flow = flow! {
-        pipe="IngressPipeImpl";
-        table="acl";
-        key={
-            "hdr.ethernet.ether_type"=>ETHERNET_TYPE_ARP
-        };
-        action=send_to_cpu();
-        priority=4000;
-    };
-    ctx.insert_flow(flow, device_id);
 }

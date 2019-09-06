@@ -25,7 +25,7 @@ pub mod common;
 //pub mod extended;
 pub mod graph;
 pub mod linkprobe;
-//pub mod proxyarp;
+pub mod proxyarp;
 pub mod statistic;
 pub mod sync_app;
 
