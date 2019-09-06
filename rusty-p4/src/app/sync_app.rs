@@ -96,34 +96,30 @@ where
         self.apps.reverse();
         SyncAppsBase::new(self.apps)
     }
-}
 
-default impl<T, E> ServiceStorage<T> for SyncAppsBuilder<E>
-where
-    T: 'static,
-    service::DefaultServiceStorage: service::ServiceStorage<T>,
-{
-    fn to_service(&self) -> Option<Service<T>> {
+    pub fn get_service<T>(&self) -> Option<Service<T>>
+    where
+        T: 'static,
+        service::DefaultServiceStorage: service::ServiceStorage<T>,
+    {
         if let Some(t) = self.services.get(&TypeId::of::<T>()) {
             t.to_service()
         } else {
             None
         }
     }
-}
 
-impl<T, E> ServiceStorage<T> for SyncAppsBuilder<E>
-where
-    T: 'static + Send + Sync,
-    service::DefaultServiceStorage: service::ServiceStorage<T>,
-{
-    fn to_service(&self) -> Option<Service<T>> {
-        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
-            t.to_service()
-        } else {
-            None
-        }
-    }
+    //    pub fn get_async_service<T>(&self) -> Option<Service<T>>
+    //    where
+    //        T: 'static + Send + Sync,
+    //        service::DefaultServiceStorage: service::ServiceStorage<T>,
+    //    {
+    //        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
+    //            t.to_service()
+    //        } else {
+    //            None
+    //        }
+    //    }
 }
 
 pub struct SyncAppsBase<E> {

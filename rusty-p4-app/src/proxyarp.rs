@@ -49,13 +49,10 @@ impl ProxyArpLoader {
         self
     }
 
-    pub fn build<B>(self, app_builder: &B) -> ProxyArpState
-    where
-        B: ServiceStorage<CommonState>,
-    {
+    pub fn build(self, commonstate_service: Service<CommonState>) -> ProxyArpState {
         ProxyArpState {
             interceptor: Arc::new(self.interceptor),
-            commonstate_service: app_builder.to_service().unwrap(),
+            commonstate_service,
         }
     }
 }

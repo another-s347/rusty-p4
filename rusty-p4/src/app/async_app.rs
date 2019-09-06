@@ -68,31 +68,15 @@ impl<E> AsyncAppsBuilder<E> where E: Event {
         self.apps.reverse();
         AsyncAppsBase::new(self.apps)
     }
-}
 
-default impl<T,E> ServiceStorage<T> for AsyncAppsBuilder<E>
-    where
-    T: 'static, service::DefaultServiceStorage: service::ServiceStorage<T>
-{
-    fn to_service(&self) -> Option<Service<T>> {
+    pub fn get_service<T>(&self) -> Option<Service<T>>
+        where
+            T: 'static,
+            service::DefaultServiceStorage: service::ServiceStorage<T>,
+    {
         if let Some(t) = self.services.get(&TypeId::of::<T>()) {
             t.to_service()
-        }
-        else {
-            None
-        }
-    }
-}
-
-impl<T,E> ServiceStorage<T> for AsyncAppsBuilder<E>
-    where
-        T: 'static + Send + Sync, service::DefaultServiceStorage: service::ServiceStorage<T>
-{
-    fn to_service(&self) -> Option<Service<T>> {
-        if let Some(t) = self.services.get(&TypeId::of::<T>()) {
-            t.to_service()
-        }
-        else {
+        } else {
             None
         }
     }
