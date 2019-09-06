@@ -1,3 +1,9 @@
+/*
+commit:53a9405b6da41f22a133b0cc82b2f4277a93c78e
+release
+420Mb/s
+*/
+
 #![allow(warnings)]
 #![feature(option_flattening)]
 #![feature(async_await)]
@@ -7,14 +13,12 @@ use rusty_p4::p4rt;
 use rusty_p4::util::flow::*;
 use rusty_p4::context::{Context, ContextHandle};
 //use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
-use rusty_p4::restore;
 use rusty_p4::util::value::EXACT;
 use std::path::Path;
 use tokio;
 //use rusty_p4::app::linkprobe::{LinkProbeLoader, LinkProbeInterceptor};
 //use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
 use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
-use rusty_p4::restore::Restore;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::{DeviceID, ConnectPoint};
 use rusty_p4::util::flow::Flow;
@@ -69,7 +73,7 @@ impl AsyncApp<CommonEvents> for Benchmark {
 
 #[tokio::main]
 pub async fn main() {
-    flexi_logger::Logger::with_str("debug").start().unwrap();
+    flexi_logger::Logger::with_str("info").start().unwrap();
 
     let pipeconf = Pipeconf::new(
         "benchmark",
@@ -86,7 +90,7 @@ pub async fn main() {
     });
     let app = app_builder.build();
 
-    let (mut context,driver) = Context::try_new(pipeconfs, app, None, ContextConfig::default()).await.unwrap();
+    let (mut context,driver) = Context::try_new(pipeconfs, app, ContextConfig::default()).await.unwrap();
 
     context.get_handle().add_device("s1".to_string(),"127.0.0.1:50051".to_string(),1,"benchmark");
 
