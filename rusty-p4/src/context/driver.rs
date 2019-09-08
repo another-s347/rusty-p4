@@ -81,37 +81,6 @@ where
                                 handle = ctx.get_handle();
                             }
                         }
-                        Some(CoreRequest::PacketOut {
-                            connect_point,
-                            packet,
-                        }) => {
-                            if let Some(c) = ctx.connections.read().unwrap().get(&connect_point.device) {
-                                let request =
-                                    new_packet_out_request(&c.pipeconf, connect_point.port, packet);
-                                let result = c.send_stream_request(request);
-                                if result.is_err() {
-                                    error!(target:"context","packet out err {:?}", result.err().unwrap());
-                                }
-                            } else {
-                                // find device name
-                                error!(target:"context","PacketOut error: connection not found for device {:?}.", connect_point.device);
-                            }
-                        }
-                        Some(CoreRequest::SetEntity { device, entity, op }) => {
-                            if let Some(c) = ctx.connections.read().unwrap().get(&device) {
-                                let request = new_set_entity_request(1, entity, op.into());
-                                match c.p4runtime_client.write(&request) {
-                                    Ok(response) => {
-                                        debug!(target:"context","set entity response: {:?}",response);
-                                    }
-                                    Err(e) => {
-                                        error!(target:"context","grpc send error: {:?}",e);
-                                    }
-                                }
-                            } else {
-                                error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
-                            }
-                        }
                         _ => {
 
                         }
@@ -154,7 +123,7 @@ where
                     Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
                 let result = ctx.add_connection(bmv2connection, &pipeconf).await;
                 if result.is_err() {
-                    error!(target:"context","add connection fail: {:?}",result.err().unwrap());
+                    error!(target:"context","add {} connection fail: {:?}",name,result.err().unwrap());
                     ctx.event_sender.send(CoreEvent::Event(
                         CommonEvents::DeviceLost(device.id).into_e(),
                     ));

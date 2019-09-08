@@ -72,13 +72,20 @@ where
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
-        self.sender
-            .unbounded_send(CoreRequest::SetEntity {
-                device,
-                entity: table_entry_to_entity(table_entry),
-                op: update,
-            })
-            .unwrap();
+        if let Some(c) = self.connections.get(&device) {
+            let request =
+                new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
+            match c.p4runtime_client.write(&request) {
+                Ok(response) => {
+                    debug!(target:"context","set entity response: {:?}",response);
+                }
+                Err(e) => {
+                    error!(target:"context","grpc send error: {:?}",e);
+                }
+            }
+        } else {
+            error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
+        }
         flow.metadata = hash;
         Ok(flow)
     }
@@ -145,12 +152,16 @@ where
     }
 
     pub fn send_packet(&self, to: ConnectPoint, packet: Bytes) {
-        self.sender
-            .unbounded_send(CoreRequest::PacketOut {
-                connect_point: to,
-                packet,
-            })
-            .unwrap();
+        if let Some(c) = self.connections.get(&to.device) {
+            let request = new_packet_out_request(&c.pipeconf, to.port, packet);
+            let result = c.send_stream_request(request);
+            if result.is_err() {
+                error!(target:"context","packet out err {:?}", result.err().unwrap());
+            }
+        } else {
+            // find device name
+            error!(target:"context","PacketOut error: connection not found for device {:?}.", to.device);
+        }
     }
 
     pub fn set_entity<T: crate::entity::ToEntity>(
@@ -163,13 +174,19 @@ where
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         if let Some(entity) = entity.to_proto_entity(&connection.pipeconf) {
-            self.sender
-                .unbounded_send(CoreRequest::SetEntity {
-                    device,
-                    entity,
-                    op: update_type,
-                })
-                .unwrap();
+            if let Some(c) = self.connections.get(&device) {
+                let request = new_set_entity_request(1, entity, update_type.into());
+                match c.p4runtime_client.write(&request) {
+                    Ok(response) => {
+                        debug!(target:"context","set entity response: {:?}",response);
+                    }
+                    Err(e) => {
+                        error!(target:"context","grpc send error: {:?}",e);
+                    }
+                }
+            } else {
+                error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
+            }
             Ok(())
         } else {
             Err(ContextError::from(ContextErrorKind::EntityIsNone))

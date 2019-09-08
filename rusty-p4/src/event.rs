@@ -28,23 +28,9 @@ impl PacketReceived {
 
 #[derive(Debug)]
 pub enum CoreRequest<E> {
-    AddDevice {
-        device: Device,
-        reply: Option<()>,
-    },
-    RemoveDevice {
-        device: DeviceID,
-    },
+    AddDevice { device: Device, reply: Option<()> },
+    RemoveDevice { device: DeviceID },
     Event(E),
-    PacketOut {
-        connect_point: ConnectPoint,
-        packet: Bytes,
-    },
-    SetEntity {
-        device: DeviceID,
-        entity: ProtoEntity,
-        op: UpdateType,
-    },
 }
 
 pub trait Event: Clone + Debug + Send + 'static {
