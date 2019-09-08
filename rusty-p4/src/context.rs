@@ -17,14 +17,14 @@ use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
 use failure::ResultExt;
-use futures::future::{result, Future};
-use futures::sink::Sink;
-use futures::stream::Stream;
-use futures03::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures03::compat::*;
-use futures03::future::FutureExt;
-use futures03::sink::SinkExt;
-use futures03::stream::StreamExt;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::compat::*;
+use futures::future::FutureExt;
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
+use futures01::future::Future;
+use futures01::sink::Sink;
+use futures01::stream::Stream;
 use grpcio::{StreamingCallSink, WriteFlags};
 use log::{debug, error, info, trace, warn};
 use std::collections::{HashMap, HashSet};
@@ -67,9 +67,9 @@ where
     where
         T: P4app<E> + 'static,
     {
-        let (app_s, app_r) = futures03::channel::mpsc::unbounded();
+        let (app_s, app_r) = futures::channel::mpsc::unbounded();
 
-        let (s, mut r) = futures03::channel::mpsc::unbounded();
+        let (s, mut r) = futures::channel::mpsc::unbounded();
 
         let mut obj = Context {
             pipeconf: Arc::new(pipeconf),
@@ -167,7 +167,7 @@ where
             event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()));
         }));
 
-        let (sink_sender, sink_receiver) = futures::sync::mpsc::unbounded();
+        let (sink_sender, sink_receiver) = futures01::sync::mpsc::unbounded();
         let error_sender = self.event_sender.clone();
         let mut obj = self.clone();
         connection.client.spawn(
@@ -205,7 +205,7 @@ where
 
 pub struct Connection {
     pub p4runtime_client: P4RuntimeClient,
-    pub sink: futures::sync::mpsc::UnboundedSender<(StreamMessageRequest, WriteFlags)>,
+    pub sink: futures01::sync::mpsc::UnboundedSender<(StreamMessageRequest, WriteFlags)>,
     pub device_id: u64,
     pub pipeconf: Pipeconf,
 }

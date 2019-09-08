@@ -11,9 +11,9 @@ use crate::representation::DeviceID;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
-use futures::sink::Sink;
-use futures::stream::Stream;
-use futures03::compat::*;
+use futures::compat::*;
+use futures01::sink::Sink;
+use futures01::stream::Stream;
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 use prost::Message;
 use rusty_p4_proto::proto::v1::{

@@ -12,7 +12,7 @@ use crate::util::packet::Packet;
 use crate::util::value::EXACT;
 use crate::util::value::{encode, LPM};
 use bytes::{Bytes, BytesMut};
-use futures03::future::Future;
+use futures::future::Future;
 use log::{debug, error, info, trace, warn};
 use std::any::Any;
 use std::cell::{Ref, RefCell};
