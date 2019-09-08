@@ -37,7 +37,7 @@ use tokio::runtime::Runtime;
 #[derive(Clone)]
 pub struct ContextHandle<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
-    connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+    connections: Arc<HashMap<DeviceID, Arc<Connection>>>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
@@ -47,7 +47,7 @@ where
 {
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
-        connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+        connections: Arc<HashMap<DeviceID, Arc<Connection>>>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> ContextHandle<E> {
         ContextHandle {
@@ -68,8 +68,7 @@ where
         update: UpdateType,
     ) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
-        let connections = self.connections.read().unwrap();
-        let connection = connections.get(&device).ok_or(ContextError::from(
+        let connection = self.connections.get(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
@@ -160,8 +159,7 @@ where
         update_type: UpdateType,
         entity: &T,
     ) -> Result<(), ContextError> {
-        let connections = self.connections.read().unwrap();
-        let connection = connections.get(&device).ok_or(ContextError::from(
+        let connection = self.connections.get(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         if let Some(entity) = entity.to_proto_entity(&connection.pipeconf) {
@@ -176,5 +174,11 @@ where
         } else {
             Err(ContextError::from(ContextErrorKind::EntityIsNone))
         }
+    }
+
+    pub fn remove_device(&self, device: DeviceID) {
+        self.sender
+            .unbounded_send(CoreRequest::RemoveDevice { device })
+            .unwrap();
     }
 }

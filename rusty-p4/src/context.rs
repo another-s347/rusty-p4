@@ -44,12 +44,11 @@ pub struct ContextConfig {
     pub enable_netconfiguration: bool,
 }
 
-#[derive(Clone)]
 pub struct Context<E> {
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     pub core_channel_sender: UnboundedSender<CoreRequest<E>>,
     event_sender: UnboundedSender<CoreEvent<E>>,
-    connections: Arc<RwLock<HashMap<DeviceID, Connection>>>,
+    connections: RwLock<Arc<HashMap<DeviceID, Arc<Connection>>>>,
     id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
     config: ContextConfig,
@@ -63,7 +62,7 @@ where
         pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
         config: ContextConfig,
-    ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
+    ) -> Result<(ContextHandle<E>, ContextDriver<E, T>), ContextError>
     where
         T: P4app<E> + 'static,
     {
@@ -75,14 +74,12 @@ where
             pipeconf: Arc::new(pipeconf),
             core_channel_sender: s,
             event_sender: app_s,
-            connections: Arc::new(RwLock::new(HashMap::new())),
+            connections: RwLock::new(Arc::new(HashMap::new())),
             id_to_name: Arc::new(RwLock::new(HashMap::new())),
             removed_id_to_name: Arc::new(RwLock::new(HashMap::new())),
             config,
         };
         let context_handle = obj.get_handle();
-
-        let mut result = obj.clone();
 
         app.on_start(&context_handle);
 
@@ -93,16 +90,17 @@ where
             ctx: obj,
         };
 
-        Ok((result, driver))
+        Ok((context_handle, driver))
     }
 
     pub fn get_handle(&self) -> ContextHandle<E>
     where
         E: Event,
     {
+        let conns = self.connections.read().unwrap().clone();
         ContextHandle::new(
             self.core_channel_sender.clone(),
-            self.connections.clone(),
+            conns,
             self.pipeconf.clone(),
         )
     }
@@ -169,35 +167,28 @@ where
 
         let (sink_sender, sink_receiver) = futures01::sync::mpsc::unbounded();
         let error_sender = self.event_sender.clone();
-        let mut obj = self.clone();
+
+        let handle = self.get_handle();
         connection.client.spawn(
             sink_receiver
                 .forward(connection.stream_channel_sink.sink_map_err(move |e| {
                     dbg!(e);
-                    error_sender
-                        .unbounded_send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()));
-                    let mut conns = obj.connections.write().unwrap();
-                    conns.remove(&id);
-                    let mut map = obj.id_to_name.write().unwrap();
-                    if let Some(old) = map.remove(&id) {
-                        let mut removed_map = obj.id_to_name.write().unwrap();
-                        removed_map.insert(id, old);
-                    }
+                    handle.remove_device(id);
                 }))
                 .map(|_| ()),
         );
 
-        self.connections.write().unwrap().insert(
+        // TODO: Is this the right way to use Rwlock<Arc<T>> ?
+        let mut ptr = self.connections.write().unwrap();
+        Arc::make_mut(&mut ptr).insert(
             id,
-            Connection {
+            Arc::new(Connection {
                 p4runtime_client: connection.client,
                 sink: sink_sender,
                 device_id: connection.device_id,
                 pipeconf: pipeconf.clone(),
-            },
+            }),
         );
-
-        //self.event_sender.start_send(CoreEvent::Event(CommonEvents::DeviceAdded(connection.name).into()));
 
         Ok(())
     }

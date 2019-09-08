@@ -32,6 +32,9 @@ pub enum CoreRequest<E> {
         device: Device,
         reply: Option<()>,
     },
+    RemoveDevice {
+        device: DeviceID,
+    },
     Event(E),
     PacketOut {
         connect_point: ConnectPoint,
