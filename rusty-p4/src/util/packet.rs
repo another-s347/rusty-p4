@@ -19,16 +19,23 @@ where
 
     fn from_bytes(b: &'a [u8]) -> Option<Self>;
 
-    fn write_self_to_buf<T: BufMut>(&self, mut buf: T);
+    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T);
+
+    fn write_all_to_buf<T: BufMut>(&self, buf: &mut T) {
+        self.write_self_to_buf(buf);
+        if let Some(payload) = self.get_payload() {
+            payload.write_all_to_buf(buf);
+        }
+    }
 
     fn get_payload(&self) -> Option<&Self::Payload>;
 
     fn bytes_hint(&self) -> usize {
-        let packet = self;
+        let mut packet = self;
         let mut size = 0;
         size += packet.self_bytes_hint();
-        while let Some(packet) = packet.get_payload() {
-            size += packet.bytes_hint();
+        if let Some(payload) = packet.get_payload() {
+            size += payload.bytes_hint();
         }
         size
     }
@@ -36,10 +43,7 @@ where
     fn write_to_bytes(&self) -> Bytes {
         let packet = self;
         let mut buffer = BytesMut::with_capacity(packet.bytes_hint());
-        packet.write_self_to_buf(&mut buffer);
-        while let Some(packet) = packet.get_payload() {
-            packet.write_self_to_buf(&mut buffer);
-        }
+        self.write_all_to_buf(&mut buffer);
         buffer.freeze()
     }
 }
@@ -55,7 +59,7 @@ impl<'a> Packet<'a> for () {
         Some(())
     }
 
-    fn write_self_to_buf<T: BufMut>(&self, mut buf: T) {}
+    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {}
 
     fn get_payload(&self) -> Option<&Self::Payload> {
         None

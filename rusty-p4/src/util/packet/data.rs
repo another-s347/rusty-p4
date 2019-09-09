@@ -13,7 +13,7 @@ impl<'a> Packet<'a> for &'a [u8] {
         Some(b)
     }
 
-    fn write_self_to_buf<T: BufMut>(&self, mut buf: T) {
+    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
         buf.put_slice(self)
     }
 

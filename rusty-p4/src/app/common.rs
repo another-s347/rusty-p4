@@ -111,6 +111,7 @@ where
                     if self.devices.contains_key(&device.id) {
                         None
                     } else {
+                        self.graph.add_device(&device);
                         self.devices.insert(device.id, device.clone());
                         Some(event)
                     }

@@ -52,7 +52,7 @@ impl<'a> Packet<'a> for Arp<'a> {
     type Payload = ();
 
     fn self_bytes_hint(&self) -> usize {
-        (6 + 2 * self.hw_addr_len + 2 * self.proto_addr_len) as usize
+        (8 + 2 * self.hw_addr_len + 2 * self.proto_addr_len) as usize
     }
 
     fn from_bytes(b: &'a [u8]) -> Option<Self> {
@@ -79,7 +79,7 @@ impl<'a> Packet<'a> for Arp<'a> {
         })
     }
 
-    fn write_self_to_buf<T: BufMut>(&self, mut buf: T) {
+    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
         buf.put_u16_be(self.hw_type);
         buf.put_u16_be(self.proto_type);
         buf.put_u8(self.hw_addr_len);
