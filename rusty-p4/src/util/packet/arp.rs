@@ -52,7 +52,7 @@ impl<'a> Packet<'a> for Arp<'a> {
     type Payload = ();
 
     fn self_bytes_hint(&self) -> usize {
-        (6 + 2 * self.hw_addr_len + 2 * self.proto_addr_len) as usize
+        (8 + 2 * self.hw_addr_len + 2 * self.proto_addr_len) as usize
     }
 
     fn from_bytes(b: &'a [u8]) -> Option<Self> {
