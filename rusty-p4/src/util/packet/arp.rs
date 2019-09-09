@@ -79,7 +79,7 @@ impl<'a> Packet<'a> for Arp<'a> {
         })
     }
 
-    fn write_self_to_buf<T: BufMut>(&self, mut buf: T) {
+    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
         buf.put_u16_be(self.hw_type);
         buf.put_u16_be(self.proto_type);
         buf.put_u8(self.hw_addr_len);
