@@ -16,6 +16,7 @@ use bytes::Bytes;
 use failure::ResultExt;
 use futures::{Future, Sink};
 use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
+use nom::dbg_dmp;
 use rusty_p4_proto::proto::v1::{
     Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,
 };
@@ -54,6 +55,17 @@ pub fn adjust_value(mut value: Bytes, bytes_len: usize) -> Bytes {
         value.slice(value.len() - bytes_len, value.len())
     } else {
         value.extend(vec![0u8; bytes_len - value.len()]);
+        value
+    }
+}
+
+pub fn adjust_value_with(mut value: Bytes, bytes_len: usize, e: u8) -> Bytes {
+    if bytes_len == value.len() {
+        value
+    } else if bytes_len < value.len() {
+        value.slice(value.len() - bytes_len, value.len())
+    } else {
+        value.extend(vec![e; bytes_len - value.len()]);
         value
     }
 }
@@ -104,6 +116,12 @@ pub fn build_table_entry(
     metadata: u64,
 ) -> TableEntry {
     let action = if !action_name.is_empty() {
+        let action_id = get_actions_id(p4info, action_name);
+        let action_id = if action_id.is_none() {
+            panic!("action with name '{}' not found.", action_name);
+        } else {
+            action_id.unwrap()
+        };
         let mut action = crate::proto::p4runtime::Action {
             action_id: get_actions_id(p4info, action_name).unwrap(),
             params: vec![],
@@ -215,6 +233,7 @@ pub fn get_action<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Action> {
         .filter(|t| t.preamble.is_some())
         .find(|t| {
             let pre = t.preamble.as_ref().unwrap();
+            dbg!(&pre);
             &pre.name == name || &pre.alias == name
         })
 }
@@ -292,7 +311,28 @@ pub fn get_match_field_pb(
                             },
                         )
                     }
-                    _ => panic!("what"),
+                    (Some(match_field::MatchType::Ternary), InnerValue::EXACT(v)) => {
+                        assert_eq!(byte_len, v.len());
+                        //                assert_eq!(byte_len, mask.len());
+                        let mask = adjust_value_with(
+                            Bytes::from_static(&[0xff, 0xff, 0xff, 0xff]),
+                            byte_len,
+                            0xff,
+                        );
+                        for i in 0..byte_len {
+                            assert!(mask.as_ref()[i] & v.as_ref()[i] == v.as_ref()[i]);
+                        }
+                        field_match::FieldMatchType::Ternary(
+                            crate::proto::p4runtime::field_match::Ternary {
+                                value: v.to_vec(),
+                                mask: mask.to_vec(),
+                            },
+                        )
+                    }
+                    other => {
+                        dbg!(other);
+                        panic!("what")
+                    }
                 }
             }
             match_field::Match::OtherMatchType(_) => panic!("unsupported"),

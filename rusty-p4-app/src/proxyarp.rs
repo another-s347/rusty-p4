@@ -155,12 +155,7 @@ pub fn on_arp_received<E>(
                     payload: arp_reply,
                 }
                 .write_to_bytes();
-                ctx.sender
-                    .unbounded_send(CoreRequest::PacketOut {
-                        connect_point: cp,
-                        packet,
-                    })
-                    .unwrap();
+                ctx.send_packet(cp, packet);
             } else {
                 let packet = Ethernet {
                     src: arp_sender_mac.as_ref(),
@@ -178,15 +173,13 @@ pub fn on_arp_received<E>(
                             if x.number == cp.port {
                                 continue;
                             }
-                            ctx.sender
-                                .unbounded_send(CoreRequest::PacketOut {
-                                    connect_point: ConnectPoint {
-                                        device: d.id,
-                                        port: x.number,
-                                    },
-                                    packet: packet.clone(),
-                                })
-                                .unwrap();
+                            ctx.send_packet(
+                                ConnectPoint {
+                                    device: d.id,
+                                    port: x.number,
+                                },
+                                packet.clone(),
+                            );
                         }
                     });
             }

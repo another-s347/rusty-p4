@@ -128,7 +128,7 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&C
             device: device.id,
             port
         };
-        let mut my_sender = ctx.sender.clone();
+        let mut my_sender = ctx.clone();
         let probe = new_probe(&cp);
         let mut interval = tokio::timer::Interval::new_interval(Duration::new(3,0));
         let (cancel,mut cancel_r) = tokio::sync::oneshot::channel();
@@ -137,10 +137,7 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&C
                 if cancel_r.try_recv().is_ok() {
                     break;
                 }
-                my_sender.send(CoreRequest::PacketOut {
-                    connect_point:cp,
-                    packet: probe.clone()
-                }).await.unwrap();
+                my_sender.send_packet(cp, probe.clone());
             }
         });
         linkprobe_per_ports.push(cancel);
