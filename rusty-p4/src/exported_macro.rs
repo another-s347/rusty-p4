@@ -264,7 +264,7 @@ macro_rules! flow_tablematches {
 #[macro_export]
 macro_rules! flow {
     (
-    pipe=$pipe:expr;
+    pipe=$pipe:literal;
     table=$table:expr;
     key={$($t:tt)*};
     action=$action_name:ident($($pt:tt)*);
@@ -276,7 +276,7 @@ macro_rules! flow {
                 matches:flow_tablematch!($($t)*)
             }),
             action: std::sync::Arc::new($crate::util::flow::FlowAction {
-                name:stringify!($action_name),
+                name:concat!($pipe,'.',stringify!($action_name)),
                 params:action_param!($($pt)*)
             }),
             metadata:0,
