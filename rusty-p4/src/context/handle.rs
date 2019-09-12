@@ -113,6 +113,15 @@ where
             .unwrap()
     }
 
+    pub fn add_device_object(&self, device: Device) {
+        self.sender
+            .unbounded_send(CoreRequest::AddDevice {
+                device,
+                reply: None,
+            })
+            .unwrap()
+    }
+
     pub fn add_device_with_pipeconf_id(
         &self,
         name: String,
