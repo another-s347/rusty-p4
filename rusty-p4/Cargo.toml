@@ -1,6 +1,6 @@
 [package]
 name = "rusty-p4"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
 license = "Apache-2.0"
