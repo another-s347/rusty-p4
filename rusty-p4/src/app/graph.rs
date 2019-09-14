@@ -1,206 +1,75 @@
 use crate::app::common::MergeResult;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Link};
+use petgraph::prelude::{EdgeRef, NodeIndex};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
-// index = x+y*n
-pub struct GraphBase<T> {
-    pub base: Vec<T>,
-    n_capacity: usize,
-    n_usage: usize,
-}
-
-impl<T> GraphBase<T>
-where
-    T: Default + Copy + Display,
-{
-    pub fn with_capacity(n: usize) -> GraphBase<T> {
-        GraphBase {
-            base: vec![T::default(); n * n],
-            n_capacity: n,
-            n_usage: 0,
-        }
-    }
-
-    pub fn with_capacity_and_usage(cap: usize, usage: usize) -> GraphBase<T> {
-        assert!(usage <= cap);
-        GraphBase {
-            base: vec![T::default(); cap * cap],
-            n_capacity: cap,
-            n_usage: usage,
-        }
-    }
-
-    pub fn get(&self, x: usize, y: usize) -> &T {
-        assert!(x < self.n_usage);
-        assert!(y < self.n_usage);
-        self.base.get(x + y * self.n_usage).unwrap()
-    }
-
-    pub fn get_mut(&mut self, x: usize, y: usize) -> &mut T {
-        assert!(x < self.n_usage);
-        assert!(y < self.n_usage);
-        self.base.get_mut(x + y * self.n_usage).unwrap()
-    }
-
-    pub fn set(&mut self, x: usize, y: usize, item: T) -> Result<(), ()> {
-        assert!(x < self.n_usage);
-        assert!(y < self.n_usage);
-        assert!(x + y * self.n_usage < self.n_capacity * self.n_capacity);
-        self.base[x + y * self.n_usage] = item;
-
-        Ok(())
-    }
-
-    fn reserve(&mut self, n: usize) {
-        let new_cap = self.n_capacity + n;
-        let addition = new_cap * new_cap - self.n_capacity * self.n_capacity;
-        self.base.reserve(addition);
-        self.n_capacity = new_cap;
-    }
-
-    pub fn incr_space(&mut self, n: usize) {
-        assert!(n + self.n_usage <= self.n_capacity);
-        let new_n_usage = self.n_usage + n;
-        if self.n_usage == 0 {
-            self.n_usage = new_n_usage;
-            return;
-        }
-        for y in (0..self.n_usage).rev() {
-            for x in (0..self.n_usage).rev() {
-                let old_index = x + y * self.n_usage;
-                let new_index = old_index + y * n;
-                self.base[new_index] = self.base[old_index];
-            }
-        }
-        self.n_usage = new_n_usage;
-    }
-
-    pub fn map_from<A, F>(other: &GraphBase<A>, map: F) -> GraphBase<T>
-    where
-        F: Fn(&A) -> T,
-    {
-        let n = other.n_usage;
-        let mut new_vec = Vec::with_capacity(other.n_capacity);
-        for i in 0..n * n {
-            new_vec.push(map(other.base.get(i).unwrap()));
-        }
-        GraphBase {
-            base: new_vec,
-            n_capacity: other.n_capacity,
-            n_usage: other.n_usage,
-        }
-    }
-}
-
-impl<T> Debug for GraphBase<T>
-where
-    T: Display + Default + Copy,
-{
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        writeln!(f, "n_usage: {}, n_cap: {}", self.n_usage, self.n_capacity);
-        for x in 0..self.n_usage {
-            for y in 0..self.n_usage {
-                write!(f, "{} ", self.get(x, y));
-            }
-            writeln!(f);
-        }
-        Ok(())
-    }
-}
-
-struct ShortestPathBuffer {
-    base: GraphBase<u8>,
-    dirty: bool,
-}
-
 #[derive(Debug)]
 pub struct DefaultGraph {
-    connectivity: GraphBase<u8>,
-    index_map: HashMap<DeviceID, usize>,
-    link_map: HashMap<(usize, usize), (Link, u8)>,
-    node_count: usize,
+    base: petgraph::Graph<DeviceID, u32>,
+    node_index: HashMap<DeviceID, petgraph::prelude::NodeIndex>,
+    edge_to_link: HashMap<petgraph::prelude::EdgeIndex, Link>,
+    link_to_edge: HashMap<Link, petgraph::prelude::EdgeIndex>,
 }
 
 impl DefaultGraph {
     pub fn new() -> DefaultGraph {
         DefaultGraph {
-            connectivity: GraphBase::with_capacity_and_usage(10, 5),
-            index_map: HashMap::new(),
-            link_map: HashMap::new(),
-            node_count: 0,
+            base: Default::default(),
+            node_index: HashMap::new(),
+            edge_to_link: HashMap::new(),
+            link_to_edge: HashMap::new(),
         }
     }
 
     pub fn add_device(&mut self, device: &Device) {
-        if self.index_map.contains_key(&device.id) {
+        if self.node_index.contains_key(&device.id) {
             return;
         }
-        self.index_map.insert(device.id, self.node_count);
-        self.node_count += 1;
-        if self.node_count > self.connectivity.n_usage {
-            self.connectivity
-                .incr_space(self.node_count - self.connectivity.n_usage);
-        }
+        let node = self.base.add_node(device.id);
+        self.node_index.insert(device.id, node);
     }
 
     pub fn remove_device(&mut self, device: &DeviceID) {
-        if !self.index_map.contains_key(device) {
-            return;
-        }
-        let index = self.index_map.remove(device).unwrap();
-        for y in 0..self.connectivity.n_usage {
-            self.connectivity.set(index, y, 0);
-            self.connectivity.set(y, index, 0);
+        if let Some(index) = self.node_index.remove(device) {
+            self.base.remove_node(index);
         }
     }
 
-    pub fn add_link(&mut self, link: &Link, cost: u8) -> MergeResult<()> {
-        let one = *self.index_map.get(&link.src.device).unwrap();
-        let two = *self.index_map.get(&link.dst.device).unwrap();
-        let key = (one, two);
-        let mut result = MergeResult::ADDED(());
-        if let Some((exist_link, exist_cost)) = self.link_map.get(&key) {
-            if exist_link != link && *exist_cost < cost {
-                return MergeResult::CONFLICT;
-            } else {
-                result = MergeResult::MERGED;
-            }
+    pub fn add_link(&mut self, link: &Link, cost: u32) -> MergeResult<()> {
+        if let Some(index) = self.link_to_edge.get(link) {
+            *self.base.edge_weight_mut(*index).unwrap() = cost;
+            MergeResult::MERGED
+        } else {
+            let src = *self.node_index.get(&link.src.device).unwrap();
+            let dst = *self.node_index.get(&link.dst.device).unwrap();
+            let index = self.base.add_edge(src, dst, cost);
+            self.link_to_edge.insert(*link, index);
+            self.edge_to_link.insert(index, *link);
+            MergeResult::ADDED(())
         }
-        self.link_map.insert(key, ((*link).clone(), cost));
-        self.connectivity.set(one, two, cost);
-        result
     }
 
     pub fn remove_link(&mut self, link: &Link) {
-        let one = self.index_map.get(&link.src.device);
-        if one.is_none() {
-            return;
+        if let Some(index) = self.link_to_edge.remove(link) {
+            self.edge_to_link.remove(&index);
+            self.base.remove_edge(index);
         }
-        let two = self.index_map.get(&link.dst.device);
-        if two.is_none() {
-            return;
-        }
-        let one = *one.unwrap();
-        let two = *two.unwrap();
-        let key = (one, two);
-        self.link_map.remove(&key);
-        self.connectivity.set(one, two, 0);
     }
 
     pub fn get_path(&self, src: DeviceID, dst: DeviceID) -> Option<Path> {
-        let src = *self.index_map.get(&src).unwrap();
-        let dst = *self.index_map.get(&dst).unwrap();
+        let src = *self.node_index.get(&src).unwrap();
+        let dst = *self.node_index.get(&dst).unwrap();
 
         let mut dist = HashMap::new();
         dist.insert(src, 0);
         let mut prev = HashMap::new();
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::with_capacity(self.base.node_count());
 
-        let mut vertx_heap = BinaryHeap::new();
+        let mut vertx_heap = BinaryHeap::with_capacity(self.base.node_count());
         vertx_heap.push(ReversePrioritywithVertx {
             vertx: src,
             priority: 0,
@@ -211,17 +80,20 @@ impl DefaultGraph {
                 continue;
             }
 
-            for i in 0..self.node_count {
-                if *self.connectivity.get(vertx, i) != 0 {
-                    let cost = *self.connectivity.get(vertx, i);
+            for i in self.base.edges(vertx) {
+                if *i.weight() != 0 {
+                    let cost = *i.weight();
                     let new_dist = priority + cost;
-                    let is_shorter = dist.get(&i).map_or(true, |&current| new_dist < current);
+                    let target = i.target();
+                    let is_shorter = dist
+                        .get(&target)
+                        .map_or(true, |&current| new_dist < current);
 
                     if is_shorter {
-                        dist.insert(i, new_dist);
-                        prev.insert(i, vertx);
+                        dist.insert(target, new_dist);
+                        prev.insert(target, i);
                         vertx_heap.push(ReversePrioritywithVertx {
-                            vertx: i,
+                            vertx: target,
                             priority: new_dist,
                         })
                     }
@@ -234,18 +106,20 @@ impl DefaultGraph {
             let mut two = dst;
             let mut c = 0;
             loop {
-                let key = (one, two);
-                let (link, cost) = self.link_map.get(&key).unwrap();
+                let link = self.edge_to_link.get(&p.id()).unwrap();
                 lists.push(link.clone());
-                c += cost;
-                if one == src {
+                c += p.weight();
+                if one.source() == src {
                     break;
                 }
-                two = one;
+                two = one.source();
                 one = *prev.get(&two).unwrap();
             }
             lists.reverse();
-            Some(Path { links: lists })
+            Some(Path {
+                links: lists,
+                weight: c,
+            })
         } else {
             None
         }
@@ -255,12 +129,13 @@ impl DefaultGraph {
 #[derive(Debug)]
 pub struct Path {
     pub links: Vec<Link>,
+    pub weight: u32,
 }
 
 #[derive(Eq)]
 struct ReversePrioritywithVertx {
-    pub vertx: usize,
-    pub priority: u8,
+    pub vertx: NodeIndex,
+    pub priority: u32,
 }
 
 impl Ord for ReversePrioritywithVertx {
@@ -280,146 +155,3 @@ impl PartialEq for ReversePrioritywithVertx {
         self.priority == other.priority
     }
 }
-
-fn test_incr() {
-    let mut graph = GraphBase::with_capacity(10);
-    graph.incr_space(3);
-    for y in 0..3 {
-        for x in 0..3 {
-            graph.set(x, y, x + y * 3);
-        }
-    }
-    graph.incr_space(2);
-    for x in 0..3 {
-        for y in 0..3 {
-            println!("checking x={}, y={}", x, y);
-            assert_eq!(x + y * 3, *graph.get(x, y));
-        }
-    }
-}
-
-//#[test]
-//fn test_defaultgraph() {
-//    let mut graph: DefaultGraph = DefaultGraph::new();
-//    let d0 = Device {
-//        name: "0".to_string(),
-//        ports: Default::default(),
-//        typ: DeviceType::VIRTUAL,
-//        device_id: 0,
-//        index: 0,
-//    };
-//    let cp0 = ConnectPoint {
-//        device: "0".to_string(),
-//        port: 1,
-//    };
-//    let d1 = Device {
-//        name: "1".to_string(),
-//        ports: Default::default(),
-//        typ: DeviceType::VIRTUAL,
-//        device_id: 0,
-//        index: 0,
-//    };
-//    let cp1 = ConnectPoint {
-//        device: "1".to_string(),
-//        port: 1,
-//    };
-//    let d2 = Device {
-//        name: "2".to_string(),
-//        ports: Default::default(),
-//        typ: DeviceType::VIRTUAL,
-//        device_id: 0,
-//        index: 0,
-//    };
-//    let cp2 = ConnectPoint {
-//        device: "2".to_string(),
-//        port: 1,
-//    };
-//    let d3 = Device {
-//        name: "3".to_string(),
-//        ports: Default::default(),
-//        typ: DeviceType::VIRTUAL,
-//        device_id: 0,
-//        index: 0,
-//    };
-//    let cp3 = ConnectPoint {
-//        device: "3".to_string(),
-//        port: 1,
-//    };
-//    let d4 = Device {
-//        name: "4".to_string(),
-//        ports: Default::default(),
-//        typ: DeviceType::VIRTUAL,
-//        device_id: 0,
-//        index: 0,
-//    };
-//    let cp4 = ConnectPoint {
-//        device: "4".to_string(),
-//        port: 1,
-//    };
-//    graph.add_device(&d0);
-//    graph.add_device(&d1);
-//    graph.add_device(&d2);
-//    graph.add_device(&d3);
-//    graph.add_device(&d4);
-//    let link = Link {
-//        src: cp0.clone(),
-//        dst: cp1.clone(),
-//    };
-//    graph.add_link(
-//        &Link {
-//            src: cp0.clone(),
-//            dst: cp1.clone(),
-//        },
-//        10,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp0.clone(),
-//            dst: cp3.clone(),
-//        },
-//        5,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp1.clone(),
-//            dst: cp3.clone(),
-//        },
-//        3,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp1.clone(),
-//            dst: cp2.clone(),
-//        },
-//        1,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp2.clone(),
-//            dst: cp4.clone(),
-//        },
-//        4,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp3.clone(),
-//            dst: cp2.clone(),
-//        },
-//        9,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp3.clone(),
-//            dst: cp4.clone(),
-//        },
-//        2,
-//    );
-//    graph.add_link(
-//        &Link {
-//            src: cp4.clone(),
-//            dst: cp0.clone(),
-//        },
-//        7,
-//    );
-//    dbg!(graph.get_path(&d0, &d2));
-//}

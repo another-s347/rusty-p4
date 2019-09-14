@@ -9,8 +9,8 @@ use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
 use crate::util::flow::*;
 use crate::util::value::MAC;
-use failure::_core::cell::RefCell;
 use log::{info, warn};
+use std::cell::RefCell;
 use std::convert::TryInto;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -66,7 +66,7 @@ impl CommonState {
         }
     }
 
-    pub fn add_link(&mut self, link: Link, cost: u8) -> MergeResult<()> {
+    pub fn add_link(&mut self, link: Link, cost: u32) -> MergeResult<()> {
         let result = self.graph.add_link(&link, cost);
         match result {
             MergeResult::CONFLICT => {}
