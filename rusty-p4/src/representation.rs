@@ -17,8 +17,10 @@ pub struct Device {
     pub index: usize,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DeviceID(pub u64);
+
+impl petgraph::graphmap::NodeTrait for DeviceID {}
 
 impl ToString for DeviceID {
     fn to_string(&self) -> String {
