@@ -6,11 +6,12 @@ use std::sync::{Arc, Mutex, RwLock};
 use crate::app::P4app;
 use crate::entity::UpdateType;
 use crate::error::{ContextError, ContextErrorKind};
-use crate::event::{CommonEvents, CoreEvent, CoreRequest, Event, PacketReceived};
-use crate::p4rt::bmv2::Bmv2SwitchConnection;
+use crate::event::{
+    CommonEvents, CoreEvent, CoreRequest, Event, NorthboundRequest, PacketReceived,
+};
+use crate::p4rt::bmv2::{Bmv2SwitchConnection, Bmv2ConnectionOption};
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
-use crate::proto::p4runtime::P4RuntimeClient;
 use crate::proto::p4runtime::{
     stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
@@ -25,7 +26,6 @@ use failure::ResultExt;
 //use futures::sink::Sink;
 //use futures::stream::Stream;
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::compat::*;
 use futures::future::FusedFuture;
 use futures::future::Future;
 use futures::future::FutureExt;
@@ -36,7 +36,6 @@ use futures::task::Poll;
 //use futures03::task::Context;
 //use futures03::task::Poll;
 use futures::core_reexport::task::Context;
-use grpcio::{StreamingCallSink, WriteFlags};
 use log::{debug, error, info, trace, warn};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
@@ -44,9 +43,13 @@ use tokio::runtime::Runtime;
 use super::Context as AppContext;
 use super::ContextHandle;
 
+type P4RuntimeClient =
+    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+
 pub struct ContextDriver<E, T> {
     pub core_request_receiver: UnboundedReceiver<CoreRequest<E>>,
     pub event_receiver: UnboundedReceiver<CoreEvent<E>>,
+    pub request_receiver: UnboundedReceiver<NorthboundRequest>,
     pub app: T,
     pub ctx: AppContext<E>,
 }
@@ -97,6 +100,14 @@ where
                         _ => {}
                     }
                 }
+                northbound_request = self.request_receiver.next() => {
+                    match northbound_request {
+                        Some(r) => {
+                            self.app.on_request(r,&handle);
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
     }
@@ -120,13 +131,19 @@ where
                 }
                 let pipeconf = pipeconf_obj.unwrap().clone();
                 let bmv2connection =
-                    Bmv2SwitchConnection::new(name, socket_addr, device_id, device.id);
+                    Bmv2SwitchConnection::try_new(name, socket_addr, Bmv2ConnectionOption {
+                        p4_device_id: device_id,
+                        inner_device_id: Some(device.id.0),
+                        ..Default::default()
+                    }).await;
                 let result = ctx.add_connection(bmv2connection, &pipeconf).await;
                 if result.is_err() {
                     error!(target:"context","add {} connection fail: {:?}",name,result.err().unwrap());
-                    ctx.event_sender.send(CoreEvent::Event(
-                        CommonEvents::DeviceLost(device.id).into_e(),
-                    ));
+                    ctx.event_sender
+                        .send(CoreEvent::Event(
+                            CommonEvents::DeviceLost(device.id).into_e(),
+                        ))
+                        .await;
                     return false;
                 }
             }

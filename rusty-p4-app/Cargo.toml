@@ -11,10 +11,10 @@ description = "Sample app collection for rusty-p4."
 
 [dependencies]
 bytes = "0.4.12"
-futures = { package="futures-preview", version = "0.3.0-alpha.18", features = ["async-await", "nightly", "compat"]}
+futures-preview = { version = "0.3.0-alpha.19", features = ["async-await", "unstable"]}
 hyper = "0.13.0-alpha.1"
 rusty-p4 = { path="../rusty-p4" }
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version="0.2.0-alpha.4" , features = ["rt-full"] }
+tokio = { version="0.2.0-alpha.6" , features = ["rt-full"] }

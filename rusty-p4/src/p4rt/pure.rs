@@ -15,7 +15,6 @@ use byteorder::ByteOrder;
 use bytes::Bytes;
 use failure::ResultExt;
 use futures::{Future, Sink};
-use grpcio::{Channel, ClientDuplexReceiver, StreamingCallSink, WriteFlags};
 use nom::dbg_dmp;
 use rusty_p4_proto::proto::v1::{
     Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,

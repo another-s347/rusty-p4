@@ -90,9 +90,9 @@ pub async fn main() {
     });
     let app = app_builder.build();
 
-    let (mut context,driver) = Context::try_new(pipeconfs, app, ContextConfig::default()).await.unwrap();
+    let (mut context,driver) = Context::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
 
-    context.get_handle().add_device("s1".to_string(),"127.0.0.1:50051".to_string(),1,"benchmark");
+    context.add_device("s1".to_string(),"127.0.0.1:50051".to_string(),1,"benchmark");
 
     driver.run_to_end().await;
 }
