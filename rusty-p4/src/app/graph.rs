@@ -9,7 +9,7 @@ use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct DefaultGraph {
-    base: petgraph::Graph<DeviceID, u32>,
+    base: petgraph::stable_graph::StableGraph<DeviceID, u32>,
     node_index: HashMap<DeviceID, petgraph::prelude::NodeIndex>,
     edge_to_link: HashMap<petgraph::prelude::EdgeIndex, Link>,
     link_to_edge: HashMap<Link, petgraph::prelude::EdgeIndex>,
