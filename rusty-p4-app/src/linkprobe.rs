@@ -18,8 +18,9 @@ use rusty_p4::representation::DeviceType;
 use tokio::sync::oneshot::Sender;
 use rusty_p4::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use std::any::Any;
-use rusty_p4::app::async_app::AsyncApp;
 use rusty_p4::util::flow::Flow;
+use rusty_p4::app::P4app;
+use async_trait::async_trait;
 
 pub struct LinkProbeLoader {
     interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
@@ -56,8 +57,9 @@ impl LinkProbeLoader {
     }
 }
 
-impl<E> AsyncApp<E> for LinkProbeState where E:Event {
-    fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<E>) -> Option<PacketReceived> {
+#[async_trait]
+impl<E> P4app<E> for LinkProbeState where E:Event {
+    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut ContextHandle<E>) -> Option<PacketReceived> {
         match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
             Some(ref ethernet) if ethernet.ether_type==0x861 => {
                 let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload);
@@ -79,7 +81,7 @@ impl<E> AsyncApp<E> for LinkProbeState where E:Event {
         Some(packet)
     }
 
-    fn on_event(&self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+    async fn on_event(&mut self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
         match event.try_to_common() {
             Some(CommonEvents::DeviceAdded(device)) => {
                 on_device_added(self,device,ctx);

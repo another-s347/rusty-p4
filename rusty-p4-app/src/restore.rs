@@ -1,4 +1,3 @@
-use rusty_p4::app::async_app::AsyncApp;
 use rusty_p4::app::P4app;
 use rusty_p4::context::{Context, ContextHandle};
 use rusty_p4::event::CommonEvents;
@@ -13,6 +12,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::sync::{Arc, Mutex};
+use async_trait::async_trait;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RestoreState {
@@ -27,11 +27,12 @@ impl RestoreState {
     }
 }
 
+#[async_trait]
 impl<E> P4app<E> for Restore
 where
     E: Event,
 {
-    fn on_start(self: &mut Self, ctx: &ContextHandle<E>) {
+    async fn on_start(self: &mut Self, ctx: &mut ContextHandle<E>) {
         self.file.seek(SeekFrom::Start(0));
         self.file.set_len(0);
         serde_json::to_writer_pretty(&mut self.file, &self.state).unwrap();
@@ -48,7 +49,7 @@ where
         }
     }
 
-    fn on_event(&mut self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+    async fn on_event(&mut self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
         match event.try_to_common() {
             Some(CommonEvents::DeviceAdded(device)) if device.typ.is_master() => {
                 if !self.state.devices.contains_key(&device.id) {

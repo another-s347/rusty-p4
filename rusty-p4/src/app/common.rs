@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
-
-use crate::app::async_app::AsyncAppsBuilder;
+use async_trait::async_trait;
+//use crate::app::async_app::AsyncAppsBuilder;
 use crate::app::graph::DefaultGraph;
-use crate::app::sync_app::SyncAppsBuilder;
 use crate::app::P4app;
 use crate::context::ContextHandle;
 use crate::event::{CommonEvents, Event, PacketReceived};
@@ -14,8 +13,15 @@ use std::cell::RefCell;
 use std::convert::TryInto;
 use std::rc::Rc;
 use std::sync::Arc;
+use crate::service::{Service};
+use parking_lot::Mutex;
 
+#[derive(Clone)]
 pub struct CommonState {
+    pub inner:Arc<Mutex<CommonStateInner>>
+}
+
+pub struct CommonStateInner {
     pub devices: HashMap<DeviceID, Device>,
     pub flows: HashMap<u64, HashSet<Flow>>,
     pub hosts: HashSet<Host>,
@@ -26,16 +32,20 @@ pub struct CommonState {
 impl CommonState {
     pub fn new() -> CommonState {
         CommonState {
-            devices: HashMap::new(),
-            flows: HashMap::new(),
-            hosts: HashSet::new(),
-            graph: DefaultGraph::new(),
-            links: HashSet::new(),
+            inner: Arc::new(Mutex::new(
+                CommonStateInner {
+                    devices: HashMap::new(),
+                    flows: HashMap::new(),
+                    hosts: HashSet::new(),
+                    graph: DefaultGraph::new(),
+                    links: HashSet::new(),
+                }
+            ))
         }
     }
 }
 
-impl CommonState {
+impl CommonStateInner {
     pub fn merge_device(&mut self, mut info: &Device) -> MergeResult<DeviceID> {
         let id = info.id;
         if let Some(pre) = self.devices.get_mut(&id) {
@@ -100,24 +110,26 @@ pub enum MergeResult<T> {
     CONFLICT,
 }
 
+#[async_trait]
 impl<E> P4app<E> for CommonState
 where
     E: Event,
 {
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
         if let Some(common) = event.try_to_common() {
+            let mut inner = self.inner.lock();
             match common {
                 CommonEvents::DeviceAdded(device) => {
-                    if self.devices.contains_key(&device.id) {
+                    if inner.devices.contains_key(&device.id) {
                         None
                     } else {
-                        self.graph.add_device(&device);
-                        self.devices.insert(device.id, device.clone());
+                        inner.graph.add_device(&device);
+                        inner.devices.insert(device.id, device.clone());
                         Some(event)
                     }
                 }
                 CommonEvents::DeviceUpdate(device) => {
-                    let result = self.merge_device(device);
+                    let result = inner.merge_device(device);
                     match result {
                         MergeResult::ADDED(name) => Some(event),
                         MergeResult::MERGED => Some(event),
@@ -125,20 +137,20 @@ where
                     }
                 }
                 CommonEvents::DeviceLost(deviceID) => {
-                    if let Some(device) = self.devices.remove(&deviceID) {
-                        self.hosts
+                    if let Some(device) = inner.devices.remove(&deviceID) {
+                        inner.hosts
                             .iter()
                             .filter(|host| host.location.device == *deviceID)
                             .for_each(|host| {
                                 ctx.send_event(CommonEvents::HostLost(*host).into_e());
                             });
-                        self.links
+                        inner.links
                             .iter()
                             .filter(|x| x.src.device == *deviceID || x.dst.device == *deviceID)
                             .for_each(|link| {
                                 ctx.send_event(CommonEvents::LinkLost(*link).into_e());
                             });
-                        self.graph.remove_device(&deviceID);
+                        inner.graph.remove_device(&deviceID);
                         info!(target:"extend","device removed {}", device.name);
                         Some(event)
                     } else {
@@ -147,7 +159,7 @@ where
                     }
                 }
                 CommonEvents::HostDetected(host) => {
-                    let result = self.merge_host(host);
+                    let result = inner.merge_host(host);
                     match result {
                         MergeResult::ADDED(host) => {
                             info!(target:"extend","host detected {:?}",host);
@@ -158,7 +170,7 @@ where
                     }
                 }
                 CommonEvents::LinkDetected(link) => {
-                    let result = self.add_link(link.clone(), 1);
+                    let result = inner.add_link(link.clone(), 1);
                     match result {
                         MergeResult::ADDED(()) => Some(event),
                         MergeResult::CONFLICT => None,
@@ -166,8 +178,8 @@ where
                     }
                 }
                 CommonEvents::LinkLost(link) => {
-                    if self.links.remove(&link) {
-                        self.graph.remove_link(&link);
+                    if inner.links.remove(&link) {
+                        inner.graph.remove_link(&link);
                         info!(target:"extend","link removed {:?}", link);
                         return Some(event);
                     } else {
@@ -176,7 +188,7 @@ where
                     }
                 }
                 CommonEvents::HostLost(host) => {
-                    if self.hosts.remove(&host) {
+                    if inner.hosts.remove(&host) {
                         info!(target:"extend","host removed {:?}", &host);
                         Some(event)
                     } else {
@@ -192,13 +204,12 @@ where
     }
 }
 
-fn test<E>()
-where
-    E: Event,
-{
-    let mut async_builder: AsyncAppsBuilder<E> = super::async_app::AsyncAppsBuilder::new();
-    let commonstate_async_service =
-        async_builder.with_sync_service(1, "common state", CommonState::new());
-    let mut sync_builder: SyncAppsBuilder<E> = super::sync_app::SyncAppsBuilder::new();
-    let commonstate_service = sync_builder.with_service(1, "common state", CommonState::new());
+impl Service for CommonState {
+    type ServiceType = CommonState;
+
+    fn get_service(&mut self) -> Self::ServiceType {
+        CommonState {
+            inner: self.inner.clone()
+        }
+    }
 }

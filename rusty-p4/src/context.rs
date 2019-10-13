@@ -82,9 +82,9 @@ impl<E> Context<E>
             removed_id_to_name: Arc::new(RwLock::new(HashMap::new())),
             config,
         };
-        let context_handle = obj.get_handle();
+        let mut context_handle = obj.get_handle();
 
-        app.on_start(&context_handle);
+        app.on_start(&mut context_handle).await;
 
         let northbound_channel = if let Some(r) = northbound_channel {
             r

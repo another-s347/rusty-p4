@@ -1,14 +1,13 @@
 use bytes::Bytes;
 use futures::prelude::*;
 use log::{debug, error, info, trace, warn};
-use rusty_p4::app::async_app::AsyncApp;
 use rusty_p4::app::common::CommonState;
 use rusty_p4::app::P4app;
 use rusty_p4::context::ContextHandle;
 use rusty_p4::event::{CommonEvents, CoreRequest, Event, PacketReceived};
 use rusty_p4::p4rt::pipeconf::PipeconfID;
 use rusty_p4::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
-use rusty_p4::service::{Service, ServiceStorage};
+use rusty_p4::service::{Service};
 use rusty_p4::util::flow::*;
 use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::util::packet::Packet;
@@ -17,11 +16,12 @@ use rusty_p4::util::value::{Value, EXACT, MAC};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use async_trait::async_trait;
 
 #[derive(Clone)]
 pub struct ProxyArpState {
     pub interceptor: Arc<HashMap<PipeconfID, Box<dyn ArpInterceptor>>>,
-    pub commonstate_service: Service<CommonState>,
+    pub commonstate_service: CommonState,
 }
 
 pub struct ProxyArpLoader {
@@ -49,7 +49,7 @@ impl ProxyArpLoader {
         self
     }
 
-    pub fn build(self, commonstate_service: Service<CommonState>) -> ProxyArpState {
+    pub fn build(self, commonstate_service: CommonState) -> ProxyArpState {
         ProxyArpState {
             interceptor: Arc::new(self.interceptor),
             commonstate_service,
@@ -57,18 +57,19 @@ impl ProxyArpLoader {
     }
 }
 
+#[async_trait]
 impl<E> P4app<E> for ProxyArpState
 where
     E: Event,
 {
-    fn on_packet(
+    async fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
-        ctx: &ContextHandle<E>,
+        ctx: &mut ContextHandle<E>,
     ) -> Option<PacketReceived> {
         match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
             Some(ethernet) if ethernet.ether_type == 0x806 => {
-                on_arp_received(ethernet, packet.from, &self.commonstate_service.get(), ctx);
+                on_arp_received(ethernet, packet.from, &self.commonstate_service, ctx);
                 return None;
             }
             _ => {}
@@ -76,7 +77,7 @@ where
         Some(packet)
     }
 
-    fn on_event(self: &mut Self, event: E, ctx: &ContextHandle<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
         match event.try_to_common() {
             Some(CommonEvents::DeviceAdded(device)) => {
                 let interceptor = match &device.typ {
@@ -120,6 +121,7 @@ pub fn on_arp_received<E>(
         error!(target:"proxyarp","invalid arp packet");
         return;
     }
+    let state = state.inner.lock();
     let arp = arp.unwrap();
     let arp_sender_mac = MAC::from_slice(arp.sender_mac);
     match arp.opcode {
