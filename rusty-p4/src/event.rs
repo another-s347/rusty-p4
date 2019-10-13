@@ -70,3 +70,17 @@ pub enum CommonEvents {
     HostLost(Host),
     Other,
 }
+
+pub struct NorthboundRequest {
+    pub name: String,
+    pub path: String,
+    pub args: NorthboundArgType,
+    pub payload: Option<Bytes>,
+    pub reply: tokio::sync::oneshot::Sender<Result<Bytes, i32>>,
+}
+
+pub enum NorthboundArgType {
+    Form(String),
+    Json(String),
+    Binary(Bytes),
+}
