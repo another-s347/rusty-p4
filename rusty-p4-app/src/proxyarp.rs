@@ -110,7 +110,7 @@ pub fn on_arp_received<E>(
     data: Ethernet<&[u8]>,
     cp: ConnectPoint,
     state: &CommonState,
-    ctx: &ContextHandle<E>,
+    ctx: &mut ContextHandle<E>,
 ) where
     E: Event,
 {

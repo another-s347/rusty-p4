@@ -28,19 +28,23 @@ use rusty_p4::event::{CommonEvents, PacketReceived};
 use rusty_p4::app::common::CommonState;
 use log::{info};
 use bytes::Bytes;
-use rusty_p4::app::async_app::{AsyncAppsBuilder, AsyncApp};
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use std::sync::{RwLock, Arc};
 use std::time::{Instant, Duration};
 use tokio::timer::Interval;
+use async_trait::async_trait;
+use rusty_p4::app::P4app;
 
 pub struct Benchmark {
     bytes:Arc<AtomicUsize>,
 }
 
-impl AsyncApp<CommonEvents> for Benchmark {
-    fn on_start(&self, ctx: &ContextHandle<CommonEvents>) {
+
+#[async_trait]
+impl P4app<CommonEvents> for Benchmark {
+    async fn on_start(&mut self, ctx: &mut ContextHandle<CommonEvents>) {
         let bytes = self.bytes.clone();
+        //println("started");
         tokio::spawn(async move {
             let mut interval = Interval::new_interval(Duration::from_secs(1));
             loop {
@@ -51,7 +55,7 @@ impl AsyncApp<CommonEvents> for Benchmark {
         });
     }
 
-    fn on_packet(&self, packet: PacketReceived, ctx: &ContextHandle<CommonEvents>) -> Option<PacketReceived> {
+    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut ContextHandle<CommonEvents>) -> Option<PacketReceived> {
 //        println!("transfer");
         let b = packet.packet.payload.len();
         self.bytes.fetch_add(b, Ordering::AcqRel);
@@ -59,13 +63,13 @@ impl AsyncApp<CommonEvents> for Benchmark {
             ctx.send_packet(ConnectPoint {
                 device: packet.from.device,
                 port: 2
-            }, Bytes::from(packet.into_packet_bytes()));
+            }, Bytes::from(packet.into_packet_bytes())).await;
         }
         else if packet.from.port==2 {
             ctx.send_packet(ConnectPoint {
                 device: packet.from.device,
                 port: 1
-            }, Bytes::from(packet.into_packet_bytes()));
+            }, Bytes::from(packet.into_packet_bytes())).await;
         }
         None
     }
@@ -84,11 +88,9 @@ pub async fn main() {
     let mut pipeconfs = HashMap::new();
     pipeconfs.insert(pipeconf.get_id(),pipeconf);
 
-    let mut app_builder = AsyncAppsBuilder::new();
-    app_builder.with(1,"benchmark",Benchmark {
+    let app = Benchmark {
         bytes: Arc::new(AtomicUsize::new(0)),
-    });
-    let app = app_builder.build();
+    };
 
     let (mut context,driver) = Context::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
 

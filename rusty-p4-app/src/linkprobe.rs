@@ -101,7 +101,7 @@ impl<E> P4app<E> for LinkProbeState where E:Event {
     }
 }
 
-pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&ContextHandle<E>) where E:Event
+pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&mut ContextHandle<E>) where E:Event
 {
     let interceptor = match &device.typ {
         DeviceType::MASTER {

@@ -92,10 +92,10 @@ where
                 event = self.event_receiver.next() => {
                     match event {
                         Some(CoreEvent::PacketReceived(packet)) => {
-                            self.app.on_packet(packet, &mut handle);
+                            self.app.on_packet(packet, &mut handle).await;
                         }
                         Some(CoreEvent::Event(e)) => {
-                            self.app.on_event(e, &mut handle);
+                            self.app.on_event(e, &mut handle).await;
                         }
                         _ => {}
                     }
@@ -103,7 +103,7 @@ where
                 northbound_request = self.request_receiver.next() => {
                     match northbound_request {
                         Some(r) => {
-                            self.app.on_request(r,&mut handle);
+                            self.app.on_request(r,&mut handle).await;
                         }
                         _ => {}
                     }

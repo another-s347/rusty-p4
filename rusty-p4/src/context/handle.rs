@@ -34,7 +34,7 @@ use tokio::runtime::Runtime;
 #[derive(Clone)]
 pub struct ContextHandle<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
-    connections: Arc<HashMap<DeviceID, Connection>>,
+    connections: HashMap<DeviceID, Connection>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
@@ -44,7 +44,7 @@ where
 {
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
-        connections: Arc<HashMap<DeviceID, Connection>>,
+        connections: HashMap<DeviceID, Connection>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> ContextHandle<E> {
         ContextHandle {
@@ -54,35 +54,30 @@ where
         }
     }
 
-    pub async fn insert_flow(&self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
+    pub async fn insert_flow(&mut self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
         self.set_flow(flow, device, UpdateType::Insert).await
     }
 
     pub async fn set_flow(
-        &self,
+        &mut self,
         mut flow: Flow,
         device: DeviceID,
         update: UpdateType,
     ) -> Result<Flow, ContextError> {
         let hash = crate::util::hash(&flow);
-        let connection = self.connections.get(&device).ok_or(ContextError::from(
+        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
         let table_entry = flow.to_table_entry(&connection.pipeconf, hash);
-        if let Some(c) = self.connections.get(&device) {
-            let mut c = c.clone();
-            let request =
-                new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
-            match c.p4runtime_client.write(tonic::Request::new(request)).await {
-                Ok(response) => {
-                    debug!(target:"context","set entity response: {:?}",response);
-                }
-                Err(e) => {
-                    error!(target:"context","grpc send error: {:?}",e);
-                }
+        let request =
+            new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
+        match connection.p4runtime_client.write(tonic::Request::new(request)).await {
+            Ok(response) => {
+                debug!(target:"context","set entity response: {:?}",response);
             }
-        } else {
-            error!(target:"context","SetEntity error: connection not found for device {:?}",&device);
+            Err(e) => {
+                error!(target:"context","grpc send error: {:?}",e);
+            }
         }
         flow.metadata = hash;
         Ok(flow)
@@ -158,13 +153,11 @@ where
         self.sender.unbounded_send(request).unwrap();
     }
 
-    pub fn send_packet(&self, to: ConnectPoint, packet: Bytes) {
-        if let Some(c) = self.connections.get(&to.device) {
-            let mut c = c.clone();
+    pub async fn send_packet(&mut self, to: ConnectPoint, packet: Bytes) {
+        if let Some(c) = self.connections.get_mut(&to.device) {
             let request = new_packet_out_request(&c.pipeconf, to.port, packet);
-            let result = c.send_stream_request(request);
-            if result.is_err() {
-                error!(target:"context","packet out err {:?}", result.err().unwrap());
+            if let Err(err) = c.send_stream_request(request).await {
+                error!(target:"context","packet out err {:?}", err);
             }
         } else {
             // find device name
@@ -173,14 +166,14 @@ where
     }
 
     pub async fn set_entity<T: crate::entity::ToEntity>(
-        &self,
+        &mut self,
         device: DeviceID,
         update_type: UpdateType,
         entity: &T,
     ) -> Result<(), ContextError> {
-        let mut connection = self.connections.get(&device).ok_or(ContextError::from(
+        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
-        ))?.clone();
+        ))?;
         if let Some(entity) = entity.to_proto_entity(&connection.pipeconf) {
             let request = new_set_entity_request(1, entity, update_type.into());
             match connection.p4runtime_client.write(tonic::Request::new(request)).await {

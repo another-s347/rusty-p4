@@ -108,7 +108,7 @@ impl<E> Context<E>
         where
             E: Event,
     {
-        let conns = self.connections.read().unwrap().clone();
+        let conns = self.connections.read().unwrap().as_ref().clone();
         ContextHandle::new(
             self.core_channel_sender.clone(),
             conns,
@@ -170,6 +170,7 @@ impl<E> Context<E>
                     }
                 }
             }
+            println!("done");
         });
 
         let error_sender = self.event_sender.clone();
@@ -201,9 +202,10 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn send_stream_request(&mut self, request: StreamMessageRequest) -> Result<(), ContextError> {
+    pub async fn send_stream_request(&mut self, request: StreamMessageRequest) -> Result<(), ContextError> {
         self.sink
-            .try_send(request)
+            .send(request)
+            .await
             .context(ContextErrorKind::DeviceNotConnected {
                 device: DeviceID(self.device_id),
             })?;
