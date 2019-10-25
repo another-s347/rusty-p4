@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use async_trait::async_trait;
 //use crate::app::async_app::ExampleAsyncApp;
 //use crate::app::sync_app::AsyncWrap;
 use crate::context::ContextHandle;
@@ -85,15 +85,16 @@ impl P4app<CommonEvents> for Example {
         match event {
             CommonEvents::DeviceAdded(ref device) => {
                 info!(target:"Example App","device up {:?}", device);
-                let flow = flow! {
-                    pipe="MyIngress";
-                    table="ipv4_lpm";
-                    key={
-                        "hdr.ipv4.dstAddr"=>ip"10.0.2.2"/32
-                    };
-                    action=myTunnel_ingress(dst_id:100u32);
-                };
-                ctx.insert_flow(flow, device.id);
+                //                let flow = flow! {
+                //                    pipe:"MyIngress",
+                //                    table:"ipv4_lpm" {
+                //                        "hdr.ipv4.dstAddr"=>ipv4!(10.0.2.2)/32
+                //                    }
+                //                    action:"myTunnel_ingress"{
+                //                        dst_id:100u32
+                //                    }
+                //                };
+                //                ctx.insert_flow(flow, device.id);
             }
             _ => {}
         }

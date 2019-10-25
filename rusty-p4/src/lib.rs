@@ -6,8 +6,14 @@
 #[macro_use]
 extern crate failure;
 
-#[macro_use]
-pub mod exported_macro;
+use proc_macro_hack::proc_macro_hack;
+
+#[proc_macro_hack(support_nested)]
+pub use macro_impl::flow;
+#[proc_macro_hack(support_nested)]
+pub use macro_impl::flow_match;
+//#[macro_use]
+//pub mod exported_macro;
 pub mod app;
 pub mod context;
 pub mod entity;

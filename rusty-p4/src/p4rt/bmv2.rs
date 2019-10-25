@@ -75,7 +75,7 @@ async fn drive_bmv2_with_master_update(
     mut response_sender:tokio::sync::mpsc::Sender<StreamMessageResponse>,
     m_sender:tokio::sync::oneshot::Sender<MasterArbitrationUpdate>) {
     let mut m_sender = Some(m_sender);
-    let mut response = client.stream_channel(tonic::Request::new(request_receiver.map(|s|Ok(s)))).await.unwrap().into_inner();
+    let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();
     while let Some(r) = response.next().await {
         match r {
             Ok(StreamMessageResponse {
@@ -101,7 +101,7 @@ async fn drive_bmv2(
     request_receiver:tokio::sync::mpsc::Receiver<StreamMessageRequest>,
     mut response_sender:tokio::sync::mpsc::Sender<StreamMessageResponse>,
 ) {
-    let mut response = client.stream_channel(tonic::Request::new(request_receiver.map(|s|Ok(s)))).await.unwrap().into_inner();
+    let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();
     response.map_err(|e|()).forward(response_sender.sink_map_err(|e|())).await;
 }
 
@@ -173,7 +173,7 @@ impl Bmv2SwitchConnection {
         let request = super::pure::new_packet_out_request(pipeconf, egress_port, packet);
         self.client
             .stream_channel(tonic::Request::new(futures::stream::once(async {
-                Ok(request)
+                request
             })))
             .await
             .context(ConnectionErrorKind::GRPCSendError)?;
