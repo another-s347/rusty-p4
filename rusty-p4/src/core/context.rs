@@ -29,12 +29,12 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
-use crate::core::core::Connection;
+use crate::core::connection::bmv2::Bmv2Connection;
 
 #[derive(Clone)]
 pub struct Context<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
-    connections: HashMap<DeviceID, Connection>,
+    connections: HashMap<DeviceID, Bmv2Connection>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
@@ -44,7 +44,7 @@ where
 {
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
-        connections: HashMap<DeviceID, Connection>,
+        connections: HashMap<DeviceID, Bmv2Connection>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> Context<E> {
         Context {

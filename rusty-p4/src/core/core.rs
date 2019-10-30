@@ -36,6 +36,7 @@ use rusty_p4_proto::proto::v1::{
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
 use crate::core::Context;
+use crate::core::connection::bmv2::Bmv2Connection;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -49,7 +50,7 @@ pub struct Core<E> {
     pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     pub(crate) core_channel_sender: UnboundedSender<CoreRequest<E>>,
     pub(crate) event_sender: UnboundedSender<CoreEvent<E>>,
-    pub(crate) connections: HashMap<DeviceID, Connection>,
+    pub(crate) connections: HashMap<DeviceID, Bmv2Connection>,
     pub(crate) config: ContextConfig,
 }
 
@@ -156,7 +157,7 @@ impl<E> Core<E>
 
         let id = connection.inner_id;
         self.connections.insert(id,
-                                Connection {
+                                Bmv2Connection {
                                     p4runtime_client: connection.client,
                                     sink: request_sender,
                                     device_id: connection.device_id,
@@ -164,63 +165,6 @@ impl<E> Core<E>
                                     master_arbitration:None
                                 });
 
-        Ok(())
-    }
-}
-
-#[derive(Clone)]
-pub struct Connection {
-    pub p4runtime_client: P4RuntimeClient,
-    pub sink: tokio::sync::mpsc::Sender<StreamMessageRequest>,
-    pub device_id: u64,
-    pub pipeconf: Pipeconf,
-    pub master_arbitration:Option<MasterArbitrationUpdate>
-}
-
-impl Connection {
-    pub async fn send_stream_request(
-        &mut self,
-        request: StreamMessageRequest,
-    ) -> Result<(), ContextError> {
-        self.sink
-            .send(request)
-            .await
-            .context(ContextErrorKind::DeviceNotConnected {
-                device: DeviceID(self.device_id),
-            })?;
-
-        Ok(())
-    }
-
-    pub async fn send_request(
-        &mut self,
-        request: WriteRequest,
-    ) -> Result<WriteResponse, ContextError> {
-        Ok(self
-            .p4runtime_client
-            .write(tonic::Request::new(request))
-            .await
-            .context(ContextErrorKind::ConnectionError)?
-            .into_inner())
-    }
-
-    pub async fn master_up<E>(
-        &mut self,
-        master_update:MasterArbitrationUpdate,
-        context:&mut Context<E>
-    ) -> Result<(), ContextError>
-        where E:Event+Debug
-    {
-        self.master_arbitration = Some(master_update);
-        let request = crate::p4rt::pure::new_set_forwarding_pipeline_config_request(
-            self.pipeconf.get_p4info(),
-            self.pipeconf.get_bmv2_file_path(),
-            self.master_arbitration.as_ref().unwrap(),
-            self.device_id).await.context(ContextErrorKind::ConnectionError)?;
-        self.p4runtime_client
-            .set_forwarding_pipeline_config(tonic::Request::new(request))
-            .await.context(ContextErrorKind::ConnectionError)?;
-        context.send_event(CommonEvents::DevicePipeconfUpdate(self.pipeconf.get_id()).into_e());
         Ok(())
     }
 }
