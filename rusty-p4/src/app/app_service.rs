@@ -1,6 +1,6 @@
 use crate::app::P4app;
 use async_trait::async_trait;
-use crate::context::ContextHandle;
+use crate::core::Context;
 use crate::event::{PacketReceived, NorthboundRequest, Event};
 use failure::_core::marker::PhantomData;
 use crate::app::common::CommonState;
@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 pub struct AppServiceBuilder<E> {
     last_receiver:tokio::sync::mpsc::Receiver<_M<E>>,
-    context_senders:Vec<tokio::sync::oneshot::Sender<ContextHandle<E>>>,
+    context_senders:Vec<tokio::sync::oneshot::Sender<Context<E>>>,
     m_senders:Vec<tokio::sync::mpsc::Sender<_M<E>>>,
     first_sender:tokio::sync::mpsc::Sender<_M<E>>,
     services:HashMap<TypeId,Rc<dyn Any>>
@@ -81,13 +81,13 @@ impl<E> AppServiceBuilder<E> where E:Event {
 }
 
 pub struct AppService<E> {
-    context_senders:Vec<tokio::sync::oneshot::Sender<ContextHandle<E>>>,
+    context_senders:Vec<tokio::sync::oneshot::Sender<Context<E>>>,
     m_senders:Vec<tokio::sync::mpsc::Sender<_M<E>>>,
     first_sender:tokio::sync::mpsc::Sender<_M<E>>
 }
 
 pub struct AppContainer<T,E> {
-    pub(crate) context_receiver:tokio::sync::oneshot::Receiver<ContextHandle<E>>,
+    pub(crate) context_receiver:tokio::sync::oneshot::Receiver<Context<E>>,
     pub(crate) m_receiver:tokio::sync::mpsc::Receiver<_M<E>>,
     pub(crate) m_sender:tokio::sync::mpsc::Sender<_M<E>>,
     pub(crate) app:T,
@@ -116,7 +116,7 @@ impl<T,E> AppContainer<T,E> where T:P4app<E>,E:Event {
 
 #[async_trait]
 impl<E> P4app<E> for AppService<E> where E:Event {
-    async fn on_start(self: &mut Self, ctx: &mut ContextHandle<E>) {
+    async fn on_start(self: &mut Self, ctx: &mut Context<E>) {
         for x in self.context_senders.drain(0..) {
             x.send(ctx.clone());
         }
@@ -125,18 +125,18 @@ impl<E> P4app<E> for AppService<E> where E:Event {
     async fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
-        ctx: &mut ContextHandle<E>,
+        ctx: &mut Context<E>,
     ) -> Option<PacketReceived> {
         self.first_sender.send(_M::Packet(packet)).await;
         None
     }
 
-    async fn on_event(self: &mut Self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut Context<E>) -> Option<E> {
         self.first_sender.send(_M::Event(event)).await;
         None
     }
 
-    async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut ContextHandle<E>) {}
+    async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut Context<E>) {}
 }
 
 pub(crate) enum _M<E> {

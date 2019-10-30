@@ -11,7 +11,7 @@ release
 extern crate rusty_p4;
 use rusty_p4::p4rt;
 use rusty_p4::util::flow::*;
-use rusty_p4::context::{Context, ContextHandle};
+use rusty_p4::core::{Context, Core};
 //use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
 use rusty_p4::util::value::EXACT;
 use std::path::Path;
@@ -23,7 +23,7 @@ use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::{DeviceID, ConnectPoint};
 use rusty_p4::util::flow::Flow;
 use std::collections::HashMap;
-use rusty_p4::context::ContextConfig;
+use rusty_p4::core::core::ContextConfig;
 use rusty_p4::event::{CommonEvents, PacketReceived};
 use rusty_p4::app::common::CommonState;
 use log::{info};
@@ -42,7 +42,7 @@ pub struct Benchmark {
 
 #[async_trait]
 impl P4app<CommonEvents> for Benchmark {
-    async fn on_start(&mut self, ctx: &mut ContextHandle<CommonEvents>) {
+    async fn on_start(&mut self, ctx: &mut Context<CommonEvents>) {
         let bytes = self.bytes.clone();
         //println("started");
         tokio::spawn(async move {
@@ -55,7 +55,7 @@ impl P4app<CommonEvents> for Benchmark {
         });
     }
 
-    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut ContextHandle<CommonEvents>) -> Option<PacketReceived> {
+    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut Context<CommonEvents>) -> Option<PacketReceived> {
 //        println!("transfer");
         let from = ctx.try_get_connectpoint(&packet).unwrap();
         let b = packet.packet.len();
@@ -93,7 +93,7 @@ pub async fn main() {
         bytes: Arc::new(AtomicUsize::new(0)),
     };
 
-    let (mut context,driver) = Context::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
+    let (mut context,driver) = Core::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
 
     context.add_device("s1".to_string(),"127.0.0.1:50051".to_string(),1,"benchmark");
 

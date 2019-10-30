@@ -1,5 +1,3 @@
-use super::Connection;
-use super::Context;
 use crate::app::P4app;
 use crate::entity::UpdateType;
 use crate::error::{ContextError, ContextErrorKind};
@@ -31,24 +29,25 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
+use crate::core::core::Connection;
 
 #[derive(Clone)]
-pub struct ContextHandle<E> {
+pub struct Context<E> {
     pub sender: UnboundedSender<CoreRequest<E>>,
     connections: HashMap<DeviceID, Connection>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
-impl<E> ContextHandle<E>
+impl<E> Context<E>
 where
-    E: Debug,
+    E: Debug+Event,
 {
     pub fn new(
         sender: UnboundedSender<CoreRequest<E>>,
         connections: HashMap<DeviceID, Connection>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    ) -> ContextHandle<E> {
-        ContextHandle {
+    ) -> Context<E> {
+        Context {
             sender,
             connections,
             pipeconf,
@@ -74,10 +73,10 @@ where
             new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
         match connection.p4runtime_client.write(tonic::Request::new(request)).await {
             Ok(response) => {
-                debug!(target:"context","set entity response: {:?}",response);
+                debug!(target:"core","set entity response: {:?}",response);
             }
             Err(e) => {
-                error!(target:"context","grpc send error: {:?}",e);
+                error!(target:"core","grpc send error: {:?}",e);
             }
         }
         flow.metadata = hash;
@@ -158,11 +157,11 @@ where
         if let Some(c) = self.connections.get_mut(&to.device) {
             let request = new_packet_out_request(&c.pipeconf, to.port, packet);
             if let Err(err) = c.send_stream_request(request).await {
-                error!(target:"context","packet out err {:?}", err);
+                error!(target:"core","packet out err {:?}", err);
             }
         } else {
             // find device name
-            error!(target:"context","PacketOut error: connection not found for device {:?}.", to.device);
+            error!(target:"core","PacketOut error: connection not found for device {:?}.", to.device);
         }
     }
 
@@ -179,10 +178,10 @@ where
             let request = new_set_entity_request(1, entity, update_type.into());
             match connection.p4runtime_client.write(tonic::Request::new(request)).await {
                 Ok(response) => {
-                    debug!(target:"context","set entity response: {:?}",response);
+                    debug!(target:"core","set entity response: {:?}",response);
                 }
                 Err(e) => {
-                    error!(target:"context","grpc send error: {:?}",e);
+                    error!(target:"core","grpc send error: {:?}",e);
                 }
             }
             Ok(())
@@ -200,10 +199,11 @@ where
     pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate)
         -> Result<(), ContextError>
     {
+        let mut context = self.clone();
         let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
             ContextErrorKind::DeviceNotConnected { device },
         ))?;
-        connection.master_up(master_update).await
+        connection.master_up(master_update, &mut context).await
     }
 
     pub fn try_get_connectpoint(&self, packet:&PacketReceived) -> Option<ConnectPoint> {

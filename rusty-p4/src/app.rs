@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 //use crate::app::async_app::ExampleAsyncApp;
 //use crate::app::sync_app::AsyncWrap;
-use crate::context::ContextHandle;
+use crate::core::Context;
 use crate::event::{CommonEvents, Event, NorthboundRequest, PacketReceived};
 use crate::proto::p4runtime::PacketIn;
 use crate::util::flow::*;
@@ -33,21 +33,21 @@ pub trait P4app<E>: 'static + Send
 where
     E: Event,
 {
-    async fn on_start(self: &mut Self, ctx: &mut ContextHandle<E>) {}
+    async fn on_start(self: &mut Self, ctx: &mut Context<E>) {}
 
     async fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
-        ctx: &mut ContextHandle<E>,
+        ctx: &mut Context<E>,
     ) -> Option<PacketReceived> {
         Some(packet)
     }
 
-    async fn on_event(self: &mut Self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut Context<E>) -> Option<E> {
         Some(event)
     }
 
-    async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut ContextHandle<E>) {}
+    async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut Context<E>) {}
 }
 
 pub struct Example {
@@ -65,7 +65,7 @@ impl P4app<CommonEvents> for Example {
     async fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
-        ctx: &mut ContextHandle<CommonEvents>,
+        ctx: &mut Context<CommonEvents>,
     ) -> Option<PacketReceived> {
         let parsed: Option<Ethernet<&[u8]>> = Ethernet::from_bytes(packet.packet.as_slice());
         if let Some(ethernet) = parsed {
@@ -80,7 +80,7 @@ impl P4app<CommonEvents> for Example {
     async fn on_event(
         self: &mut Self,
         event: CommonEvents,
-        ctx: &mut ContextHandle<CommonEvents>,
+        ctx: &mut Context<CommonEvents>,
     ) -> Option<CommonEvents> {
         match event {
             CommonEvents::DeviceAdded(ref device) => {

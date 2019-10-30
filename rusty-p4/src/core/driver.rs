@@ -35,13 +35,12 @@ use futures::stream::StreamExt;
 use futures::task::Poll;
 //use futures03::task::Context;
 //use futures03::task::Poll;
-use futures::core_reexport::task::Context;
 use log::{debug, error, info, trace, warn};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 
-use super::Context as AppContext;
-use super::ContextHandle;
+use super::Core as AppContext;
+use super::Context;
 
 type P4RuntimeClient =
     crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -99,7 +98,7 @@ where
                         }
                         Some(CoreEvent::Bmv2MasterUpdate(device_id,m)) => {
                             if let Err(e) = handle.master_up(device_id,m).await {
-                                error!(target:"context","{:#?}",e);
+                                error!(target:"core","{:#?}",e);
                             }
                             else {
                                 println!("master up");
@@ -129,13 +128,13 @@ where
                 device_id,
                 pipeconf,
             } => {
-                if ctx.connections.read().unwrap().contains_key(&device.id) {
-                    error!(target:"context","Device with name existed: {:?}",device.name);
+                if ctx.connections.contains_key(&device.id) {
+                    error!(target:"core","Device with name existed: {:?}",device.name);
                     return false;
                 }
                 let pipeconf_obj = ctx.pipeconf.get(&pipeconf);
                 if pipeconf_obj.is_none() {
-                    error!(target:"context","pipeconf not found: {:?}",pipeconf);
+                    error!(target:"core","pipeconf not found: {:?}",pipeconf);
                     return false;
                 }
                 let pipeconf = pipeconf_obj.unwrap().clone();
@@ -150,7 +149,7 @@ where
                 )
                 .await;
                 if let Err(e) = ctx.add_bmv2_connection(bmv2connection, &pipeconf).await {
-                    error!(target:"context","add {} connection fail: {:?}",name,e);
+                    error!(target:"core","add {} connection fail: {:?}",name,e);
                     ctx.event_sender
                         .send(CoreEvent::Event(
                             CommonEvents::DeviceLost(device.id).into_e(),
@@ -171,13 +170,7 @@ where
     }
 
     async fn remove_device(id: DeviceID, ctx: &mut AppContext<E>) -> bool {
-        let mut conns = ctx.connections.write().unwrap();
-        Arc::get_mut(&mut conns).unwrap().remove(&id);
-        let mut map = ctx.id_to_name.write().unwrap();
-        if let Some(old) = map.remove(&id) {
-            let mut removed_map = ctx.id_to_name.write().unwrap();
-            removed_map.insert(id, old);
-        }
+        ctx.connections.remove(&id);
         ctx.event_sender
             .send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()))
             .await
@@ -186,9 +179,6 @@ where
     }
 
     pub async fn run_to_end(self) {
-        //        let handle = self.ctx.get_handle();
-        //        tokio::spawn(Self::run_request(self.core_request_receiver, self.ctx));
-        //        Self::run_event(self.event_receiver, self.app, handle).await;
         self.run().await;
     }
 }

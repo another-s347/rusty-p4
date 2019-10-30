@@ -7,6 +7,7 @@ use rusty_p4_proto::proto::v1::{
 };
 use std::fmt::Debug;
 use std::sync::Arc;
+use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 
 pub enum CoreEvent<E> {
     PacketReceived(PacketReceived),
@@ -57,6 +58,7 @@ impl CommonEvents {
 pub enum CommonEvents {
     DeviceAdded(Device),
     DeviceMasterUp(DeviceID),
+    DevicePipeconfUpdate(PipeconfID),
     DeviceUpdate(Device),
     DeviceLost(DeviceID),
     LinkDetected(Link),

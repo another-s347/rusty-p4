@@ -16,10 +16,8 @@ use log::{debug, error, info, trace, warn};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 
-pub use handle::ContextHandle;
-
 use crate::app::P4app;
-use crate::context::driver::ContextDriver;
+use crate::core::driver::ContextDriver;
 use crate::entity::UpdateType;
 use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{
@@ -37,52 +35,46 @@ use rusty_p4_proto::proto::v1::{
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
-
-pub mod driver;
-pub mod handle;
+use crate::core::Context;
 
 type P4RuntimeClient =
-    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[derive(Copy, Clone, Default)]
 pub struct ContextConfig {
     pub enable_netconfiguration: bool,
 }
 
-pub struct Context<E> {
-    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    pub core_channel_sender: UnboundedSender<CoreRequest<E>>,
-    event_sender: UnboundedSender<CoreEvent<E>>,
-    connections: RwLock<Arc<HashMap<DeviceID, Connection>>>,
-    id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-    removed_id_to_name: Arc<RwLock<HashMap<DeviceID, String>>>,
-    config: ContextConfig,
+pub struct Core<E> {
+    pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
+    pub(crate) core_channel_sender: UnboundedSender<CoreRequest<E>>,
+    pub(crate) event_sender: UnboundedSender<CoreEvent<E>>,
+    pub(crate) connections: HashMap<DeviceID, Connection>,
+    pub(crate) config: ContextConfig,
 }
 
-impl<E> Context<E>
-where
-    E: Event + Clone + 'static + Send,
+impl<E> Core<E>
+    where
+        E: Event + Clone + 'static + Send,
 {
     pub async fn try_new<T>(
         pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
         config: ContextConfig,
         northbound_channel: Option<UnboundedReceiver<NorthboundRequest>>,
-    ) -> Result<(ContextHandle<E>, ContextDriver<E, T>), ContextError>
-    where
-        T: P4app<E> + 'static,
+    ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
+        where
+            T: P4app<E> + 'static,
     {
         let (app_s, app_r) = futures::channel::mpsc::unbounded();
 
         let (s, mut r) = futures::channel::mpsc::unbounded();
 
-        let mut obj = Context {
+        let mut obj = Core {
             pipeconf: Arc::new(pipeconf),
             core_channel_sender: s,
             event_sender: app_s,
-            connections: RwLock::new(Arc::new(HashMap::new())),
-            id_to_name: Arc::new(RwLock::new(HashMap::new())),
-            removed_id_to_name: Arc::new(RwLock::new(HashMap::new())),
+            connections:HashMap::new(),
             config,
         };
         let mut context_handle = obj.get_handle();
@@ -107,12 +99,12 @@ where
         Ok((context_handle, driver))
     }
 
-    pub fn get_handle(&self) -> ContextHandle<E>
-    where
-        E: Event,
+    pub fn get_handle(&self) -> Context<E>
+        where
+            E: Event,
     {
-        let conns = self.connections.read().unwrap().as_ref().clone();
-        ContextHandle::new(
+        let conns = self.connections.clone();
+        Context::new(
             self.core_channel_sender.clone(),
             conns,
             self.pipeconf.clone(),
@@ -134,7 +126,7 @@ where
                 if let Some(update) = r.update {
                     match update {
                         stream_message_response::Update::Arbitration(masterUpdate) => {
-                            debug!(target: "context", "StreaMessageResponse?: {:#?}", &masterUpdate);
+                            debug!(target: "core", "StreaMessageResponse?: {:#?}", &masterUpdate);
                             event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
                         }
                         stream_message_response::Update::Packet(packet) => {
@@ -146,13 +138,13 @@ where
                             event_sender.send(CoreEvent::PacketReceived(x)).await.unwrap();
                         }
                         stream_message_response::Update::Digest(p) => {
-                            debug!(target: "context", "StreaMessageResponse: {:#?}", p);
+                            debug!(target: "core", "StreaMessageResponse: {:#?}", p);
                         }
                         stream_message_response::Update::IdleTimeoutNotification(n) => {
-                            debug!(target: "context", "StreaMessageResponse: {:#?}", n);
+                            debug!(target: "core", "StreaMessageResponse: {:#?}", n);
                         }
                         stream_message_response::Update::Other(what) => {
-                            debug!(target: "context", "StreaMessageResponse: {:#?}", what);
+                            debug!(target: "core", "StreaMessageResponse: {:#?}", what);
                         }
                     }
                 }
@@ -162,23 +154,15 @@ where
         let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
         request_sender.send(master_up_req).await.unwrap();
 
-        let name = connection.name.clone();
         let id = connection.inner_id;
-        let packet_in_metaid = pipeconf.packetin_ingress_id;
-        let mut event_sender = self.event_sender.clone();
-
-        // TODO: Is this the right way to use Rwlock<Arc<T>> ?
-        let mut ptr = self.connections.write().unwrap();
-        Arc::make_mut(&mut ptr).insert(
-            id,
-            Connection {
-                p4runtime_client: connection.client,
-                sink: request_sender,
-                device_id: connection.device_id,
-                pipeconf: pipeconf.clone(),
-                master_arbitration:None
-            },
-        );
+        self.connections.insert(id,
+                                Connection {
+                                    p4runtime_client: connection.client,
+                                    sink: request_sender,
+                                    device_id: connection.device_id,
+                                    pipeconf: pipeconf.clone(),
+                                    master_arbitration:None
+                                });
 
         Ok(())
     }
@@ -220,10 +204,13 @@ impl Connection {
             .into_inner())
     }
 
-    pub async fn master_up(
+    pub async fn master_up<E>(
         &mut self,
-        master_update:MasterArbitrationUpdate
-    ) -> Result<(), ContextError> {
+        master_update:MasterArbitrationUpdate,
+        context:&mut Context<E>
+    ) -> Result<(), ContextError>
+        where E:Event+Debug
+    {
         self.master_arbitration = Some(master_update);
         let request = crate::p4rt::pure::new_set_forwarding_pipeline_config_request(
             self.pipeconf.get_p4info(),
@@ -233,7 +220,7 @@ impl Connection {
         self.p4runtime_client
             .set_forwarding_pipeline_config(tonic::Request::new(request))
             .await.context(ContextErrorKind::ConnectionError)?;
-        println!("set forwarding pipeline config");
+        context.send_event(CommonEvents::DevicePipeconfUpdate(self.pipeconf.get_id()).into_e());
         Ok(())
     }
 }
