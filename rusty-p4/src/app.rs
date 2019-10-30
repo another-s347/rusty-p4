@@ -67,7 +67,7 @@ impl P4app<CommonEvents> for Example {
         packet: PacketReceived,
         ctx: &mut ContextHandle<CommonEvents>,
     ) -> Option<PacketReceived> {
-        let parsed: Option<Ethernet<&[u8]>> = Ethernet::from_bytes(packet.get_packet_bytes());
+        let parsed: Option<Ethernet<&[u8]>> = Ethernet::from_bytes(packet.packet.as_slice());
         if let Some(ethernet) = parsed {
             self.counter += 1;
             info!(target:"Example App","Counter == {}, ethernet type == {:x}", self.counter, ethernet.ether_type);

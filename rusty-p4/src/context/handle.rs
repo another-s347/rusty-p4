@@ -205,4 +205,18 @@ where
         ))?;
         connection.master_up(master_update).await
     }
+
+    pub fn try_get_connectpoint(&self, packet:&PacketReceived) -> Option<ConnectPoint> {
+        self.connections.get(&packet.from)
+            .map(|conn|&conn.pipeconf)
+            .and_then(|pipeconf|{
+                packet.metadata.iter()
+                    .find(|x| x.metadata_id == pipeconf.packetin_ingress_id)
+                    .map(|x| BigEndian::read_u16(x.value.as_ref()))
+            })
+            .map(|port|ConnectPoint {
+                device: packet.from,
+                port: port as u32
+            })
+    }
 }

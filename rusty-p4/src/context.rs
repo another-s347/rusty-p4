@@ -138,19 +138,12 @@ where
                             event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
                         }
                         stream_message_response::Update::Packet(packet) => {
-                            dbg!(packet.metadata);
-//                            let port = packet.metadata.iter()
-//                                .find(|x| x.metadata_id == packet_in_metaid)
-//                                .map(|x| BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
-                            // todo, dynamic update pipeconf
-//                            let x = PacketReceived {
-//                                packet,
-//                                from: ConnectPoint {
-//                                    device: id,
-//                                    port,
-//                                },
-//                            };
-//                            packet_s.send(CoreEvent::PacketReceived(x)).await.unwrap();
+                            let x = PacketReceived {
+                                packet:packet.payload,
+                                from: id,
+                                metadata: packet.metadata
+                            };
+                            event_sender.send(CoreEvent::PacketReceived(x)).await.unwrap();
                         }
                         stream_message_response::Update::Digest(p) => {
                             debug!(target: "context", "StreaMessageResponse: {:#?}", p);

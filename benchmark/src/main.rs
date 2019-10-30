@@ -57,19 +57,20 @@ impl P4app<CommonEvents> for Benchmark {
 
     async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut ContextHandle<CommonEvents>) -> Option<PacketReceived> {
 //        println!("transfer");
-        let b = packet.packet.payload.len();
+        let from = ctx.try_get_connectpoint(&packet).unwrap();
+        let b = packet.packet.len();
         self.bytes.fetch_add(b, Ordering::AcqRel);
-        if packet.from.port==1 {
+        if from.port==1 {
             ctx.send_packet(ConnectPoint {
-                device: packet.from.device,
+                device: from.device,
                 port: 2
-            }, Bytes::from(packet.into_packet_bytes())).await;
+            }, Bytes::from(packet.packet)).await;
         }
-        else if packet.from.port==2 {
+        else if from.port==2 {
             ctx.send_packet(ConnectPoint {
-                device: packet.from.device,
+                device: from.device,
                 port: 1
-            }, Bytes::from(packet.into_packet_bytes())).await;
+            }, Bytes::from(packet.packet)).await;
         }
         None
     }
