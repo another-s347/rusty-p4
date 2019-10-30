@@ -17,8 +17,11 @@ use failure::ResultExt;
 use futures::{Future, Sink};
 use nom::dbg_dmp;
 use rusty_p4_proto::proto::v1::{
-    Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,
+    Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,MasterArbitrationUpdate,
 };
+use std::path::Path;
+use tokio::io::AsyncReadExt;
+use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 
 pub fn new_write_table_entry(
     device_id: u64,
@@ -408,4 +411,47 @@ pub fn get_action_param_pb(
         value: value.to_vec(),
     };
     return p4runtime_param;
+}
+
+pub async fn new_set_forwarding_pipeline_config_request(
+    p4info: &P4Info,
+    bmv2_json_file_path: &Path,
+    master_arbitration:&MasterArbitrationUpdate,
+    device_id:u64
+) -> Result<crate::proto::p4runtime::SetForwardingPipelineConfigRequest, ConnectionError>
+{
+    let mut file =
+        tokio::fs::File::open(bmv2_json_file_path).await.context(ConnectionErrorKind::DeviceConfigFileError)?;
+    let mut buffer = String::new();
+    file.read_to_string(&mut buffer).await
+        .context(ConnectionErrorKind::DeviceConfigFileError)?;
+    let election_id = master_arbitration.election_id.clone();
+    Ok(crate::proto::p4runtime::SetForwardingPipelineConfigRequest {
+        device_id,
+        role_id: 0,
+        election_id,
+        action: crate::proto::p4runtime::set_forwarding_pipeline_config_request::Action::VerifyAndCommit.into(),
+        config: Some(crate::proto::p4runtime::ForwardingPipelineConfig {
+            p4info: Some(p4info.clone()),
+            p4_device_config: buffer.into_bytes(),
+            cookie: None,
+        }),
+    })
+}
+
+pub fn new_master_update_request(
+    device_id:u64,
+    option:Bmv2MasterUpdateOption
+) -> StreamMessageRequest
+{
+    StreamMessageRequest {
+        update: Some(stream_message_request::Update::Arbitration(
+            MasterArbitrationUpdate {
+                device_id,
+                role: None,
+                election_id: Uint128 { high: option.election_id_high, low: option.election_id_low }.into(),
+                status: None,
+            },
+        )),
+    }
 }

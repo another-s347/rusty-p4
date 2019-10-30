@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
@@ -25,12 +25,15 @@ use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{
     CommonEvents, CoreEvent, CoreRequest, Event, NorthboundRequest, PacketReceived,
 };
-use crate::p4rt::bmv2::Bmv2SwitchConnection;
+use crate::p4rt::bmv2::{Bmv2SwitchConnection, Bmv2MasterUpdateOption};
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
 use crate::proto::p4runtime::{
-    Entity, Index, MeterEntry, PacketIn, stream_message_response, StreamMessageRequest,
+    stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
+};
+use rusty_p4_proto::proto::v1::{
+    MasterArbitrationUpdate
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
@@ -39,7 +42,7 @@ pub mod driver;
 pub mod handle;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[derive(Copy, Clone, Default)]
 pub struct ContextConfig {
@@ -57,8 +60,8 @@ pub struct Context<E> {
 }
 
 impl<E> Context<E>
-    where
-        E: Event + Clone + 'static + Send,
+where
+    E: Event + Clone + 'static + Send,
 {
     pub async fn try_new<T>(
         pipeconf: HashMap<PipeconfID, Pipeconf>,
@@ -66,8 +69,8 @@ impl<E> Context<E>
         config: ContextConfig,
         northbound_channel: Option<UnboundedReceiver<NorthboundRequest>>,
     ) -> Result<(ContextHandle<E>, ContextDriver<E, T>), ContextError>
-        where
-            T: P4app<E> + 'static,
+    where
+        T: P4app<E> + 'static,
     {
         let (app_s, app_r) = futures::channel::mpsc::unbounded();
 
@@ -105,8 +108,8 @@ impl<E> Context<E>
     }
 
     pub fn get_handle(&self) -> ContextHandle<E>
-        where
-            E: Event,
+    where
+        E: Event,
     {
         let conns = self.connections.read().unwrap().as_ref().clone();
         ContextHandle::new(
@@ -116,47 +119,38 @@ impl<E> Context<E>
         )
     }
 
-    pub async fn add_connection(
+    pub async fn add_bmv2_connection(
         &mut self,
         mut connection: Bmv2SwitchConnection,
         pipeconf: &Pipeconf,
     ) -> Result<(), ContextError> {
-        connection
-            .set_forwarding_pipeline_config(
-                pipeconf.get_p4info(),
-                pipeconf.get_bmv2_file_path(),
-            )
-            .await
-            .context(ContextErrorKind::ConnectionError)?;
-
-        let mut packet_s = self.event_sender.clone().sink_map_err(|e| {
-            dbg!(e);
-        });
-
-        let name = connection.name.clone();
-        let id = connection.inner_id;
-        let packet_in_metaid = pipeconf.packetin_ingress_id;
+        let (mut request_sender, request_receiver) = tokio::sync::mpsc::channel(4096);
+        let mut client = connection.client.clone();
         let mut event_sender = self.event_sender.clone();
-        let mut response_receiver = connection.stream_response_receiver;
+        let id = connection.inner_id;
         tokio::spawn(async move {
-            while let Some(x) = response_receiver.next().await {
-                if let Some(update) = x.update {
+            let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();
+            while let Some(Ok(r)) = response.next().await {
+                if let Some(update) = r.update {
                     match update {
                         stream_message_response::Update::Arbitration(masterUpdate) => {
-                            debug!(target: "context", "StreaMessageResponse?: {:#?}", masterUpdate);
+                            debug!(target: "context", "StreaMessageResponse?: {:#?}", &masterUpdate);
+                            event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
                         }
                         stream_message_response::Update::Packet(packet) => {
-                            let port = packet.metadata.iter()
-                                .find(|x| x.metadata_id == packet_in_metaid)
-                                .map(|x| BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
-                            let x = PacketReceived {
-                                packet,
-                                from: ConnectPoint {
-                                    device: id,
-                                    port,
-                                },
-                            };
-                            packet_s.send(CoreEvent::PacketReceived(x)).await.unwrap();
+                            dbg!(packet.metadata);
+//                            let port = packet.metadata.iter()
+//                                .find(|x| x.metadata_id == packet_in_metaid)
+//                                .map(|x| BigEndian::read_u16(x.value.as_ref())).unwrap() as u32;
+                            // todo, dynamic update pipeconf
+//                            let x = PacketReceived {
+//                                packet,
+//                                from: ConnectPoint {
+//                                    device: id,
+//                                    port,
+//                                },
+//                            };
+//                            packet_s.send(CoreEvent::PacketReceived(x)).await.unwrap();
                         }
                         stream_message_response::Update::Digest(p) => {
                             debug!(target: "context", "StreaMessageResponse: {:#?}", p);
@@ -170,12 +164,15 @@ impl<E> Context<E>
                     }
                 }
             }
-            println!("done");
         });
 
-        let error_sender = self.event_sender.clone();
+        let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
+        request_sender.send(master_up_req).await.unwrap();
 
-        let handle = self.get_handle();
+        let name = connection.name.clone();
+        let id = connection.inner_id;
+        let packet_in_metaid = pipeconf.packetin_ingress_id;
+        let mut event_sender = self.event_sender.clone();
 
         // TODO: Is this the right way to use Rwlock<Arc<T>> ?
         let mut ptr = self.connections.write().unwrap();
@@ -183,9 +180,10 @@ impl<E> Context<E>
             id,
             Connection {
                 p4runtime_client: connection.client,
-                sink: connection.stream_request_sender,
+                sink: request_sender,
                 device_id: connection.device_id,
                 pipeconf: pipeconf.clone(),
+                master_arbitration:None
             },
         );
 
@@ -199,10 +197,14 @@ pub struct Connection {
     pub sink: tokio::sync::mpsc::Sender<StreamMessageRequest>,
     pub device_id: u64,
     pub pipeconf: Pipeconf,
+    pub master_arbitration:Option<MasterArbitrationUpdate>
 }
 
 impl Connection {
-    pub async fn send_stream_request(&mut self, request: StreamMessageRequest) -> Result<(), ContextError> {
+    pub async fn send_stream_request(
+        &mut self,
+        request: StreamMessageRequest,
+    ) -> Result<(), ContextError> {
         self.sink
             .send(request)
             .await
@@ -213,10 +215,32 @@ impl Connection {
         Ok(())
     }
 
-    pub async fn send_request(&mut self, request: WriteRequest) -> Result<WriteResponse, ContextError> {
+    pub async fn send_request(
+        &mut self,
+        request: WriteRequest,
+    ) -> Result<WriteResponse, ContextError> {
         Ok(self
             .p4runtime_client
-            .write(tonic::Request::new(request)).await
-            .context(ContextErrorKind::ConnectionError)?.into_inner())
+            .write(tonic::Request::new(request))
+            .await
+            .context(ContextErrorKind::ConnectionError)?
+            .into_inner())
+    }
+
+    pub async fn master_up(
+        &mut self,
+        master_update:MasterArbitrationUpdate
+    ) -> Result<(), ContextError> {
+        self.master_arbitration = Some(master_update);
+        let request = crate::p4rt::pure::new_set_forwarding_pipeline_config_request(
+            self.pipeconf.get_p4info(),
+            self.pipeconf.get_bmv2_file_path(),
+            self.master_arbitration.as_ref().unwrap(),
+            self.device_id).await.context(ContextErrorKind::ConnectionError)?;
+        self.p4runtime_client
+            .set_forwarding_pipeline_config(tonic::Request::new(request))
+            .await.context(ContextErrorKind::ConnectionError)?;
+        println!("set forwarding pipeline config");
+        Ok(())
     }
 }

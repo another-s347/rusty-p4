@@ -1,13 +1,17 @@
 use crate::entity::{ProtoEntity, UpdateType};
 use crate::proto::p4runtime::PacketIn;
-use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link};
+use crate::representation::{ConnectPoint, Device, DeviceID, Host, Link, DeviceType};
 use bytes::{Bytes, BytesMut};
+use rusty_p4_proto::proto::v1::{
+    Entity, ForwardingPipelineConfig, MasterArbitrationUpdate, Uint128, Update,
+};
 use std::fmt::Debug;
 use std::sync::Arc;
 
 pub enum CoreEvent<E> {
     PacketReceived(PacketReceived),
     Event(E),
+    Bmv2MasterUpdate(DeviceID,MasterArbitrationUpdate),
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +65,7 @@ impl CommonEvents {
 #[derive(Clone, Debug)]
 pub enum CommonEvents {
     DeviceAdded(Device),
+    DeviceMasterUp(DeviceID),
     DeviceUpdate(Device),
     DeviceLost(DeviceID),
     LinkDetected(Link),

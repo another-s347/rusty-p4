@@ -9,7 +9,7 @@ use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{
     CommonEvents, CoreEvent, CoreRequest, Event, NorthboundRequest, PacketReceived,
 };
-use crate::p4rt::bmv2::{Bmv2SwitchConnection, Bmv2ConnectionOption};
+use crate::p4rt::bmv2::{Bmv2ConnectionOption, Bmv2SwitchConnection};
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
 use crate::proto::p4runtime::{
@@ -97,6 +97,15 @@ where
                         Some(CoreEvent::Event(e)) => {
                             self.app.on_event(e, &mut handle).await;
                         }
+                        Some(CoreEvent::Bmv2MasterUpdate(device_id,m)) => {
+                            if let Err(e) = handle.master_up(device_id,m).await {
+                                error!(target:"context","{:#?}",e);
+                            }
+                            else {
+                                println!("master up");
+                                ctx.event_sender.send(CoreEvent::Event(CommonEvents::DeviceMasterUp(device_id).into_e())).await.unwrap();
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -130,15 +139,18 @@ where
                     return false;
                 }
                 let pipeconf = pipeconf_obj.unwrap().clone();
-                let bmv2connection =
-                    Bmv2SwitchConnection::try_new(name, socket_addr, Bmv2ConnectionOption {
+                let bmv2connection = Bmv2SwitchConnection::try_new(
+                    name,
+                    socket_addr,
+                    Bmv2ConnectionOption {
                         p4_device_id: device_id,
                         inner_device_id: Some(device.id.0),
                         ..Default::default()
-                    }).await;
-                let result = ctx.add_connection(bmv2connection, &pipeconf).await;
-                if result.is_err() {
-                    error!(target:"context","add {} connection fail: {:?}",name,result.err().unwrap());
+                    },
+                )
+                .await;
+                if let Err(e) = ctx.add_bmv2_connection(bmv2connection, &pipeconf).await {
+                    error!(target:"context","add {} connection fail: {:?}",name,e);
                     ctx.event_sender
                         .send(CoreEvent::Event(
                             CommonEvents::DeviceLost(device.id).into_e(),

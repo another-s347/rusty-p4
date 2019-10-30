@@ -13,6 +13,7 @@ use crate::proto::p4runtime::{
     stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,
 };
+use rusty_p4_proto::proto::v1::MasterArbitrationUpdate;
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
 use byteorder::BigEndian;
@@ -194,5 +195,14 @@ where
         self.sender
             .unbounded_send(CoreRequest::RemoveDevice { device })
             .unwrap();
+    }
+
+    pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate)
+        -> Result<(), ContextError>
+    {
+        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
+            ContextErrorKind::DeviceNotConnected { device },
+        ))?;
+        connection.master_up(master_update).await
     }
 }

@@ -34,9 +34,6 @@ pub struct Bmv2SwitchConnection {
     pub address: String,
     pub device_id: u64,
     pub client: P4RuntimeClient,
-    pub stream_request_sender:tokio::sync::mpsc::Sender<StreamMessageRequest>,
-    pub stream_response_receiver:tokio::sync::mpsc::Receiver<StreamMessageResponse>,
-    pub master_arbitration:Option<MasterArbitrationUpdate>
 }
 
 pub struct Bmv2ConnectionOption {
@@ -126,41 +123,12 @@ impl Bmv2SwitchConnection {
         let mut client_stub =
             crate::proto::p4runtime::client::P4RuntimeClient::new(endpoint.channel());
 
-        let (mut request_sender,request_receiver) = tokio::sync::mpsc::channel(4096);
-        let (mut response_sender,response_receiver) = tokio::sync::mpsc::channel(4096);
-
-        let master_update = if let Some(master_update) = options.master_update {
-            let (m_sender,master_update_receiver) = tokio::sync::oneshot::channel();
-            tokio::spawn(drive_bmv2_with_master_update(client_stub.clone(),request_receiver,response_sender,m_sender));
-
-            let request = StreamMessageRequest {
-                update: Some(stream_message_request::Update::Arbitration(
-                    MasterArbitrationUpdate {
-                        device_id: options.p4_device_id,
-                        role: None,
-                        election_id: Uint128 { high: master_update.election_id_high, low: master_update.election_id_low }.into(),
-                        status: None,
-                    },
-                )),
-            };
-
-            request_sender.send(request).await;
-            Some(master_update_receiver.await.unwrap())
-        }
-        else {
-            tokio::spawn(drive_bmv2(client_stub.clone(),request_receiver,response_sender));
-            None
-        };
-
         Bmv2SwitchConnection {
             name,
             inner_id: DeviceID(inner_id),
             address,
             device_id,
             client: client_stub,
-            stream_request_sender: request_sender,
-            stream_response_receiver: response_receiver,
-            master_arbitration: master_update
         }
     }
 
@@ -184,24 +152,9 @@ impl Bmv2SwitchConnection {
         &mut self,
         p4info: &P4Info,
         bmv2_json_file_path: &Path,
+        master_arbitration:&MasterArbitrationUpdate
     ) -> Result<(), ConnectionError> {
-        let mut file =
-            tokio::fs::File::open(bmv2_json_file_path).await.context(ConnectionErrorKind::DeviceConfigFileError)?;
-        let mut buffer = String::new();
-        file.read_to_string(&mut buffer).await
-            .context(ConnectionErrorKind::DeviceConfigFileError)?;
-        let election_id = self.master_arbitration.clone().and_then(|x|x.election_id);
-        let request = crate::proto::p4runtime::SetForwardingPipelineConfigRequest {
-            device_id: self.device_id,
-            role_id: 0,
-            election_id,
-            action: crate::proto::p4runtime::set_forwarding_pipeline_config_request::Action::VerifyAndCommit.into(),
-            config: Some(ForwardingPipelineConfig {
-                p4info: Some(p4info.clone()),
-                p4_device_config: buffer.into_bytes(),
-                cookie: None,
-            }),
-        };
+        let request = super::pure::new_set_forwarding_pipeline_config_request(p4info,bmv2_json_file_path,master_arbitration,self.device_id).await?;
         self.client
             .set_forwarding_pipeline_config(tonic::Request::new(request))
             .await
