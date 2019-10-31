@@ -23,7 +23,7 @@ use crate::error::{ContextError, ContextErrorKind};
 use crate::event::{
     CommonEvents, CoreEvent, CoreRequest, Event, NorthboundRequest, PacketReceived,
 };
-use crate::p4rt::bmv2::{Bmv2SwitchConnection, Bmv2MasterUpdateOption};
+use crate::p4rt::bmv2::{Bmv2SwitchConnection, Bmv2MasterUpdateOption, Bmv2ConnectionOption};
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 use crate::p4rt::pure::{new_packet_out_request, new_set_entity_request, new_write_table_entry};
 use crate::proto::p4runtime::{
@@ -37,6 +37,7 @@ use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
 use crate::core::Context;
 use crate::core::connection::bmv2::Bmv2Connection;
+use crate::core::connection::{ConnectionBox, Connection};
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -48,9 +49,9 @@ pub struct ContextConfig {
 
 pub struct Core<E> {
     pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    pub(crate) core_channel_sender: UnboundedSender<CoreRequest<E>>,
+    pub(crate) core_channel_sender: UnboundedSender<CoreRequest>,
     pub(crate) event_sender: UnboundedSender<CoreEvent<E>>,
-    pub(crate) connections: HashMap<DeviceID, Bmv2Connection>,
+    pub(crate) connections: HashMap<DeviceID, ConnectionBox>,
     pub(crate) config: ContextConfig,
 }
 
@@ -100,6 +101,16 @@ impl<E> Core<E>
         Ok((context_handle, driver))
     }
 
+    pub async fn process_core_request(&mut self,request:CoreRequest) -> bool {
+        match request {
+            CoreRequest::AddDevice { device} => self.add_device(device).await,
+            CoreRequest::RemoveDevice { device } => self.remove_device(device).await,
+            CoreRequest::AddPipeconf { pipeconf } => self.add_pipeconf(pipeconf),
+            CoreRequest::UpdatePipeconf { device, pipeconf } => self.update_pipeconf(device,pipeconf).await,
+            CoreRequest::RemovePipeconf { pipeconf } => self.remove_pipeconf(pipeconf)
+        }
+    }
+
     pub fn get_handle(&self) -> Context<E>
         where
             E: Event,
@@ -107,9 +118,100 @@ impl<E> Core<E>
         let conns = self.connections.clone();
         Context::new(
             self.core_channel_sender.clone(),
+            self.event_sender.clone(),
             conns,
             self.pipeconf.clone(),
         )
+    }
+
+    pub async fn add_device(&mut self, device:Device) -> bool {
+        let name = &device.name;
+        match device.typ {
+            DeviceType::MASTER {
+                ref socket_addr,
+                device_id,
+                pipeconf,
+            } => {
+                if self.connections.contains_key(&device.id) {
+                    error!(target:"core","Device with name existed: {:?}",device.name);
+                    return false;
+                }
+                let pipeconf_obj = self.pipeconf.get(&pipeconf);
+                if pipeconf_obj.is_none() {
+                    error!(target:"core","pipeconf not found: {:?}",pipeconf);
+                    return false;
+                }
+                let pipeconf = pipeconf_obj.unwrap().clone();
+                let bmv2connection = Bmv2SwitchConnection::try_new(
+                    name,
+                    socket_addr,
+                    Bmv2ConnectionOption {
+                        p4_device_id: device_id,
+                        inner_device_id: Some(device.id.0),
+                        ..Default::default()
+                    },
+                )
+                    .await;
+                if let Err(e) = self.add_bmv2_connection(bmv2connection, &pipeconf).await {
+                    error!(target:"core","add {} connection fail: {:?}",name,e);
+                    self.event_sender
+                        .send(CoreEvent::Event(
+                            CommonEvents::DeviceLost(device.id).into_e(),
+                        ))
+                        .await;
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        self.event_sender
+            .send(CoreEvent::Event(
+                CommonEvents::DeviceAdded(device.clone()).into_e(),
+            ))
+            .await
+            .unwrap();
+        true
+    }
+
+    pub async fn remove_device(&mut self, id:DeviceID) -> bool {
+        self.connections.remove(&id);
+        self.event_sender
+            .send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()))
+            .await
+            .unwrap();
+        true
+    }
+
+    pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate) -> Result<(), ContextError> {
+        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
+            ContextErrorKind::DeviceNotConnected { device },
+        ))?;
+        connection.master_updated(master_update).await
+    }
+
+    pub fn add_pipeconf(&mut self, pipeconf:Pipeconf) -> bool {
+        let id = pipeconf.get_id();
+        if self.pipeconf.contains_key(&id) {
+            return false;
+        }
+        else {
+            Arc::make_mut(&mut self.pipeconf).insert(id, pipeconf);
+            return true;
+        }
+    }
+
+    pub fn remove_pipeconf(&mut self, pipeconf:PipeconfID) -> bool {
+        Arc::make_mut(&mut self.pipeconf).remove(&pipeconf).is_some()
+    }
+
+    pub async fn update_pipeconf(&mut self, device:DeviceID, pipeconf:PipeconfID) -> bool {
+        let pipeconf = if let Some(p) = self.pipeconf.get(&pipeconf) {
+          p.clone()
+        } else { return false };
+        let conn = if let Some(d) = self.connections.get_mut(&device) {
+            d
+        } else { return false };
+        conn.set_pipeconf(pipeconf).await.is_ok()
     }
 
     pub async fn add_bmv2_connection(
@@ -163,7 +265,7 @@ impl<E> Core<E>
                                     device_id: connection.device_id,
                                     pipeconf: pipeconf.clone(),
                                     master_arbitration:None
-                                });
+                                }.clone_box());
 
         Ok(())
     }

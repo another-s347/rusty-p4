@@ -9,6 +9,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
 
+/// Event indicates that something happened. It shouldn't change the state of Core and Context
 pub enum CoreEvent<E> {
     PacketReceived(PacketReceived),
     Event(E),
@@ -22,11 +23,14 @@ pub struct PacketReceived {
     pub metadata: Vec<PacketMetadata>
 }
 
+/// Event indicates that something will happen. It may change the state of Core and Context
 #[derive(Debug)]
-pub enum CoreRequest<E> {
-    AddDevice { device: Device, reply: Option<()> },
+pub enum CoreRequest {
+    AddDevice { device: Device },
     RemoveDevice { device: DeviceID },
-    Event(E),
+    AddPipeconf { pipeconf:Pipeconf },
+    UpdatePipeconf { device: DeviceID, pipeconf:PipeconfID },
+    RemovePipeconf { pipeconf: PipeconfID },
 }
 
 pub trait Event: Clone + Debug + Send + 'static {

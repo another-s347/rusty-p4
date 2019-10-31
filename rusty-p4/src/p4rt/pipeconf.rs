@@ -9,7 +9,7 @@ use std::process::exit;
 use std::sync::Arc;
 use std::io::{BufReader, Read};
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Pipeconf {
     id: PipeconfID,
     name: String,
@@ -61,6 +61,7 @@ impl Pipeconf {
     }
 }
 
+#[derive(Debug)]
 struct Inner {
     pub p4info: P4Info,
     pub bmv2_json_file_path: PathBuf,

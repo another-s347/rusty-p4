@@ -30,11 +30,13 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::runtime::current_thread::Handle;
 use tokio::runtime::Runtime;
 use crate::core::connection::bmv2::Bmv2Connection;
+use crate::core::connection::ConnectionBox;
 
 #[derive(Clone)]
 pub struct Context<E> {
-    pub sender: UnboundedSender<CoreRequest<E>>,
-    connections: HashMap<DeviceID, Bmv2Connection>,
+    pub core_request_sender: UnboundedSender<CoreRequest>,
+    event_sender: UnboundedSender<CoreEvent<E>>,
+    connections: HashMap<DeviceID, ConnectionBox>,
     pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
@@ -43,15 +45,23 @@ where
     E: Debug+Event,
 {
     pub fn new(
-        sender: UnboundedSender<CoreRequest<E>>,
-        connections: HashMap<DeviceID, Bmv2Connection>,
+        core_request_sender: UnboundedSender<CoreRequest>,
+        event_sender: UnboundedSender<CoreEvent<E>>,
+        connections: HashMap<DeviceID, ConnectionBox>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> Context<E> {
         Context {
-            sender,
+            core_request_sender,
+            event_sender,
             connections,
             pipeconf,
         }
+    }
+
+    pub fn update_pipeconf(&mut self, device:DeviceID, pipeconf:PipeconfID) {
+        self.core_request_sender.unbounded_send(CoreRequest::UpdatePipeconf {
+            device, pipeconf
+        }).unwrap();
     }
 
     pub async fn insert_flow(&mut self, mut flow: Flow, device: DeviceID) -> Result<Flow, ContextError> {
@@ -98,19 +108,17 @@ where
             device_id,
             index: 0,
         };
-        self.sender
+        self.core_request_sender
             .unbounded_send(CoreRequest::AddDevice {
-                device,
-                reply: None,
+                device
             })
             .unwrap()
     }
 
     pub fn add_device_object(&self, device: Device) {
-        self.sender
+        self.core_request_sender
             .unbounded_send(CoreRequest::AddDevice {
                 device,
-                reply: None,
             })
             .unwrap()
     }
@@ -135,22 +143,21 @@ where
             device_id,
             index: 0,
         };
-        self.sender
+        self.core_request_sender
             .unbounded_send(CoreRequest::AddDevice {
                 device,
-                reply: None,
             })
             .unwrap()
     }
 
     pub fn send_event(&self, event: E) {
-        self.sender
-            .unbounded_send(CoreRequest::Event(event))
+        self.event_sender
+            .unbounded_send(CoreEvent::Event(event))
             .unwrap();
     }
 
-    pub fn send_request(&self, request: CoreRequest<E>) {
-        self.sender.unbounded_send(request).unwrap();
+    pub fn send_request(&self, request: CoreRequest) {
+        self.core_request_sender.unbounded_send(request).unwrap();
     }
 
     pub async fn send_packet(&mut self, to: ConnectPoint, packet: Bytes) {
@@ -191,20 +198,20 @@ where
     }
 
     pub fn remove_device(&self, device: DeviceID) {
-        self.sender
+        self.core_request_sender
             .unbounded_send(CoreRequest::RemoveDevice { device })
             .unwrap();
     }
 
-    pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate)
-        -> Result<(), ContextError>
-    {
-        let mut context = self.clone();
-        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
-            ContextErrorKind::DeviceNotConnected { device },
-        ))?;
-        connection.master_up(master_update, &mut context).await
-    }
+//    pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate)
+//        -> Result<(), ContextError>
+//    {
+//        let mut context = self.clone();
+//        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
+//            ContextErrorKind::DeviceNotConnected { device },
+//        ))?;
+//        connection.master_up(master_update, &mut context).await
+//    }
 
     pub fn try_get_connectpoint(&self, packet:&PacketReceived) -> Option<ConnectPoint> {
         self.connections.get(&packet.from)

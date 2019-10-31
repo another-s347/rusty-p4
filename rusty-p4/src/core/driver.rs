@@ -46,7 +46,7 @@ type P4RuntimeClient =
     crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 pub struct ContextDriver<E, T> {
-    pub core_request_receiver: UnboundedReceiver<CoreRequest<E>>,
+    pub core_request_receiver: UnboundedReceiver<CoreRequest>,
     pub event_receiver: UnboundedReceiver<CoreEvent<E>>,
     pub request_receiver: UnboundedReceiver<NorthboundRequest>,
     pub app: T,
@@ -65,27 +65,12 @@ where
             select! {
                 request = self.core_request_receiver.next() => {
                     match request {
-                        Some(CoreRequest::AddDevice {
-                            ref device,
-                            reply
-                        }) => {
-                            if Self::add_device(device, &mut ctx).await {
+                        Some(request) => {
+                            if ctx.process_core_request(request).await {
                                 handle = ctx.get_handle();
                             }
                         }
-                        Some(CoreRequest::Event(e)) => {
-                            ctx.event_sender.send(CoreEvent::Event(e)).await.unwrap();
-                        }
-                        Some(CoreRequest::RemoveDevice {
-                            device
-                        }) => {
-                            if Self::remove_device(device, &mut ctx).await {
-                                handle = ctx.get_handle();
-                            }
-                        }
-                        _ => {
-
-                        }
+                        None => { }
                     }
                 }
                 event = self.event_receiver.next() => {
@@ -97,7 +82,7 @@ where
                             self.app.on_event(e, &mut handle).await;
                         }
                         Some(CoreEvent::Bmv2MasterUpdate(device_id,m)) => {
-                            if let Err(e) = handle.master_up(device_id,m).await {
+                            if let Err(e) = ctx.master_up(device_id,m).await {
                                 error!(target:"core","{:#?}",e);
                             }
                             else {
@@ -118,64 +103,6 @@ where
                 }
             }
         }
-    }
-
-    async fn add_device(device: &Device, ctx: &mut AppContext<E>) -> bool {
-        let name = &device.name;
-        match device.typ {
-            DeviceType::MASTER {
-                ref socket_addr,
-                device_id,
-                pipeconf,
-            } => {
-                if ctx.connections.contains_key(&device.id) {
-                    error!(target:"core","Device with name existed: {:?}",device.name);
-                    return false;
-                }
-                let pipeconf_obj = ctx.pipeconf.get(&pipeconf);
-                if pipeconf_obj.is_none() {
-                    error!(target:"core","pipeconf not found: {:?}",pipeconf);
-                    return false;
-                }
-                let pipeconf = pipeconf_obj.unwrap().clone();
-                let bmv2connection = Bmv2SwitchConnection::try_new(
-                    name,
-                    socket_addr,
-                    Bmv2ConnectionOption {
-                        p4_device_id: device_id,
-                        inner_device_id: Some(device.id.0),
-                        ..Default::default()
-                    },
-                )
-                .await;
-                if let Err(e) = ctx.add_bmv2_connection(bmv2connection, &pipeconf).await {
-                    error!(target:"core","add {} connection fail: {:?}",name,e);
-                    ctx.event_sender
-                        .send(CoreEvent::Event(
-                            CommonEvents::DeviceLost(device.id).into_e(),
-                        ))
-                        .await;
-                    return false;
-                }
-            }
-            _ => {}
-        }
-        ctx.event_sender
-            .send(CoreEvent::Event(
-                CommonEvents::DeviceAdded(device.clone()).into_e(),
-            ))
-            .await
-            .unwrap();
-        true
-    }
-
-    async fn remove_device(id: DeviceID, ctx: &mut AppContext<E>) -> bool {
-        ctx.connections.remove(&id);
-        ctx.event_sender
-            .send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()))
-            .await
-            .unwrap();
-        true
     }
 
     pub async fn run_to_end(self) {
