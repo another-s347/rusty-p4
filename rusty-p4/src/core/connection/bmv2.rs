@@ -16,6 +16,7 @@ use crate::core::connection::{Connection, ConnectionBox};
 use tokio::sync::mpsc::Sender;
 use std::sync::Arc;
 use async_trait::async_trait;
+use std::any::Any;
 
 type P4RuntimeClient =
     crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -93,5 +94,9 @@ impl Connection for Bmv2Connection {
             pipeconf,
             master_arbitration
         }
+    }
+
+    fn as_any(&self) -> &Any {
+        self
     }
 }

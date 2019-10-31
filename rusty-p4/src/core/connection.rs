@@ -14,6 +14,7 @@ use rusty_p4_proto::proto::v1::{
     MasterArbitrationUpdate
 };
 use async_trait::async_trait;
+use std::any::Any;
 
 pub mod bmv2;
 pub mod stratum_bmv2;
@@ -22,12 +23,14 @@ type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[async_trait]
-pub trait Connection:Send+Sync {
+pub trait Connection:Send+Sync+'static {
     async fn master_updated(&mut self,master_update:MasterArbitrationUpdate) -> Result<(), ContextError>;
 
     async fn set_pipeconf(&mut self, pipeconf:Pipeconf) -> Result<(), ContextError>;
 
     fn clone_box(&self)->ConnectionBox;
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub struct ConnectionBox {
@@ -81,6 +84,11 @@ impl ConnectionBox
     pub async fn set_pipeconf(&mut self, pipeconf:Pipeconf) -> Result<(), ContextError> {
         self.pipeconf = pipeconf.clone();
         self.inner.set_pipeconf(pipeconf).await
+    }
+
+    pub fn get_inner<T:Connection+Clone>(&self) -> Option<&T> {
+        let o = self.inner.as_ref().as_any();
+        o.downcast_ref::<T>()
     }
 }
 
