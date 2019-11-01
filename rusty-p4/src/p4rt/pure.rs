@@ -370,13 +370,12 @@ pub fn get_packout_egress_port_metaid(p4info: &P4Info) -> Option<u32> {
             let pre = p.preamble.as_ref().unwrap();
             pre.name == "packet_out"
         })
-        .map(|x| {
+        .and_then(|x| {
             x.metadata
                 .iter()
                 .find(|meta| meta.name == "egress_port")
                 .map(|x| x.id)
         })
-        .flatten()
 }
 
 pub fn get_packin_egress_port_metaid(p4info: &P4Info) -> Option<u32> {
@@ -387,13 +386,12 @@ pub fn get_packin_egress_port_metaid(p4info: &P4Info) -> Option<u32> {
             let pre = p.preamble.as_ref().unwrap();
             pre.name == "packet_in"
         })
-        .map(|x| {
+        .and_then(|x| {
             x.metadata
                 .iter()
                 .find(|meta| meta.name == "ingress_port")
                 .map(|x| x.id)
         })
-        .flatten()
 }
 
 pub fn get_action_param_pb(

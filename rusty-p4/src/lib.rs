@@ -1,7 +1,4 @@
 #![allow(warnings)]
-#![feature(option_flattening)]
-#![feature(linked_list_extras)]
-#![feature(specialization)]
 #![recursion_limit = "512"]
 #[macro_use]
 extern crate failure;

@@ -91,15 +91,15 @@ impl CommonStateInner {
     pub fn get_interface_by_cp(&self, cp: &ConnectPoint) -> Option<&Interface> {
         self.devices
             .get(&cp.device)
-            .iter()
-            .flat_map(|dev| dev.ports.iter())
-            .find(|port| port.number == cp.port)
-            .map(|port| port.interface.as_ref())
-            .flatten()
+            .and_then(|dev|{
+                dev.ports.iter()
+                    .find(|port| port.number == cp.port)
+                    .and_then(|port| port.interface.as_ref())
+            })
     }
 
     pub fn get_mac_by_cp(&self, cp: &ConnectPoint) -> Option<MAC> {
-        self.get_interface_by_cp(cp).map(|i| i.mac).flatten()
+        self.get_interface_by_cp(cp).and_then(|i| i.mac)
     }
 }
 

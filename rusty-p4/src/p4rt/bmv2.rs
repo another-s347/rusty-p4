@@ -82,10 +82,8 @@ impl Bmv2SwitchConnection {
         };
         let device_id = options.p4_device_id;
 
-        let endpoint = tonic::transport::Endpoint::try_from(format!("http://{}",address)).map(|e|e).unwrap();
-
         let mut client_stub =
-            crate::proto::p4runtime::client::P4RuntimeClient::new(endpoint.channel());
+            crate::proto::p4runtime::client::P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
 
         Bmv2SwitchConnection {
             name,

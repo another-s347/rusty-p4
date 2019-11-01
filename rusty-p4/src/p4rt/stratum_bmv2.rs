@@ -71,11 +71,8 @@ impl StratumBmv2SwitchConnection {
         };
         let device_id = options.p4_device_id;
 
-        let endpoint = tonic::transport::Endpoint::try_from(format!("http://{}",address)).map(|e|e).unwrap();
-
-        let mut client_stub =
-            crate::proto::p4runtime::client::P4RuntimeClient::new(endpoint.channel());
-        let mut gnmi_client_stub = GNMIClient::new(endpoint.channel());
+        let mut client_stub = P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
+        let mut gnmi_client_stub = GNMIClient::connect(format!("http://{}",address)).await.unwrap();
 
         StratumBmv2SwitchConnection {
             name,

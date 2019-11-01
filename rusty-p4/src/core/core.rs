@@ -249,7 +249,6 @@ impl<E> Core<E>
         pipeconf: &Pipeconf
     ) -> Result<(), ContextError> {
         let (mut request_sender, request_receiver) = tokio::sync::mpsc::channel(4096);
-        let (mut subscribe_sender, subscribe_receiver) = tokio::sync::mpsc::channel(4096);
         let mut client = connection.client.clone();
         let mut event_sender = self.event_sender.clone();
         let id = connection.inner_id;
@@ -257,6 +256,7 @@ impl<E> Core<E>
 
         let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
         request_sender.send(master_up_req).await.unwrap();
+        // todo: gather device information
 
         let id = connection.inner_id;
         self.connections.insert(id,
@@ -264,7 +264,6 @@ impl<E> Core<E>
                                     p4runtime_client: connection.client,
                                     gnmi_client: connection.gnmi_client,
                                     sink: request_sender,
-                                    gnmi_subscribe_sink: subscribe_sender,
                                     device_id: connection.device_id,
                                     pipeconf: pipeconf.clone(),
                                     master_arbitration:None
