@@ -93,61 +93,16 @@ where
         Ok(flow)
     }
 
-    pub fn add_device(&self, name: String, address: String, device_id: u64, pipeconf: &str) {
-        let id = crate::util::hash(&name);
-        let pipeconf = crate::util::hash(pipeconf);
-        let device = Device {
-            id: DeviceID(id),
-            name,
-            ports: Default::default(),
-            typ: DeviceType::MASTER {
-                socket_addr: address,
-                device_id,
-                pipeconf: PipeconfID(pipeconf),
-            },
-            device_id,
-            index: 0,
-        };
-        self.core_request_sender
-            .unbounded_send(CoreRequest::AddDevice {
-                device
-            })
-            .unwrap()
-    }
-
-    pub fn add_device_object(&self, device: Device) {
+    pub fn add_device(&self, device: Device) -> bool {
+        if self.connections.contains_key(&device.id) {
+            return false;
+        }
         self.core_request_sender
             .unbounded_send(CoreRequest::AddDevice {
                 device,
             })
-            .unwrap()
-    }
-
-    pub fn add_device_with_pipeconf_id(
-        &self,
-        name: String,
-        address: String,
-        device_id: u64,
-        pipeconf: PipeconfID,
-    ) {
-        let id = crate::util::hash(&name);
-        let device = Device {
-            id: DeviceID(id),
-            name,
-            ports: Default::default(),
-            typ: DeviceType::MASTER {
-                socket_addr: address,
-                device_id,
-                pipeconf,
-            },
-            device_id,
-            index: 0,
-        };
-        self.core_request_sender
-            .unbounded_send(CoreRequest::AddDevice {
-                device,
-            })
-            .unwrap()
+            .unwrap();
+        return true;
     }
 
     pub fn send_event(&self, event: E) {

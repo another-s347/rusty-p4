@@ -453,3 +453,14 @@ pub fn new_master_update_request(
         )),
     }
 }
+
+pub fn new_stratum_get_interfaces_name() -> rusty_p4_proto::proto::gnmi::GetRequest {
+    rusty_p4_proto::proto::gnmi::GetRequest {
+        prefix:None,
+        path:vec![crate::gnmi::new_gnmi_path("/interfaces/interface[name=*]/state/name")],
+        r#type:1,
+        encoding:2,
+        use_models:vec![],
+        extension:vec![]
+    }
+}

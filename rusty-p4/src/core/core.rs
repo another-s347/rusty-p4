@@ -39,7 +39,7 @@ use crate::core::Context;
 use crate::core::connection::bmv2::Bmv2Connection;
 use crate::core::connection::{ConnectionBox, Connection};
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
-use crate::p4rt::stratum_bmv2::StratumBmv2SwitchConnection;
+use crate::p4rt::stratum_bmv2::{StratumBmv2SwitchConnection, StratumBmv2ConnectionOption};
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -129,7 +129,7 @@ impl<E> Core<E>
     pub async fn add_device(&mut self, device:Device) -> bool {
         let name = &device.name;
         match device.typ {
-            DeviceType::MASTER {
+            DeviceType::Bmv2MASTER {
                 ref socket_addr,
                 device_id,
                 pipeconf,
@@ -155,6 +155,38 @@ impl<E> Core<E>
                 )
                     .await;
                 if let Err(e) = self.add_bmv2_connection(bmv2connection, &pipeconf).await {
+                    error!(target:"core","add {} connection fail: {:?}",name,e);
+                    self.event_sender
+                        .send(CoreEvent::Event(
+                            CommonEvents::DeviceLost(device.id).into_e(),
+                        ))
+                        .await;
+                    return false;
+                }
+            }
+            DeviceType::StratumMASTER {
+                ref socket_addr, device_id, pipeconf
+            } => {
+                if self.connections.contains_key(&device.id) {
+                    error!(target:"core","Device with name existed: {:?}",device.name);
+                    return false;
+                }
+                let pipeconf_obj = self.pipeconf.get(&pipeconf);
+                if pipeconf_obj.is_none() {
+                    error!(target:"core","pipeconf not found: {:?}",pipeconf);
+                    return false;
+                }
+                let pipeconf = pipeconf_obj.unwrap().clone();
+                let bmv2connection = StratumBmv2SwitchConnection::try_new(
+                    name,
+                    socket_addr,
+                    StratumBmv2ConnectionOption {
+                        p4_device_id: device_id,
+                        inner_device_id: Some(device.id.0),
+                        ..Default::default()
+                    },
+                ).await;
+                if let Err(e) = self.add_stratum_connection(bmv2connection, &pipeconf).await {
                     error!(target:"core","add {} connection fail: {:?}",name,e);
                     self.event_sender
                         .send(CoreEvent::Event(
@@ -256,6 +288,8 @@ impl<E> Core<E>
 
         let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
         request_sender.send(master_up_req).await.unwrap();
+        let response = crate::p4rt::stratum_bmv2::get_interfaces_name(&mut connection.gnmi_client).await;
+        println!("{:#?}",response);
         // todo: gather device information
 
         let id = connection.inner_id;

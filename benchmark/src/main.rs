@@ -5,8 +5,6 @@ release
 */
 
 #![allow(warnings)]
-#![feature(option_flattening)]
-#![feature(async_await)]
 #[macro_use]
 extern crate rusty_p4;
 use rusty_p4::p4rt;
@@ -20,7 +18,7 @@ use tokio;
 //use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
 use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
-use rusty_p4::representation::{DeviceID, ConnectPoint};
+use rusty_p4::representation::{DeviceID, ConnectPoint, Device};
 use rusty_p4::util::flow::Flow;
 use std::collections::HashMap;
 use rusty_p4::core::core::ContextConfig;
@@ -95,7 +93,7 @@ pub async fn main() {
 
     let (mut context,driver) = Core::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
 
-    context.add_device("s1".to_string(),"127.0.0.1:50051".to_string(),1,"benchmark");
+    context.add_device(Device::new_stratum_bmv2("s1","127.0.0.1:50001","benchmark",1));
 
     driver.run_to_end().await;
 }

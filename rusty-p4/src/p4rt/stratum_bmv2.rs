@@ -143,3 +143,20 @@ impl StratumBmv2SwitchConnection {
         Ok(())
     }
 }
+
+pub async fn get_interfaces_name(client:&mut GNMIClient) -> Vec<String> {
+    let mut v = vec![];
+    let response = client.get(super::pure::new_stratum_get_interfaces_name()).await.unwrap();
+    for n in &response.get_ref().notification {
+        match &n.update[0].val {
+            Some(rusty_p4_proto::proto::gnmi::TypedValue {
+                    value: Some(rusty_p4_proto::proto::gnmi::typed_value::Value::StringVal(ref name)),
+                },
+            ) => {
+                v.push(name.to_string());
+            }
+            _ => {}
+        };
+    }
+    v
+}

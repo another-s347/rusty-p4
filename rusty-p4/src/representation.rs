@@ -17,6 +17,40 @@ pub struct Device {
     pub index: usize,
 }
 
+impl Device {
+    pub fn new_bmv2(name:&str, address:&str, pipeconf:&str, device_id:u64) -> Device {
+        let id = crate::util::hash(name);
+        Device {
+            id: DeviceID(id),
+            name:name.to_string(),
+            ports: Default::default(),
+            typ: DeviceType::Bmv2MASTER {
+                socket_addr: address.to_string(),
+                device_id,
+                pipeconf:PipeconfID(crate::util::hash(pipeconf)),
+            },
+            device_id,
+            index: 0,
+        }
+    }
+
+    pub fn new_stratum_bmv2(name:&str, address:&str, pipeconf:&str, device_id:u64) -> Device {
+        let id = crate::util::hash(name);
+        Device {
+            id: DeviceID(id),
+            name:name.to_string(),
+            ports: Default::default(),
+            typ: DeviceType::StratumMASTER {
+                socket_addr: address.to_string(),
+                device_id,
+                pipeconf:PipeconfID(crate::util::hash(pipeconf)),
+            },
+            device_id,
+            index: 0,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DeviceID(pub u64);
 
@@ -77,7 +111,12 @@ impl PartialEq for Host {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DeviceType {
-    MASTER {
+    StratumMASTER {
+        socket_addr: String,
+        device_id: u64,
+        pipeconf: PipeconfID,
+    },
+    Bmv2MASTER {
         socket_addr: String,
         device_id: u64,
         pipeconf: PipeconfID,
@@ -88,11 +127,8 @@ pub enum DeviceType {
 impl DeviceType {
     pub fn is_master(&self) -> bool {
         match self {
-            DeviceType::MASTER {
-                socket_addr,
-                device_id,
-                pipeconf,
-            } => true,
+            DeviceType::Bmv2MASTER { .. } => true,
+            DeviceType::StratumMASTER { .. } => true,
             _ => false,
         }
     }

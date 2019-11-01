@@ -21,3 +21,4 @@ pub mod proto;
 pub mod representation;
 pub mod service;
 pub mod util;
+pub mod gnmi;
