@@ -9,9 +9,13 @@ use crate::proto::p4runtime::{
 use rusty_p4_proto::proto::v1::{
     MasterArbitrationUpdate
 };
+use rusty_p4_proto::proto::gnmi::SubscribeRequest;
 use crate::core::Context;
 use crate::event::{CommonEvents, Event};
 use std::fmt::Debug;
+use crate::core::connection::{Connection, ConnectionBox};
+use std::any::Any;
+use async_trait::async_trait;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -28,32 +32,6 @@ pub struct StratumBmv2Connection {
 }
 
 impl StratumBmv2Connection {
-    pub async fn send_stream_request(
-        &mut self,
-        request: StreamMessageRequest,
-    ) -> Result<(), ContextError> {
-        self.sink
-            .send(request)
-            .await
-            .context(ContextErrorKind::DeviceNotConnected {
-                device: DeviceID(self.device_id),
-            })?;
-
-        Ok(())
-    }
-
-    pub async fn send_request(
-        &mut self,
-        request: WriteRequest,
-    ) -> Result<WriteResponse, ContextError> {
-        Ok(self
-            .p4runtime_client
-            .write(tonic::Request::new(request))
-            .await
-            .context(ContextErrorKind::ConnectionError)?
-            .into_inner())
-    }
-
     pub async fn master_up<E>(
         &mut self,
         master_update:MasterArbitrationUpdate,
@@ -72,5 +50,54 @@ impl StratumBmv2Connection {
             .await.context(ContextErrorKind::ConnectionError)?;
         context.send_event(CommonEvents::DevicePipeconfUpdate(self.pipeconf.get_id()).into_e());
         Ok(())
+    }
+}
+
+#[async_trait]
+impl Connection for StratumBmv2Connection {
+    async fn master_updated(&mut self,master_update:MasterArbitrationUpdate) -> Result<(), ContextError> {
+        self.master_arbitration = Some(master_update);
+        let request = crate::p4rt::pure::new_set_forwarding_pipeline_config_request(
+            self.pipeconf.get_p4info(),
+            self.pipeconf.get_bmv2_file_path(),
+            self.master_arbitration.as_ref().unwrap(),
+            self.device_id).await.context(ContextErrorKind::ConnectionError)?;
+        self.p4runtime_client
+            .set_forwarding_pipeline_config(tonic::Request::new(request))
+            .await.context(ContextErrorKind::ConnectionError)?;
+        Ok(())
+    }
+
+    async fn set_pipeconf(&mut self, pipeconf: Pipeconf) -> Result<(), ContextError> {
+        self.pipeconf = pipeconf;
+        let request = crate::p4rt::pure::new_set_forwarding_pipeline_config_request(
+            self.pipeconf.get_p4info(),
+            self.pipeconf.get_bmv2_file_path(),
+            self.master_arbitration.as_ref().unwrap(),
+            self.device_id).await.context(ContextErrorKind::ConnectionError)?;
+        self.p4runtime_client
+            .set_forwarding_pipeline_config(tonic::Request::new(request))
+            .await.context(ContextErrorKind::ConnectionError)?;
+        Ok(())
+    }
+
+    fn clone_box(&self) -> ConnectionBox {
+        let p4runtime_client = self.p4runtime_client.clone();
+        let sink = self.sink.clone();
+        let device_id = self.device_id.clone();
+        let pipeconf = self.pipeconf.clone();
+        let master_arbitration = self.master_arbitration.clone();
+        ConnectionBox {
+            inner: Box::new(self.clone()),
+            p4runtime_client,
+            sink,
+            device_id,
+            pipeconf,
+            master_arbitration
+        }
+    }
+
+    fn as_any(&self) -> &Any {
+        self
     }
 }

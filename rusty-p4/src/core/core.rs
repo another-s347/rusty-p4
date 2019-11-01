@@ -38,6 +38,8 @@ use crate::util::flow::Flow;
 use crate::core::Context;
 use crate::core::connection::bmv2::Bmv2Connection;
 use crate::core::connection::{ConnectionBox, Connection};
+use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
+use crate::p4rt::stratum_bmv2::StratumBmv2SwitchConnection;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -223,36 +225,7 @@ impl<E> Core<E>
         let mut client = connection.client.clone();
         let mut event_sender = self.event_sender.clone();
         let id = connection.inner_id;
-        tokio::spawn(async move {
-            let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();
-            while let Some(Ok(r)) = response.next().await {
-                if let Some(update) = r.update {
-                    match update {
-                        stream_message_response::Update::Arbitration(masterUpdate) => {
-                            debug!(target: "core", "StreaMessageResponse?: {:#?}", &masterUpdate);
-                            event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
-                        }
-                        stream_message_response::Update::Packet(packet) => {
-                            let x = PacketReceived {
-                                packet:packet.payload,
-                                from: id,
-                                metadata: packet.metadata
-                            };
-                            event_sender.send(CoreEvent::PacketReceived(x)).await.unwrap();
-                        }
-                        stream_message_response::Update::Digest(p) => {
-                            debug!(target: "core", "StreaMessageResponse: {:#?}", p);
-                        }
-                        stream_message_response::Update::IdleTimeoutNotification(n) => {
-                            debug!(target: "core", "StreaMessageResponse: {:#?}", n);
-                        }
-                        stream_message_response::Update::Other(what) => {
-                            debug!(target: "core", "StreaMessageResponse: {:#?}", what);
-                        }
-                    }
-                }
-            }
-        });
+        tokio::spawn(drive_bmv2(client,request_receiver,event_sender,id));
 
         let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
         request_sender.send(master_up_req).await.unwrap();
@@ -268,5 +241,72 @@ impl<E> Core<E>
                                 }.clone_box());
 
         Ok(())
+    }
+    
+    pub async fn add_stratum_connection(
+        &mut self,
+        mut connection: StratumBmv2SwitchConnection,
+        pipeconf: &Pipeconf
+    ) -> Result<(), ContextError> {
+        let (mut request_sender, request_receiver) = tokio::sync::mpsc::channel(4096);
+        let (mut subscribe_sender, subscribe_receiver) = tokio::sync::mpsc::channel(4096);
+        let mut client = connection.client.clone();
+        let mut event_sender = self.event_sender.clone();
+        let id = connection.inner_id;
+        tokio::spawn(drive_bmv2(client,request_receiver,event_sender,id));
+
+        let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
+        request_sender.send(master_up_req).await.unwrap();
+
+        let id = connection.inner_id;
+        self.connections.insert(id,
+                                StratumBmv2Connection {
+                                    p4runtime_client: connection.client,
+                                    gnmi_client: connection.gnmi_client,
+                                    sink: request_sender,
+                                    gnmi_subscribe_sink: subscribe_sender,
+                                    device_id: connection.device_id,
+                                    pipeconf: pipeconf.clone(),
+                                    master_arbitration:None
+                                }.clone_box());
+
+        Ok(())
+    }
+}
+
+
+async fn drive_bmv2<E>(
+    mut client:P4RuntimeClient,
+    request_receiver:tokio::sync::mpsc::Receiver<StreamMessageRequest>,
+    mut event_sender:futures::channel::mpsc::UnboundedSender<CoreEvent<E>>,
+    id:DeviceID
+) {
+    let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();
+    while let Some(Ok(r)) = response.next().await {
+        if let Some(update) = r.update {
+            match update {
+                stream_message_response::Update::Arbitration(masterUpdate) => {
+                    debug!(target: "core", "StreaMessageResponse?: {:#?}", &masterUpdate);
+                    event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
+                }
+                stream_message_response::Update::Packet(packet) => {
+                    let x = PacketReceived {
+                        packet:packet.payload,
+                        from: id,
+                        metadata: packet.metadata
+                    };
+                    event_sender.send(CoreEvent::PacketReceived(x)).await.unwrap();
+                }
+                stream_message_response::Update::Digest(p) => {
+                    debug!(target: "core", "StreaMessageResponse: {:#?}", p);
+                }
+                stream_message_response::Update::IdleTimeoutNotification(n) => {
+                    debug!(target: "core", "StreaMessageResponse: {:#?}", n);
+                }
+                stream_message_response::Update::Other(what) => {
+                    debug!(target: "core", "StreaMessageResponse: {:#?}", what);
+                }
+            }
+        }
     }
 }

@@ -24,25 +24,28 @@ use futures::{StreamExt, FutureExt, TryFutureExt, TryStreamExt, SinkExt};
 use nom::combinator::opt;
 use tokio::io::AsyncReadExt;
 use std::convert::TryFrom;
+use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 
 type P4RuntimeClient =
-    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+type GNMIClient = rusty_p4_proto::proto::gnmi::client::GNmiClient<tonic::transport::channel::Channel>;
 
-pub struct Bmv2SwitchConnection {
+pub struct StratumBmv2SwitchConnection {
     pub name: String,
     pub inner_id: DeviceID,
     pub address: String,
     pub device_id: u64,
     pub client: P4RuntimeClient,
+    pub gnmi_client: GNMIClient
 }
 
-pub struct Bmv2ConnectionOption {
+pub struct StratumBmv2ConnectionOption {
     pub p4_device_id:u64,
     pub inner_device_id:Option<u64>,
     pub master_update:Option<Bmv2MasterUpdateOption>,
 }
 
-impl Default for Bmv2ConnectionOption {
+impl Default for StratumBmv2ConnectionOption {
     fn default() -> Self {
         Self {
             p4_device_id: 1,
@@ -52,26 +55,12 @@ impl Default for Bmv2ConnectionOption {
     }
 }
 
-pub struct Bmv2MasterUpdateOption {
-    pub election_id_high:u64,
-    pub election_id_low:u64
-}
-
-impl Default for Bmv2MasterUpdateOption {
-    fn default() -> Self {
-        Bmv2MasterUpdateOption {
-            election_id_high: 0,
-            election_id_low: 1
-        }
-    }
-}
-
-impl Bmv2SwitchConnection {
+impl StratumBmv2SwitchConnection {
     pub async fn try_new(
         name: &str,
         address: &str,
-        options: Bmv2ConnectionOption
-    ) -> Bmv2SwitchConnection {
+        options: StratumBmv2ConnectionOption
+    ) -> StratumBmv2SwitchConnection {
         let name = name.to_owned();
         let address = address.to_owned();
 
@@ -86,13 +75,15 @@ impl Bmv2SwitchConnection {
 
         let mut client_stub =
             crate::proto::p4runtime::client::P4RuntimeClient::new(endpoint.channel());
+        let mut gnmi_client_stub = GNMIClient::new(endpoint.channel());
 
-        Bmv2SwitchConnection {
+        StratumBmv2SwitchConnection {
             name,
             inner_id: DeviceID(inner_id),
             address,
             device_id,
             client: client_stub,
+            gnmi_client: gnmi_client_stub
         }
     }
 
