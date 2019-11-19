@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::time::Instant;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Device {
@@ -193,5 +194,49 @@ impl Debug for Link {
 impl PartialEq for Link {
     fn eq(&self, other: &Self) -> bool {
         self.src == other.src && self.dst == other.dst
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Load {
+    pub timestamp:Instant,
+    pub packets: i64,
+    pub bytes: i64,
+    pub last_bps: f64,
+    pub last_pps: f64,
+    pub all_bytes: i64,
+    pub all_packets: i64,
+    pub start_timestamp: Instant
+}
+
+impl Load {
+    pub fn new() -> Load {
+        Load {
+            timestamp: Instant::now(),
+            packets: 0,
+            bytes: 0,
+            last_bps: 0.0,
+            last_pps: 0.0,
+            all_bytes: 0,
+            all_packets: 0,
+            start_timestamp: Instant::now()
+        }
+    }
+
+    pub(crate) fn update(&mut self, packet:i64, bytes: i64) {
+        let timestamp = Instant::now();
+        let last = self.timestamp;
+        let dur = timestamp.duration_since(last).as_secs_f64();
+        let diff_packets = packet-self.packets;
+        let diff_bytes = bytes-self.bytes;
+        let last_pps = diff_packets as f64 / dur;
+        let last_bps = diff_bytes as f64 / dur;
+        self.last_bps = last_bps;
+        self.last_pps = last_pps;
+        self.packets = packet;
+        self.bytes = bytes;
+        self.timestamp = timestamp;
+        self.all_bytes+=bytes;
+        self.all_packets+=packet;
     }
 }

@@ -25,6 +25,7 @@ pub mod common;
 //pub mod extended;
 pub mod graph;
 pub mod statistic;
+pub mod raw_statistic;
 //pub mod sync_app;
 pub mod app_service;
 
@@ -48,6 +49,8 @@ where
     }
 
     async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut Context<E>) {}
+
+    async fn on_context_update(self: &mut Self, ctx: &mut Context<E>) {}
 }
 
 pub struct Example {

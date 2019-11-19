@@ -3,6 +3,7 @@ use crate::p4rt::pipeconf::Pipeconf;
 pub mod clone_session;
 pub mod meter;
 pub mod multicast_group;
+pub mod counter;
 pub type ProtoEntity = crate::proto::p4runtime::Entity;
 
 #[derive(Debug)]
