@@ -8,72 +8,7 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 
 pub struct Value;
-
-#[derive(Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub struct MAC(pub [u8; 6]);
-
-impl From<BytesMut> for MAC {
-    fn from(b: BytesMut) -> Self {
-        Self::from_slice(b.as_ref())
-    }
-}
-
-impl MAC {
-    pub fn of(s: &str) -> MAC {
-        let vec = hex::decode(s.replace(':', "")).unwrap();
-        MAC(vec_to_mac(vec))
-    }
-
-    pub fn broadcast() -> MAC {
-        MAC([0xff; 6])
-    }
-
-    pub fn zero() -> MAC {
-        MAC([0x00; 6])
-    }
-
-    pub fn is_broadcast(&self) -> bool {
-        self.0 == [0xff; 6]
-    }
-
-    pub fn is_multicast(&self) -> bool {
-        self.0[0] == 0x33 && self.0[1] == 0x33
-    }
-
-    pub fn as_ref(&self) -> &[u8; 6] {
-        &self.0
-    }
-
-    pub fn from_slice(b: &[u8]) -> MAC {
-        let mut s = [0u8; 6];
-        s.copy_from_slice(b.as_ref());
-        MAC(s)
-    }
-
-    pub fn display_slice(b: &[u8; 6], f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            b[0], b[1], b[2], b[3], b[4], b[5]
-        )
-    }
-}
-
-impl AsRef<[u8]> for MAC {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl Debug for MAC {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
-        )
-    }
-}
+pub type MAC = ipip::MAC;
 
 fn vec_to_mac(vec: Vec<u8>) -> [u8; 6] {
     let mut mac = [0u8; 6];
