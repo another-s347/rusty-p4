@@ -6,10 +6,11 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use petgraph::stable_graph::StableGraph;
 
 #[derive(Debug)]
 pub struct DefaultGraph {
-    base: petgraph::stable_graph::StableGraph<DeviceID, u32>,
+    base: StableGraph<DeviceID, u32>,
     node_index: HashMap<DeviceID, petgraph::prelude::NodeIndex>,
     edge_to_link: HashMap<petgraph::prelude::EdgeIndex, Link>,
     link_to_edge: HashMap<Link, petgraph::prelude::EdgeIndex>,
@@ -124,6 +125,98 @@ impl DefaultGraph {
             None
         }
     }
+
+    pub fn get_weighted_path<T:Weigher>(&self, src:DeviceID,dst:DeviceID, weigher:&mut T) -> Option<Path> {
+        let src = *self.node_index.get(&src).unwrap();
+        let dst = *self.node_index.get(&dst).unwrap();
+
+        let mut dist = HashMap::new();
+        dist.insert(src, 0);
+        let mut prev = HashMap::new();
+        let mut visited = HashSet::with_capacity(self.base.node_count());
+
+        let mut vertx_heap = BinaryHeap::with_capacity(self.base.node_count());
+        vertx_heap.push(ReversePrioritywithVertx {
+            vertx: src,
+            priority: 0,
+        });
+
+        while let Some(ReversePrioritywithVertx { vertx, priority }) = vertx_heap.pop() {
+            if !visited.insert(vertx) {
+                continue;
+            }
+
+            for i in self.base.edges(vertx) {
+                let link = i.id();
+                let w = self.edge_to_link.get(&link).and_then(|l|{
+                    weigher.get(l)
+                }).unwrap_or(weigher.default());
+                if w != 0 {
+                    let cost = w;
+                    let new_dist = priority + cost;
+                    let target = i.target();
+                    let is_shorter = dist
+                        .get(&target)
+                        .map_or(true, |&current| new_dist < current);
+
+                    if is_shorter {
+                        dist.insert(target, new_dist);
+                        prev.insert(target, i);
+                        vertx_heap.push(ReversePrioritywithVertx {
+                            vertx: target,
+                            priority: new_dist,
+                        })
+                    }
+                }
+            }
+        }
+        if let Some(&p) = prev.get(&dst) {
+            let mut lists = Vec::new();
+            let mut one = p;
+            let mut two = dst;
+            let mut c = 0;
+            loop {
+                let link = self.edge_to_link.get(&p.id()).unwrap();
+                lists.push(link.clone());
+                c += p.weight();
+                if one.source() == src {
+                    break;
+                }
+                two = one.source();
+                one = *prev.get(&two).unwrap();
+            }
+            lists.reverse();
+            Some(Path {
+                links: lists,
+                weight: c,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn weighted_map<T:Weigher>(&self, weigher:&mut T) -> DefaultGraph {
+        let mut new_graph = self.base.clone();
+        for (link,edge) in self.link_to_edge.iter() {
+            if let Some(w) = new_graph.edge_weight_mut(*edge) {
+                *w = weigher.get(link).unwrap_or(weigher.default());
+            }
+            else {
+                unreachable!()
+            }
+        }
+        DefaultGraph {
+            base: new_graph,
+            node_index: self.node_index.clone(),
+            edge_to_link: self.edge_to_link.clone(),
+            link_to_edge: self.link_to_edge.clone()
+        }
+    }
+}
+
+pub trait Weigher {
+    fn get(&mut self,link:&Link) -> Option<u32>;
+    fn default(&mut self) -> u32;
 }
 
 #[derive(Debug)]
