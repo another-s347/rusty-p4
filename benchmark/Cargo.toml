@@ -13,6 +13,8 @@ flexi_logger = "0.13.2"
 log = "0.4"
 bytes = "0.4"
 async-trait = "0.1.13"
+jemallocator = "0.3.0"
 
 [profile.release]
 debug = true
+lto = true

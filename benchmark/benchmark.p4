@@ -68,6 +68,9 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+    counter(255, CounterType.packets_and_bytes) tx_port_counter;
+    counter(255, CounterType.packets_and_bytes) rx_port_counter;
+
     action drop() {
         mark_to_drop(standard_metadata);
     }
@@ -77,6 +80,8 @@ control MyIngress(inout headers hdr,
         hdr.packet_in.setValid();
         hdr.packet_in.ingress_port = standard_metadata.ingress_port;
     }
+
+    direct_counter(CounterType.packets_and_bytes) acl_counter;
 
     table acl {
         key = {
@@ -90,6 +95,7 @@ control MyIngress(inout headers hdr,
             drop;
         }
         default_action = send_to_cpu();
+        counters = acl_counter;
     }
 
     apply {
@@ -98,6 +104,12 @@ control MyIngress(inout headers hdr,
         }
         else {
             acl.apply();
+        }
+        if (standard_metadata.egress_spec < 255) {
+            tx_port_counter.count((bit<32>) standard_metadata.egress_spec);
+        }
+        if (standard_metadata.ingress_port < 255) {
+            rx_port_counter.count((bit<32>) standard_metadata.ingress_port);
         }
     }
 }
