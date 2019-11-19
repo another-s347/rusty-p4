@@ -11,8 +11,8 @@ description = "A (WIP) library for writing P4 controller in Rust."
 
 [dependencies]
 prost = "0.5"
-tonic = {version="0.1.0-alpha.5",features=["rustls"]}
-rusty-p4-proto = {path="/home/skye/rusty-p4-proto"}
+tonic = {version="0.1.0-alpha.6",features=["rustls"]}
+rusty-p4-proto = { git="https://github.com/another-s347/rusty-p4-proto.git" }
 byteorder = "1.3.2"
 hex = "0.3"
 tokio = { version="0.2.0-alpha.6" , features = ["rt-full"] }

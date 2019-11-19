@@ -46,9 +46,9 @@ type P4RuntimeClient =
     crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 pub struct ContextDriver<E, T> {
-    pub core_request_receiver: UnboundedReceiver<CoreRequest>,
-    pub event_receiver: UnboundedReceiver<CoreEvent<E>>,
-    pub request_receiver: UnboundedReceiver<NorthboundRequest>,
+    pub core_request_receiver: futures::channel::mpsc::Receiver<CoreRequest>,
+    pub event_receiver: futures::channel::mpsc::Receiver<CoreEvent<E>>,
+    pub request_receiver: futures::channel::mpsc::Receiver<NorthboundRequest>,
     pub app: T,
     pub ctx: AppContext<E>,
 }
@@ -66,8 +66,10 @@ where
                 request = self.core_request_receiver.next() => {
                     match request {
                         Some(request) => {
-                            if ctx.process_core_request(request).await {
+                            if let Some(e) = ctx.process_core_request(request).await {
                                 handle = ctx.get_handle();
+                                self.app.on_context_update(&mut handle).await;
+                                ctx.event_sender.send(CoreEvent::Event(e)).await;
                             }
                         }
                         None => { }

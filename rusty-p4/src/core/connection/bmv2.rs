@@ -47,7 +47,6 @@ impl Bmv2Connection {
         self.p4runtime_client
             .set_forwarding_pipeline_config(tonic::Request::new(request))
             .await.context(ContextErrorKind::ConnectionError)?;
-        context.send_event(CommonEvents::DevicePipeconfUpdate(self.pipeconf.get_id()).into_e());
         Ok(())
     }
 }

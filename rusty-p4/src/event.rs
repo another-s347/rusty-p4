@@ -62,7 +62,7 @@ impl CommonEvents {
 pub enum CommonEvents {
     DeviceAdded(Device),
     DeviceMasterUp(DeviceID),
-    DevicePipeconfUpdate(PipeconfID),
+    DevicePipeconfUpdate(DeviceID,PipeconfID),
     DeviceUpdate(Device),
     DeviceLost(DeviceID),
     LinkDetected(Link),
@@ -70,6 +70,8 @@ pub enum CommonEvents {
     HostDetected(Host),
     HostUpdate(Host),
     HostLost(Host),
+    PipeconfAdded(PipeconfID),
+    PipeconfRemoved(PipeconfID),
     Other,
 }
 

@@ -34,10 +34,10 @@ use crate::core::connection::ConnectionBox;
 
 #[derive(Clone)]
 pub struct Context<E> {
-    pub core_request_sender: UnboundedSender<CoreRequest>,
-    event_sender: UnboundedSender<CoreEvent<E>>,
-    connections: HashMap<DeviceID, ConnectionBox>,
-    pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
+    pub core_request_sender: futures::channel::mpsc::Sender<CoreRequest>,
+    pub event_sender: futures::channel::mpsc::Sender<CoreEvent<E>>,
+    pub connections: HashMap<DeviceID, ConnectionBox>,
+    pub pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
 }
 
 impl<E> Context<E>
@@ -45,8 +45,8 @@ where
     E: Debug+Event,
 {
     pub fn new(
-        core_request_sender: UnboundedSender<CoreRequest>,
-        event_sender: UnboundedSender<CoreEvent<E>>,
+        core_request_sender: futures::channel::mpsc::Sender<CoreRequest>,
+        event_sender: futures::channel::mpsc::Sender<CoreEvent<E>>,
         connections: HashMap<DeviceID, ConnectionBox>,
         pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     ) -> Context<E> {
@@ -59,7 +59,7 @@ where
     }
 
     pub fn update_pipeconf(&mut self, device:DeviceID, pipeconf:PipeconfID) {
-        self.core_request_sender.unbounded_send(CoreRequest::UpdatePipeconf {
+        self.core_request_sender.try_send(CoreRequest::UpdatePipeconf {
             device, pipeconf
         }).unwrap();
     }
@@ -93,26 +93,26 @@ where
         Ok(flow)
     }
 
-    pub fn add_device(&self, device: Device) -> bool {
+    pub fn add_device(&mut self, device: Device) -> bool {
         if self.connections.contains_key(&device.id) {
             return false;
         }
         self.core_request_sender
-            .unbounded_send(CoreRequest::AddDevice {
+            .try_send(CoreRequest::AddDevice {
                 device,
             })
             .unwrap();
         return true;
     }
 
-    pub fn send_event(&self, event: E) {
+    pub fn send_event(&mut self, event: E) {
         self.event_sender
-            .unbounded_send(CoreEvent::Event(event))
+            .try_send(CoreEvent::Event(event))
             .unwrap();
     }
 
-    pub fn send_request(&self, request: CoreRequest) {
-        self.core_request_sender.unbounded_send(request).unwrap();
+    pub fn send_request(&mut self, request: CoreRequest) {
+        self.core_request_sender.try_send(request).unwrap();
     }
 
     pub async fn send_packet(&mut self, to: ConnectPoint, packet: Bytes) {
@@ -152,21 +152,11 @@ where
         }
     }
 
-    pub fn remove_device(&self, device: DeviceID) {
+    pub fn remove_device(&mut self, device: DeviceID) {
         self.core_request_sender
-            .unbounded_send(CoreRequest::RemoveDevice { device })
+            .try_send(CoreRequest::RemoveDevice { device })
             .unwrap();
     }
-
-//    pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate)
-//        -> Result<(), ContextError>
-//    {
-//        let mut context = self.clone();
-//        let connection = self.connections.get_mut(&device).ok_or(ContextError::from(
-//            ContextErrorKind::DeviceNotConnected { device },
-//        ))?;
-//        connection.master_up(master_update, &mut context).await
-//    }
 
     pub fn try_get_connectpoint(&self, packet:&PacketReceived) -> Option<ConnectPoint> {
         self.connections.get(&packet.from)

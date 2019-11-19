@@ -8,7 +8,6 @@ use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
 use failure::ResultExt;
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::future::FutureExt;
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
@@ -40,6 +39,7 @@ use crate::core::connection::bmv2::Bmv2Connection;
 use crate::core::connection::{ConnectionBox, Connection};
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 use crate::p4rt::stratum_bmv2::{StratumBmv2SwitchConnection, StratumBmv2ConnectionOption};
+use futures::channel::mpsc::{Sender, Receiver};
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -51,8 +51,8 @@ pub struct ContextConfig {
 
 pub struct Core<E> {
     pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
-    pub(crate) core_channel_sender: UnboundedSender<CoreRequest>,
-    pub(crate) event_sender: UnboundedSender<CoreEvent<E>>,
+    pub(crate) core_channel_sender: Sender<CoreRequest>,
+    pub(crate) event_sender: Sender<CoreEvent<E>>,
     pub(crate) connections: HashMap<DeviceID, ConnectionBox>,
     pub(crate) config: ContextConfig,
 }
@@ -65,14 +65,14 @@ impl<E> Core<E>
         pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
         config: ContextConfig,
-        northbound_channel: Option<UnboundedReceiver<NorthboundRequest>>,
+        northbound_channel: Option<Receiver<NorthboundRequest>>,
     ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
         where
             T: P4app<E> + 'static,
     {
-        let (app_s, app_r) = futures::channel::mpsc::unbounded();
+        let (app_s, app_r) = futures::channel::mpsc::channel(10240);
 
-        let (s, mut r) = futures::channel::mpsc::unbounded();
+        let (s, mut r) = futures::channel::mpsc::channel(10240);
 
         let mut obj = Core {
             pipeconf: Arc::new(pipeconf),
@@ -88,7 +88,7 @@ impl<E> Core<E>
         let northbound_channel = if let Some(r) = northbound_channel {
             r
         } else {
-            let (w, r) = futures::channel::mpsc::unbounded();
+            let (w, r) = futures::channel::mpsc::channel(10240);
             r
         };
 
@@ -103,7 +103,7 @@ impl<E> Core<E>
         Ok((context_handle, driver))
     }
 
-    pub async fn process_core_request(&mut self,request:CoreRequest) -> bool {
+    pub async fn process_core_request(&mut self,request:CoreRequest) -> Option<E> {
         match request {
             CoreRequest::AddDevice { device} => self.add_device(device).await,
             CoreRequest::RemoveDevice { device } => self.remove_device(device).await,
@@ -126,7 +126,7 @@ impl<E> Core<E>
         )
     }
 
-    pub async fn add_device(&mut self, device:Device) -> bool {
+    pub async fn add_device(&mut self, device:Device) -> Option<E> {
         let name = &device.name;
         match device.typ {
             DeviceType::Bmv2MASTER {
@@ -136,12 +136,12 @@ impl<E> Core<E>
             } => {
                 if self.connections.contains_key(&device.id) {
                     error!(target:"core","Device with name existed: {:?}",device.name);
-                    return false;
+                    return None;
                 }
                 let pipeconf_obj = self.pipeconf.get(&pipeconf);
                 if pipeconf_obj.is_none() {
                     error!(target:"core","pipeconf not found: {:?}",pipeconf);
-                    return false;
+                    return None;
                 }
                 let pipeconf = pipeconf_obj.unwrap().clone();
                 let bmv2connection = Bmv2SwitchConnection::try_new(
@@ -161,7 +161,7 @@ impl<E> Core<E>
                             CommonEvents::DeviceLost(device.id).into_e(),
                         ))
                         .await;
-                    return false;
+                    return None;
                 }
             }
             DeviceType::StratumMASTER {
@@ -169,12 +169,12 @@ impl<E> Core<E>
             } => {
                 if self.connections.contains_key(&device.id) {
                     error!(target:"core","Device with name existed: {:?}",device.name);
-                    return false;
+                    return None;
                 }
                 let pipeconf_obj = self.pipeconf.get(&pipeconf);
                 if pipeconf_obj.is_none() {
                     error!(target:"core","pipeconf not found: {:?}",pipeconf);
-                    return false;
+                    return None;
                 }
                 let pipeconf = pipeconf_obj.unwrap().clone();
                 let bmv2connection = StratumBmv2SwitchConnection::try_new(
@@ -193,27 +193,27 @@ impl<E> Core<E>
                             CommonEvents::DeviceLost(device.id).into_e(),
                         ))
                         .await;
-                    return false;
+                    return None;
                 }
             }
             _ => {}
         }
-        self.event_sender
-            .send(CoreEvent::Event(
-                CommonEvents::DeviceAdded(device.clone()).into_e(),
-            ))
-            .await
-            .unwrap();
-        true
+//        self.event_sender
+//            .send(CoreEvent::Event(
+//                CommonEvents::DeviceAdded(device.clone()).into_e(),
+//            ))
+//            .await
+//            .unwrap();
+        Some(CommonEvents::DeviceAdded(device.clone()).into_e())
     }
 
-    pub async fn remove_device(&mut self, id:DeviceID) -> bool {
+    pub async fn remove_device(&mut self, id:DeviceID) -> Option<E> {
         self.connections.remove(&id);
-        self.event_sender
-            .send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()))
-            .await
-            .unwrap();
-        true
+//        self.event_sender
+//            .send(CoreEvent::Event(CommonEvents::DeviceLost(id).into_e()))
+//            .await
+//            .unwrap();
+        Some(CommonEvents::DeviceLost(id).into_e())
     }
 
     pub async fn master_up(&mut self, device:DeviceID, master_update:MasterArbitrationUpdate) -> Result<(), ContextError> {
@@ -223,29 +223,32 @@ impl<E> Core<E>
         connection.master_updated(master_update).await
     }
 
-    pub fn add_pipeconf(&mut self, pipeconf:Pipeconf) -> bool {
+    pub fn add_pipeconf(&mut self, pipeconf:Pipeconf) -> Option<E> {
         let id = pipeconf.get_id();
         if self.pipeconf.contains_key(&id) {
-            return false;
+            return None;
         }
         else {
             Arc::make_mut(&mut self.pipeconf).insert(id, pipeconf);
-            return true;
+            return Some(CommonEvents::PipeconfAdded(id).into_e());
         }
     }
 
-    pub fn remove_pipeconf(&mut self, pipeconf:PipeconfID) -> bool {
-        Arc::make_mut(&mut self.pipeconf).remove(&pipeconf).is_some()
+    pub fn remove_pipeconf(&mut self, pipeconf:PipeconfID) -> Option<E> {
+        Arc::make_mut(&mut self.pipeconf).remove(&pipeconf)?;
+        Some(CommonEvents::PipeconfAdded(pipeconf).into_e())
     }
 
-    pub async fn update_pipeconf(&mut self, device:DeviceID, pipeconf:PipeconfID) -> bool {
+    pub async fn update_pipeconf(&mut self, device:DeviceID, pipeconf:PipeconfID) -> Option<E> {
+        let id = pipeconf;
         let pipeconf = if let Some(p) = self.pipeconf.get(&pipeconf) {
           p.clone()
-        } else { return false };
+        } else { return None };
         let conn = if let Some(d) = self.connections.get_mut(&device) {
             d
-        } else { return false };
-        conn.set_pipeconf(pipeconf).await.is_ok()
+        } else { return None };
+        conn.set_pipeconf(pipeconf).await.ok()?;
+        Some(CommonEvents::DevicePipeconfUpdate(device,id).into_e())
     }
 
     pub async fn add_bmv2_connection(
@@ -288,8 +291,9 @@ impl<E> Core<E>
 
         let master_up_req = crate::p4rt::pure::new_master_update_request(connection.device_id,Bmv2MasterUpdateOption::default());
         request_sender.send(master_up_req).await.unwrap();
-        let response = crate::p4rt::stratum_bmv2::get_interfaces_name(&mut connection.gnmi_client).await;
-        println!("{:#?}",response);
+
+//        let response = crate::p4rt::stratum_bmv2::get_interfaces_name(&mut connection.gnmi_client).await;
+//        println!("{:#?}",response);
         // todo: gather device information
 
         let id = connection.inner_id;
@@ -311,7 +315,7 @@ impl<E> Core<E>
 async fn drive_bmv2<E>(
     mut client:P4RuntimeClient,
     request_receiver:tokio::sync::mpsc::Receiver<StreamMessageRequest>,
-    mut event_sender:futures::channel::mpsc::UnboundedSender<CoreEvent<E>>,
+    mut event_sender:futures::channel::mpsc::Sender<CoreEvent<E>>,
     id:DeviceID
 ) {
     let mut response = client.stream_channel(tonic::Request::new(request_receiver)).await.unwrap().into_inner();

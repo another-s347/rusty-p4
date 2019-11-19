@@ -4,11 +4,12 @@ use crate::core::Context;
 use crate::event::{PacketReceived, NorthboundRequest, Event};
 use failure::_core::marker::PhantomData;
 use crate::app::common::CommonState;
-use futures::{StreamExt, Future};
+use futures::{StreamExt, Future, SinkExt};
 use crate::service::{Service};
 use std::collections::HashMap;
 use std::any::{TypeId, Any};
 use std::rc::Rc;
+use std::fmt::{Debug, Formatter, Error};
 
 pub struct AppServiceBuilder<E> {
     last_receiver:tokio::sync::mpsc::Receiver<_M<E>>,
@@ -20,18 +21,18 @@ pub struct AppServiceBuilder<E> {
 
 impl<E> AppServiceBuilder<E> where E:Event {
     pub fn new() -> Self {
-        let (s,mut c) = tokio::sync::mpsc::channel(1024);
+        let (s,mut c) = tokio::sync::mpsc::channel(10240);
         AppServiceBuilder {
             last_receiver: c,
             context_senders: vec![],
-            m_senders: vec![],
+            m_senders: vec![s.clone()],
             first_sender: s,
             services: Default::default()
         }
     }
 
     pub fn with<T>(&mut self,app:T) where T:P4app<E> {
-        let (s,mut c) = tokio::sync::mpsc::channel(1024);
+        let (s,mut c) = tokio::sync::mpsc::channel(10240);
         let c = std::mem::replace(&mut self.last_receiver,c);
         self.m_senders.push(s.clone());
         let (context_sender,context_receiver) = tokio::sync::oneshot::channel();
@@ -47,7 +48,7 @@ impl<E> AppServiceBuilder<E> where E:Event {
     pub fn with_service<T>(&mut self, mut app:T) -> T::ServiceType
         where T: P4app<E> + Service
     {
-        let (s,mut c) = tokio::sync::mpsc::channel(1024);
+        let (s,mut c) = tokio::sync::mpsc::channel(10240);
         let c = std::mem::replace(&mut self.last_receiver,c);
         self.m_senders.push(s.clone());
         let (context_sender,context_receiver) = tokio::sync::oneshot::channel();
@@ -64,6 +65,10 @@ impl<E> AppServiceBuilder<E> where E:Event {
     }
 
     pub fn build(self) -> AppService<E> {
+        let mut last_receiver = self.last_receiver;
+        tokio::spawn(async move {
+            while let Some(_) = last_receiver.next().await {}
+        });
         AppService {
             context_senders: self.context_senders,
             m_senders: self.m_senders,
@@ -109,6 +114,10 @@ impl<T,E> AppContainer<T,E> where T:P4app<E>,E:Event {
                         self.m_sender.send(_M::Packet(p)).await;
                     }
                 }
+                _M::Context(new_ctx)=>{
+                    context = new_ctx;
+                    self.app.on_context_update(&mut context).await;
+                }
             }
         }
     }
@@ -136,10 +145,21 @@ impl<E> P4app<E> for AppService<E> where E:Event {
         None
     }
 
-    async fn on_request(self: &mut Self, request: NorthboundRequest, ctx: &mut Context<E>) {}
+    async fn on_context_update(self: &mut Self, ctx: &mut Context<E>) {
+        for s in self.m_senders.iter_mut() {
+            s.send(_M::Context(ctx.clone())).await.unwrap();
+        }
+    }
 }
 
 pub(crate) enum _M<E> {
     Event(E),
-    Packet(PacketReceived)
+    Packet(PacketReceived),
+    Context(Context<E>)
+}
+
+impl<E> Debug for _M<E> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        Ok(())
+    }
 }
