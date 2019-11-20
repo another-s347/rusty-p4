@@ -7,7 +7,7 @@ use failure::_core::marker::PhantomData;
 pub mod arp;
 pub mod data;
 pub mod ethernet;
-pub mod ip;
+pub mod ipv4;
 
 pub trait Packet<'a>
 where
