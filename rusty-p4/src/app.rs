@@ -26,6 +26,7 @@ pub mod common;
 pub mod graph;
 pub mod statistic;
 pub mod raw_statistic;
+pub mod stratum_statistic;
 //pub mod sync_app;
 pub mod app_service;
 

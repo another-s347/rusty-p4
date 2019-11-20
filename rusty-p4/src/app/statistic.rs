@@ -1,6 +1,6 @@
 use crate::service::Service;
 use crate::app::P4app;
-use crate::app::raw_statistic::RawStatistic;
+use crate::app::raw_statistic::read_counter;
 use crate::core::Context;
 use crate::event::{Event,CommonEvents};
 use async_trait::async_trait;
@@ -10,9 +10,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 use crate::core::connection::ConnectionBox;
 use rusty_p4_proto::proto::v1::{CounterEntry, Index};
-use failure::_core::time::Duration;
+use std::time::Duration;
 use crate::representation::{DeviceID, Interface, Load};
 use crate::entity::counter::CounterIndex;
+use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -45,7 +46,7 @@ impl CounterTask {
     pub async fn run(mut self) {
         loop {
             tokio::timer::delay_for(self.interval.clone()).await;
-            if let Some(readings) = RawStatistic::read_counter(
+            if let Some(readings) = read_counter(
                 self.counter_index.to_counter_entry(),
                 &mut self.connection).await
             {
@@ -108,8 +109,7 @@ impl Service for Statistic {
 
     fn get_service(&mut self) -> Self::ServiceType {
         StatisticService {
-            inner_map: self.inner_map.clone(),
-//            translator: Default::default()
+            inner_map: self.inner_map.clone()
         }
     }
 }
@@ -117,7 +117,6 @@ impl Service for Statistic {
 #[derive(Clone)]
 pub struct StatisticService {
     pub(crate) inner_map:InnerMap,
-//    pub translator:HashMap<DeviceID,Arc<dyn Fn(&Interface) -> Option<CounterIndex>>>
 }
 
 impl StatisticService {
