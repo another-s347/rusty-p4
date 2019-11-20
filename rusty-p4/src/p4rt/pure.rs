@@ -252,10 +252,37 @@ pub fn get_meter<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Meter> {
 }
 
 pub fn get_meter_id(pipeconf: &P4Info, name: &str) -> Option<u32> {
-    //        self.p4info.meters.iter().for_each(|t|{
-    //            println!("{}",t.preamble.as_ref().unwrap().name);
-    //        });
     get_meter(pipeconf, name).map(|table| table.preamble.as_ref().unwrap().id)
+}
+
+pub fn get_counter<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Counter> {
+    pipeconf
+        .counters
+        .iter()
+        .filter(|t| t.preamble.is_some())
+        .find(|t| {
+            let pre = t.preamble.as_ref().unwrap();
+            &pre.name == name || &pre.alias == name
+        })
+}
+
+pub fn get_counter_id(pipeconf: &P4Info, name:&str) -> Option<u32> {
+    get_counter(pipeconf, name).map(|table| table.preamble.as_ref().unwrap().id)
+}
+
+pub fn get_directcounter<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a DirectCounter> {
+    pipeconf
+        .direct_counters
+        .iter()
+        .filter(|t| t.preamble.is_some())
+        .find(|t| {
+            let pre = t.preamble.as_ref().unwrap();
+            &pre.name == name || &pre.alias == name
+        })
+}
+
+pub fn get_directcounter_id(pipeconf: &P4Info, name:&str) -> Option<u32> {
+    get_directcounter(pipeconf, name).map(|table| table.preamble.as_ref().unwrap().id)
 }
 
 pub fn get_actions_id(pipeconf: &P4Info, action_name: &str) -> Option<u32> {
@@ -458,6 +485,17 @@ pub fn new_stratum_get_interfaces_name() -> rusty_p4_proto::proto::gnmi::GetRequ
     rusty_p4_proto::proto::gnmi::GetRequest {
         prefix:None,
         path:vec![crate::gnmi::new_gnmi_path("/interfaces/interface[name=*]/state/name")],
+        r#type:1,
+        encoding:2,
+        use_models:vec![],
+        extension:vec![]
+    }
+}
+
+pub fn new_stratum_get_interface_mac(name:&str) -> rusty_p4_proto::proto::gnmi::GetRequest {
+    rusty_p4_proto::proto::gnmi::GetRequest {
+        prefix:None,
+        path:vec![crate::gnmi::new_gnmi_path(&format!("/interfaces/interface[name={}]/ethernet/state/mac-address",name))],
         r#type:1,
         encoding:2,
         use_models:vec![],
