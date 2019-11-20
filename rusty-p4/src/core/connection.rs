@@ -31,6 +31,8 @@ pub trait Connection:Send+Sync+'static {
     fn clone_box(&self)->ConnectionBox;
 
     fn as_any(&self) -> &dyn Any;
+
+    fn as_mut_any(&mut self) -> &mut dyn Any;
 }
 
 pub struct ConnectionBox {
@@ -89,6 +91,11 @@ impl ConnectionBox
     pub fn get_inner<T:Connection+Clone>(&self) -> Option<&T> {
         let o = self.inner.as_ref().as_any();
         o.downcast_ref::<T>()
+    }
+
+    pub fn get_inner_mut<T:Connection+Clone>(&mut self) -> Option<&mut T> {
+        let o = self.inner.as_mut().as_mut_any();
+        o.downcast_mut::<T>()
     }
 }
 

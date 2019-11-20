@@ -98,4 +98,8 @@ impl Connection for Bmv2Connection {
     fn as_any(&self) -> &Any {
         self
     }
+
+    fn as_mut_any(&mut self) -> &mut Any {
+        self
+    }
 }
