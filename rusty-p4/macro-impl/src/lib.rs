@@ -1,10 +1,9 @@
 #![recursion_limit = "128"]
-//#![feature(proc_macro_diagnostic)]
 
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-
+use proc_macro2;
 use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseBuffer, ParseStream, Peek, Result};
 use syn::token::Brace;
@@ -122,19 +121,11 @@ impl Parse for _FlowMatch {
     }
 }
 
-/*
-let flow_match = flow_match!{
-    key => value,
-    key => value
-};
-*/
-#[proc_macro_hack]
-pub fn flow_match(input: TokenStream) -> TokenStream {
-    let flow_match = parse_macro_input!(input as _FlowMatch);
+fn flow_match_to_quotes(flow_match:_FlowMatch) -> proc_macro2::TokenStream {
     if flow_match.items.is_empty() {
-        return TokenStream::from(quote! {
+        return quote! {
             <Vec<rusty_p4::util::flow::FlowMatch>>::new()
-        });
+        };
     }
 
     let mut quotes = Vec::with_capacity(flow_match.items.len());
@@ -176,9 +167,21 @@ pub fn flow_match(input: TokenStream) -> TokenStream {
         }
     }
 
-    TokenStream::from(quote! {
+    quote! {
         vec![#(#quotes),*]
-    })
+    }
+}
+/*
+let flow_match = flow_match!{
+    key => value,
+    key => value
+};
+*/
+#[proc_macro_hack]
+pub fn flow_match(input: TokenStream) -> TokenStream {
+    let flow_match = parse_macro_input!(input as _FlowMatch);
+
+    TokenStream::from(flow_match_to_quotes(flow_match))
 }
 
 struct _Flow {
@@ -284,6 +287,30 @@ impl Parse for _Flow {
     }
 }
 
+fn action_params_to_quote(params:Option<Punctuated<_FlowActionItem, Token![,]>>) -> proc_macro2::TokenStream {
+    if params.is_none() {
+        return quote! {
+            <Vec<rusty_p4::util::flow::FlowActionParam>>::new()
+        };
+    }
+    let params = params.unwrap();
+    let mut quotes = Vec::with_capacity(params.len());
+    for m in params {
+        let name = m.key;
+        let expr = m.value;
+        quotes.push(quote! {
+                    rusty_p4::util::flow::FlowActionParam {
+                        name: #name,
+                        value: rusty_p4::util::value::encode(#expr)
+                    }
+                });
+    }
+
+    quote! {
+        vec![#(#quotes),*]
+    }
+}
+
 /*
 let flow = flow!{
     pipe:"",
@@ -298,9 +325,32 @@ let flow = flow!{
 */
 #[proc_macro_hack]
 pub fn flow(input: TokenStream) -> TokenStream {
-    let flow_match = parse_macro_input!(input as _Flow);
-
+    let flow = parse_macro_input!(input as _Flow);
+    let flow_table_name = flow.pipe.as_ref().map(|pipe|format!("{}.{}",pipe,&flow.table)).unwrap_or(flow.table.clone());
+    let action_name = if flow.action_name=="NoAction" {
+        flow.action_name
+    } else {
+        flow.pipe.as_ref().map(|pipe|format!("{}.{}",pipe,flow.action_name)).unwrap_or(flow.action_name)
+    };
+    let flow_matches = flow_match_to_quotes(_FlowMatch {
+        items: flow.table_match
+    });
+    let action_params = action_params_to_quote(flow.action_parameters);
+    let priority = flow.priority.map(|expr|{
+        quote!(#expr)
+    }).unwrap_or(quote!(1));
     TokenStream::from(quote! {
-        1
+        rusty_p4::util::flow::Flow {
+            table: std::sync::Arc::new(rusty_p4::util::flow::FlowTable {
+                name:#flow_table_name,
+                matches:#flow_matches
+            }),
+            action: std::sync::Arc::new(rusty_p4::util::flow::FlowAction {
+                name:#action_name,
+                params:#action_params
+            }),
+            priority:#priority,
+            metadata:0
+        }
     })
 }

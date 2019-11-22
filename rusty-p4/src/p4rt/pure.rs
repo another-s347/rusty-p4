@@ -235,7 +235,6 @@ pub fn get_action<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Action> {
         .filter(|t| t.preamble.is_some())
         .find(|t| {
             let pre = t.preamble.as_ref().unwrap();
-            dbg!(&pre);
             &pre.name == name || &pre.alias == name
         })
 }
@@ -297,8 +296,7 @@ pub fn get_match_field_pb(
 ) -> Option<FieldMatch> {
     let p4info_match = get_match_field_by_name(pipeconf, table_name, match_field_name).unwrap();
     let bitwidth = p4info_match.bitwidth;
-    let byte_len = (bitwidth as f32 / 8.0).ceil() as usize;;
-    let byte_len = byte_len as usize;
+    let byte_len = (bitwidth as f32 / 8.0).ceil() as usize;
     let x = p4info_match.r#match.as_ref().map(|x| {
         match x {
             match_field::Match::MatchType(x) => {

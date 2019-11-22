@@ -12,6 +12,10 @@ proc-macro = true
 [dev-dependencies]
 trybuild = "1.0"
 
+[dependencies.proc-macro2]
+version = "1.0"
+default-features = false
+
 [dependencies]
 quote = "1.0"
 proc-macro-hack = "0.5"
