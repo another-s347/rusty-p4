@@ -16,7 +16,7 @@ use crate::entity::counter::CounterIndex;
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 pub struct Statistic {
     inner_map:InnerMap
@@ -45,7 +45,7 @@ struct CounterTask {
 impl CounterTask {
     pub async fn run(mut self) {
         loop {
-            tokio::timer::delay_for(self.interval.clone()).await;
+            tokio::time::delay_for(self.interval.clone()).await;
             if let Some(readings) = read_counter(
                 self.counter_index.to_counter_entry(),
                 &mut self.connection).await

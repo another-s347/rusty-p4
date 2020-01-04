@@ -36,14 +36,12 @@ use futures::task::Poll;
 //use futures03::task::Context;
 //use futures03::task::Poll;
 use log::{debug, error, info, trace, warn};
-use tokio::runtime::current_thread::Handle;
-use tokio::runtime::Runtime;
 
 use super::Core as AppContext;
 use super::Context;
 
 type P4RuntimeClient =
-    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+    crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 pub struct ContextDriver<E, T> {
     pub core_request_receiver: futures::channel::mpsc::Receiver<CoreRequest>,

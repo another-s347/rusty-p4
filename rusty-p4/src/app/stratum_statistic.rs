@@ -17,8 +17,8 @@ use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 use tonic::IntoRequest;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
-type GNMIClient = rusty_p4_proto::proto::gnmi::client::GNmiClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
+type GNMIClient = rusty_p4_proto::proto::gnmi::g_nmi_client::GNmiClient<tonic::transport::channel::Channel>;
 
 pub struct StratumStatistic {
     inner_map:InnerMap
@@ -48,7 +48,7 @@ struct StratumCounterTask {
 impl StratumCounterTask {
     pub async fn run(mut self) {
         loop {
-            tokio::timer::delay_for(self.interval.clone()).await;
+            tokio::time::delay_for(self.interval.clone()).await;
             if let Some(readings) = read_stratum_load(
                 &mut self.connection, self.interface.as_str()).await
             {

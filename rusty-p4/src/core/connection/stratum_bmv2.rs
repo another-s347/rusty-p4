@@ -18,8 +18,8 @@ use std::any::Any;
 use async_trait::async_trait;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
-type GNMIClient = rusty_p4_proto::proto::gnmi::client::GNmiClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
+type GNMIClient = rusty_p4_proto::proto::gnmi::g_nmi_client::GNmiClient<tonic::transport::channel::Channel>;
 
 #[derive(Clone)]
 pub struct StratumBmv2Connection {

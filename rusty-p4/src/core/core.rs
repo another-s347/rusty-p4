@@ -12,8 +12,6 @@ use futures::future::FutureExt;
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
 use log::{debug, error, info, trace, warn};
-use tokio::runtime::current_thread::Handle;
-use tokio::runtime::Runtime;
 
 use crate::app::P4app;
 use crate::core::driver::ContextDriver;
@@ -42,7 +40,7 @@ use crate::p4rt::stratum_bmv2::{StratumBmv2SwitchConnection, StratumBmv2Connecti
 use futures::channel::mpsc::{Sender, Receiver};
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[derive(Copy, Clone, Default)]
 pub struct ContextConfig {

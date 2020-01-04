@@ -27,8 +27,8 @@ use std::convert::TryFrom;
 use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
-type GNMIClient = rusty_p4_proto::proto::gnmi::client::GNmiClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
+type GNMIClient = rusty_p4_proto::proto::gnmi::g_nmi_client::GNmiClient<tonic::transport::channel::Channel>;
 
 pub struct StratumBmv2SwitchConnection {
     pub name: String,
