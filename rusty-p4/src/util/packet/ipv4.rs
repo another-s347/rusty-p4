@@ -86,13 +86,13 @@ impl<'a, P> Packet<'a> for Ipv4<'a, P>
         buf.put_u8(version_ihl);
         let dscp_ecn = (self.dscp << 2) + (self.ecn & 0b00000011);
         buf.put_u8(dscp_ecn);
-        buf.put_u16_be(self.total_len);
-        buf.put_u16_be(self.identification);
+        buf.put_u16(self.total_len);
+        buf.put_u16(self.identification);
         let flags_fragmentoffset = ((self.flags as u16) << 13) + (self.frag_offset & 0b00011111_11111111);
-        buf.put_u16_be(flags_fragmentoffset);
+        buf.put_u16(flags_fragmentoffset);
         buf.put_u8(self.ttl);
         buf.put_u8(self.protocol);
-        buf.put_u16_be(self.hdr_checksum);
+        buf.put_u16(self.hdr_checksum);
         buf.put_slice(self.src);
         buf.put_slice(self.dst);
     }

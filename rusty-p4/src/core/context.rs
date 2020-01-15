@@ -27,8 +27,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
-use tokio::runtime::current_thread::Handle;
-use tokio::runtime::Runtime;
 use crate::core::connection::bmv2::Bmv2Connection;
 use crate::core::connection::ConnectionBox;
 

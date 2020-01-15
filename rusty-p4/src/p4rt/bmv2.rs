@@ -26,7 +26,7 @@ use tokio::io::AsyncReadExt;
 use std::convert::TryFrom;
 
 type P4RuntimeClient =
-    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+    crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 pub struct Bmv2SwitchConnection {
     pub name: String,
@@ -83,7 +83,7 @@ impl Bmv2SwitchConnection {
         let device_id = options.p4_device_id;
 
         let mut client_stub =
-            crate::proto::p4runtime::client::P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
+            crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
 
         Bmv2SwitchConnection {
             name,

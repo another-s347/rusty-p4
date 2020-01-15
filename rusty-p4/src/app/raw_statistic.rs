@@ -11,8 +11,8 @@ use rusty_p4_proto::proto::gnmi::{GetRequest};
 use rusty_p4_proto::proto::gnmi::typed_value::Value;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
-type GNMIClient = rusty_p4_proto::proto::gnmi::client::GNmiClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
+type GNMIClient = rusty_p4_proto::proto::gnmi::g_nmi_client::GNmiClient<tonic::transport::channel::Channel>;
 
 pub async fn read_counter(counter_entry:CounterEntry, client:&mut P4RuntimeClient) -> Option<Vec<CounterEntry>> {
     let mut response = client.read(crate::proto::p4runtime::ReadRequest {

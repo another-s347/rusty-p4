@@ -12,10 +12,10 @@ use crate::util::flow::{FlowActionParam, FlowMatch};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use failure::ResultExt;
 use futures::{Future, Sink};
-use nom::dbg_dmp;
+use nom::{dbg_dmp, ExtendInto};
 use rusty_p4_proto::proto::v1::{
     Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,MasterArbitrationUpdate,
 };
@@ -54,21 +54,23 @@ pub fn adjust_value(mut value: Bytes, bytes_len: usize) -> Bytes {
     if bytes_len == value.len() {
         value
     } else if bytes_len < value.len() {
-        value.slice(value.len() - bytes_len, value.len())
+        value.slice(value.len() - bytes_len..value.len())
     } else {
-        value.extend(vec![0u8; bytes_len - value.len()]);
-        value
+        let mut value2 = BytesMut::from(value.as_ref());
+        value2.extend(vec![0u8; bytes_len - value.len()]);
+        value2.freeze()
     }
 }
 
-pub fn adjust_value_with(mut value: Bytes, bytes_len: usize, e: u8) -> Bytes {
+pub fn adjust_value_with(value: Bytes, bytes_len: usize, e: u8) -> Bytes {
     if bytes_len == value.len() {
         value
     } else if bytes_len < value.len() {
-        value.slice(value.len() - bytes_len, value.len())
+        value.slice(value.len() - bytes_len..value.len())
     } else {
-        value.extend(vec![e; bytes_len - value.len()]);
-        value
+        let mut value2 = BytesMut::from(value.as_ref());
+        value2.extend(vec![e; bytes_len - value.len()]);
+        value2.freeze()
     }
 }
 
@@ -81,7 +83,7 @@ pub fn new_packet_out_request(
         payload: packet.to_vec(),
         metadata: vec![PacketMetadata {
             metadata_id: pipeconf.packetout_egress_id,
-            value: adjust_value(Bytes::from(egress_port.to_be_bytes().as_ref()), 2).to_vec(),
+            value: adjust_value(Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()), 2).to_vec(),
         }],
     };
     let request = StreamMessageRequest {

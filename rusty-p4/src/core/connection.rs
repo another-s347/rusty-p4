@@ -20,7 +20,7 @@ pub mod bmv2;
 pub mod stratum_bmv2;
 
 type P4RuntimeClient =
-crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[async_trait]
 pub trait Connection:Send+Sync+'static {

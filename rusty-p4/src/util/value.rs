@@ -52,57 +52,57 @@ pub trait Encode: Copy {
 
 impl Encode for Ipv4Addr {
     fn encode(self) -> Bytes {
-        Bytes::from(self.octets().as_ref())
+        Bytes::copy_from_slice(self.octets().as_ref())
     }
 }
 
 impl Encode for Ipv6Addr {
     fn encode(self) -> Bytes {
-        Bytes::from(self.octets().as_ref())
+        Bytes::copy_from_slice(self.octets().as_ref())
     }
 }
 
 impl Encode for IpAddr {
     fn encode(self) -> Bytes {
         match self {
-            IpAddr::V4(ip) => Bytes::from(ip.octets().as_ref()),
-            IpAddr::V6(ip) => Bytes::from(ip.octets().as_ref()),
+            IpAddr::V4(ip) => Bytes::copy_from_slice(ip.octets().as_ref()),
+            IpAddr::V6(ip) => Bytes::copy_from_slice(ip.octets().as_ref()),
         }
     }
 }
 
 impl Encode for &str {
     fn encode(self) -> Bytes {
-        Bytes::from(self)
+        Bytes::copy_from_slice(self.as_bytes())
     }
 }
 
 impl Encode for u32 {
     fn encode(self) -> Bytes {
-        Bytes::from(self.to_be_bytes().as_ref())
+        Bytes::copy_from_slice(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for u8 {
     fn encode(self) -> Bytes {
-        Bytes::from(self.to_be_bytes().as_ref())
+        Bytes::copy_from_slice(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for i32 {
     fn encode(self) -> Bytes {
-        Bytes::from(self.to_be_bytes().as_ref())
+        Bytes::copy_from_slice(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for u16 {
     fn encode(self) -> Bytes {
-        Bytes::from(self.to_be_bytes().as_ref())
+        Bytes::copy_from_slice(self.to_be_bytes().as_ref())
     }
 }
 
 impl Encode for MAC {
     fn encode(self) -> Bytes {
-        Bytes::from(self.0.as_ref())
+        Bytes::copy_from_slice(self.0.as_ref())
     }
 }

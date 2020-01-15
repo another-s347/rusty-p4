@@ -1,7 +1,7 @@
 use crate::util::packet::Packet;
 use crate::util::value::MAC;
 use byteorder::ByteOrder;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut, BufMut};
 use nom::bytes::complete::take;
 use std::net::Ipv4Addr;
 
@@ -80,11 +80,11 @@ impl<'a> Packet<'a> for Arp<'a> {
     }
 
     fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
-        buf.put_u16_be(self.hw_type);
-        buf.put_u16_be(self.proto_type);
+        buf.put_u16(self.hw_type);
+        buf.put_u16(self.proto_type);
         buf.put_u8(self.hw_addr_len);
         buf.put_u8(self.proto_addr_len);
-        buf.put_u16_be(self.opcode.into());
+        buf.put_u16(self.opcode.into());
         buf.put_slice(self.sender_mac);
         buf.put_slice(self.sender_ip);
         buf.put_slice(self.target_mac);

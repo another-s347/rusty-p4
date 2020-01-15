@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use std::any::Any;
 
 type P4RuntimeClient =
-    crate::proto::p4runtime::client::P4RuntimeClient<tonic::transport::channel::Channel>;
+    crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
 #[derive(Clone)]
 pub struct Bmv2Connection {

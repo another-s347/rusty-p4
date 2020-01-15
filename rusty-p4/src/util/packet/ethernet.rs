@@ -54,7 +54,7 @@ where
     fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
         buf.put_slice(self.dst);
         buf.put_slice(self.src);
-        buf.put_u16_be(self.ether_type);
+        buf.put_u16(self.ether_type);
     }
 
     fn get_payload(&self) -> Option<&Self::Payload> {
