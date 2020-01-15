@@ -32,7 +32,7 @@ impl Pipeconf {
         let mut file = std::fs::File::open(p4info_file_path).unwrap();
         let mut buf = vec![];
         file.read_to_end(&mut buf).unwrap();
-        let p4info = prost::Message::decode(buf).unwrap();
+        let p4info = prost::Message::decode(buf.as_ref()).unwrap();
         let packetout_id = get_packout_egress_port_metaid(&p4info).unwrap();
         let packetin_id = get_packin_egress_port_metaid(&p4info).unwrap();
         let id = crate::util::hash(name);

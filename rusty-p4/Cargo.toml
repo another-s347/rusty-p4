@@ -10,9 +10,9 @@ categories = ["network-programming"]
 description = "A (WIP) library for writing P4 controller in Rust."
 
 [dependencies]
-prost = "0.5"
-tonic = {version="0.1.0-beta.1"}
-rusty-p4-proto = { git="https://github.com/another-s347/rusty-p4-proto.git" }
+prost = "0.6"
+tonic = {version="0.1.0"}
+rusty-p4-proto = {version="0.1.0-alpha.3"}
 byteorder = "1.3.2"
 hex = "0.3"
 tokio = { version="0.2", features = ["full"]}
