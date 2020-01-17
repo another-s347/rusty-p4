@@ -49,13 +49,15 @@ pub struct ContextConfig {
     pub enable_netconfiguration: bool,
 }
 
-pub struct Core<E, C = DefaultContext<E>> {
+pub struct Core<E, C = DefaultContext<E>>
+where C:Context<E>
+{
     pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     pub(crate) core_channel_sender: Sender<CoreRequest>,
     pub(crate) event_sender: Sender<CoreEvent<E>>,
     pub(crate) connections: HashMap<DeviceID, ConnectionBox>,
     pub(crate) config: ContextConfig,
-    pha:PhantomData<C>
+    context_state: C::ContextState,
 }
 
 impl<E, C> Core<E, C>
@@ -81,7 +83,7 @@ impl<E, C> Core<E, C>
             event_sender: app_s,
             connections:HashMap::new(),
             config,
-            pha: Default::default()
+            context_state: C::ContextState::default()
         };
         let mut context_handle = obj.get_handle();
 
@@ -125,6 +127,7 @@ impl<E, C> Core<E, C>
             self.event_sender.clone(),
             conns,
             self.pipeconf.clone(),
+            self.context_state.clone()
         )
     }
 

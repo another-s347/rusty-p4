@@ -44,7 +44,9 @@ use crate::core::context::Context;
 type P4RuntimeClient =
     crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
-pub struct ContextDriver<E, T, C> {
+pub struct ContextDriver<E, T, C>
+where C:Context<E>
+{
     pub core_request_receiver: futures::channel::mpsc::Receiver<CoreRequest>,
     pub event_receiver: futures::channel::mpsc::Receiver<CoreEvent<E>>,
     pub request_receiver: futures::channel::mpsc::Receiver<NorthboundRequest>,

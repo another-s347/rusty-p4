@@ -26,7 +26,6 @@ pub mod graph;
 pub mod statistic;
 pub mod raw_statistic;
 pub mod stratum_statistic;
-pub mod flow_manager;
 pub mod app_service;
 
 #[async_trait]

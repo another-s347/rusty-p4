@@ -10,7 +10,7 @@ use std::fmt::Formatter;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, Clone)]
 pub struct Flow {
     pub table: Arc<FlowTable>,
     pub action: Arc<FlowAction>,
@@ -34,13 +34,13 @@ impl Flow {
     }
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct FlowTable {
     pub name: &'static str,
     pub matches: Vec<FlowMatch>,
 }
 
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FlowMatch {
     pub name: &'static str,
     pub value: InnerValue,

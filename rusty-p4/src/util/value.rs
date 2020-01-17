@@ -32,7 +32,7 @@ pub fn RANGE<T: Encode, P: Encode>(v: T, p: P) -> InnerValue {
     InnerValue::RANGE(v.encode(), p.encode())
 }
 
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum InnerValue {
     EXACT(Bytes),
     LPM(Bytes, /*prefix_len*/ i32),
