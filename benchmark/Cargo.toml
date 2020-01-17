@@ -8,12 +8,13 @@ edition = "2018"
 
 [dependencies]
 rusty-p4 = { path="../rusty-p4" }
-tokio = { version="0.2.0-alpha.2" , features = ["rt-full"] }
+tokio = { version="0.2" , features = ["full", "time"] }
 flexi_logger = "0.13.2"
 log = "0.4"
-bytes = "0.4"
+bytes = "0.5"
 async-trait = "0.1.13"
 jemallocator = "0.3.0"
+ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 
 [profile.release]
 debug = true

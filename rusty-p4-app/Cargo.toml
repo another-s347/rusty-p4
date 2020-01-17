@@ -10,12 +10,13 @@ categories = ["Network programming"]
 description = "Sample app collection for rusty-p4."
 
 [dependencies]
-bytes = "0.4.12"
-futures-preview = { version = "0.3.0-alpha.19", features = ["async-await", "unstable"]}
-hyper = "0.13.0-alpha.1"
 rusty-p4 = { path="../rusty-p4" }
+tokio = { version="0.2" , features = ["full", "time"] }
+futures = { version = "0.3", features = ["async-await", "unstable"]}
+flexi_logger = "0.13.2"
 log = "0.4"
+bytes = "0.5"
+async-trait = "0.1.13"
+ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version="0.2.0-alpha.6" , features = ["rt-full"] }
-async-trait = "0.1.13"

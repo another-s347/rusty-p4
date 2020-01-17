@@ -4,5 +4,5 @@ pub mod core;
 pub mod connection;
 
 pub use self::core::Core;
-pub use context::Context;
+pub use context::DefaultContext;
 pub use driver::ContextDriver;

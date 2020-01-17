@@ -1,7 +1,7 @@
 use crate::service::Service;
 use crate::app::P4app;
 use crate::app::raw_statistic::read_stratum_load;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::event::{Event,CommonEvents};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use crate::representation::{DeviceID, Interface, Load, StratumLoad};
 use crate::entity::counter::CounterIndex;
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 use tonic::IntoRequest;
+use crate::core::context::Context;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -65,15 +66,15 @@ impl StratumCounterTask {
 }
 
 #[async_trait]
-impl<E> P4app<E> for StratumStatistic
-    where E:Event + Sync
+impl<E, C> P4app<E, C> for StratumStatistic
+    where E:Event + Sync, C: Context<E>
 {
-    async fn on_event(self: &mut Self, event: E, ctx: &mut Context<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut C) -> Option<E> {
         if let Some(common) = event.try_to_common() {
             match common {
                 CommonEvents::DeviceAdded(device) => {
                     if device.typ.is_stratum() {
-                        let mut conn = &ctx.connections.get(&device.id).unwrap().get_inner::<StratumBmv2Connection>().unwrap().gnmi_client;
+                        let mut conn = &ctx.get_conn().get(&device.id).unwrap().get_inner::<StratumBmv2Connection>().unwrap().gnmi_client;
                         for p in device.ports.iter() {
                             if let Some(interface) = &p.interface {
                                 tokio::spawn(StratumCounterTask {

@@ -10,7 +10,7 @@ use rusty_p4_proto::proto::v1::{
     MasterArbitrationUpdate
 };
 use rusty_p4_proto::proto::gnmi::SubscribeRequest;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::event::{CommonEvents, Event};
 use std::fmt::Debug;
 use crate::core::connection::{Connection, ConnectionBox};
@@ -35,7 +35,7 @@ impl StratumBmv2Connection {
     pub async fn master_up<E>(
         &mut self,
         master_update:MasterArbitrationUpdate,
-        context:&mut Context<E>
+        context:&mut DefaultContext<E>
     ) -> Result<(), ContextError>
         where E:Event+Debug
     {

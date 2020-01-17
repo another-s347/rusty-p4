@@ -1,7 +1,7 @@
 use crate::service::Service;
 use crate::app::P4app;
 use crate::app::raw_statistic::read_counter;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::event::{Event,CommonEvents};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -9,11 +9,12 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::time::Instant;
 use crate::core::connection::ConnectionBox;
-use rusty_p4_proto::proto::v1::{CounterEntry, Index};
+use rusty_p4_proto::proto::v1::{CounterEntry, Index, DirectCounterEntry};
 use std::time::Duration;
 use crate::representation::{DeviceID, Interface, Load};
 use crate::entity::counter::CounterIndex;
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
+use crate::core::context::Context;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -82,14 +83,14 @@ impl CounterTask {
 }
 
 #[async_trait]
-impl<E> P4app<E> for Statistic
-    where E:Event
+impl<E, C> P4app<E, C> for Statistic
+    where E:Event,C: Context<E>
 {
-    async fn on_event(self: &mut Self, event: E, ctx: &mut Context<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut C) -> Option<E> {
         if let Some(common) = event.try_to_common() {
             match common {
                 CommonEvents::DeviceAdded(device) => {
-                    let conn = ctx.connections.get(&device.id).unwrap().p4runtime_client.clone();
+                    let conn = ctx.get_conn().get(&device.id).unwrap().p4runtime_client.clone();
                     tokio::spawn(CounterTask {
                         inner_map: self.inner_map.clone(),
                         connection: conn,

@@ -1,4 +1,4 @@
-use crate::core::{Core, Context};
+use crate::core::{Core, DefaultContext};
 use crate::proto::p4runtime::{
     stream_message_response, Entity, Index, MeterEntry, PacketIn, StreamMessageRequest,
     StreamMessageResponse, Uint128, Update, WriteRequest, WriteResponse,

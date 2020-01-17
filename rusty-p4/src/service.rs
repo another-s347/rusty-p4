@@ -1,5 +1,4 @@
 //use crate::app::sync_app::AsyncWrap;
-use crate::app::Example;
 use std::any::Any;
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;

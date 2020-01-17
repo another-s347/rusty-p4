@@ -32,12 +32,14 @@ use rusty_p4_proto::proto::v1::{
 };
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType};
 use crate::util::flow::Flow;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::core::connection::bmv2::Bmv2Connection;
 use crate::core::connection::{ConnectionBox, Connection};
 use crate::core::connection::stratum_bmv2::StratumBmv2Connection;
 use crate::p4rt::stratum_bmv2::{StratumBmv2SwitchConnection, StratumBmv2ConnectionOption};
 use futures::channel::mpsc::{Sender, Receiver};
+use crate::core::context::Context;
+use failure::_core::marker::PhantomData;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -47,26 +49,27 @@ pub struct ContextConfig {
     pub enable_netconfiguration: bool,
 }
 
-pub struct Core<E> {
+pub struct Core<E, C = DefaultContext<E>> {
     pub(crate) pipeconf: Arc<HashMap<PipeconfID, Pipeconf>>,
     pub(crate) core_channel_sender: Sender<CoreRequest>,
     pub(crate) event_sender: Sender<CoreEvent<E>>,
     pub(crate) connections: HashMap<DeviceID, ConnectionBox>,
     pub(crate) config: ContextConfig,
+    pha:PhantomData<C>
 }
 
-impl<E> Core<E>
+impl<E, C> Core<E, C>
     where
-        E: Event + Clone + 'static + Send,
+        E: Event + Clone + 'static + Send, C: Context<E>
 {
     pub async fn try_new<T>(
         pipeconf: HashMap<PipeconfID, Pipeconf>,
         mut app: T,
         config: ContextConfig,
         northbound_channel: Option<Receiver<NorthboundRequest>>,
-    ) -> Result<(Context<E>, ContextDriver<E, T>), ContextError>
+    ) -> Result<(C, ContextDriver<E, T, C>), ContextError>
         where
-            T: P4app<E> + 'static,
+            T: P4app<E,C> + 'static,
     {
         let (app_s, app_r) = futures::channel::mpsc::channel(10240);
 
@@ -78,6 +81,7 @@ impl<E> Core<E>
             event_sender: app_s,
             connections:HashMap::new(),
             config,
+            pha: Default::default()
         };
         let mut context_handle = obj.get_handle();
 
@@ -111,12 +115,12 @@ impl<E> Core<E>
         }
     }
 
-    pub fn get_handle(&self) -> Context<E>
+    pub fn get_handle(&self) -> C
         where
             E: Event,
     {
         let conns = self.connections.clone();
-        Context::new(
+        C::new(
             self.core_channel_sender.clone(),
             self.event_sender.clone(),
             conns,
@@ -223,12 +227,11 @@ impl<E> Core<E>
 
     pub fn add_pipeconf(&mut self, pipeconf:Pipeconf) -> Option<E> {
         let id = pipeconf.get_id();
-        if self.pipeconf.contains_key(&id) {
-            return None;
-        }
-        else {
+        return if self.pipeconf.contains_key(&id) {
+            None
+        } else {
             Arc::make_mut(&mut self.pipeconf).insert(id, pipeconf);
-            return Some(CommonEvents::PipeconfAdded(id).into_e());
+            Some(CommonEvents::PipeconfAdded(id).into_e())
         }
     }
 
@@ -321,7 +324,7 @@ async fn drive_bmv2<E>(
         if let Some(update) = r.update {
             match update {
                 stream_message_response::Update::Arbitration(masterUpdate) => {
-                    debug!(target: "core", "StreaMessageResponse?: {:#?}", &masterUpdate);
+                    debug!(target: "core", "StreamMessageResponse?: {:#?}", &masterUpdate);
                     event_sender.send(CoreEvent::Bmv2MasterUpdate(id,masterUpdate)).await.unwrap();
                 }
                 stream_message_response::Update::Packet(packet) => {
@@ -333,13 +336,13 @@ async fn drive_bmv2<E>(
                     event_sender.send(CoreEvent::PacketReceived(x)).await.unwrap();
                 }
                 stream_message_response::Update::Digest(p) => {
-                    debug!(target: "core", "StreaMessageResponse: {:#?}", p);
+                    debug!(target: "core", "StreamMessageResponse: {:#?}", p);
                 }
                 stream_message_response::Update::IdleTimeoutNotification(n) => {
-                    debug!(target: "core", "StreaMessageResponse: {:#?}", n);
+                    debug!(target: "core", "StreamMessageResponse: {:#?}", n);
                 }
                 stream_message_response::Update::Other(what) => {
-                    debug!(target: "core", "StreaMessageResponse: {:#?}", what);
+                    debug!(target: "core", "StreamMessageResponse: {:#?}", what);
                 }
             }
         }

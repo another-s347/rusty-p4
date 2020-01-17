@@ -27,6 +27,7 @@ petgraph = "0.4.13"
 parking_lot = "0.9.0"
 proc-macro-hack = "0.5"
 proc-macro-nested = "0.1"
+dashmap = "3.1.0"
 macro-impl = { path="./macro-impl"}
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 

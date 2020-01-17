@@ -3,7 +3,7 @@ use async_trait::async_trait;
 //use crate::app::async_app::AsyncAppsBuilder;
 use crate::app::graph::DefaultGraph;
 use crate::app::P4app;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::event::{CommonEvents, Event, PacketReceived};
 use crate::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host, Interface, Link};
 use crate::util::flow::*;
@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use crate::service::{Service};
 use parking_lot::Mutex;
+use crate::core::context::Context;
 
 #[derive(Clone)]
 pub struct CommonState {
@@ -111,11 +112,12 @@ pub enum MergeResult<T> {
 }
 
 #[async_trait]
-impl<E> P4app<E> for CommonState
+impl<E, C> P4app<E, C> for CommonState
 where
     E: Event,
+    C: Context<E>
 {
-    async fn on_event(self: &mut Self, event: E, ctx: &mut Context<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut C) -> Option<E> {
         if let Some(common) = event.try_to_common() {
             let mut inner = self.inner.lock();
             match common {

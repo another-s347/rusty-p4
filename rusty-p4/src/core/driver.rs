@@ -38,23 +38,25 @@ use futures::task::Poll;
 use log::{debug, error, info, trace, warn};
 
 use super::Core as AppContext;
-use super::Context;
+use super::DefaultContext;
+use crate::core::context::Context;
 
 type P4RuntimeClient =
     crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 
-pub struct ContextDriver<E, T> {
+pub struct ContextDriver<E, T, C> {
     pub core_request_receiver: futures::channel::mpsc::Receiver<CoreRequest>,
     pub event_receiver: futures::channel::mpsc::Receiver<CoreEvent<E>>,
     pub request_receiver: futures::channel::mpsc::Receiver<NorthboundRequest>,
     pub app: T,
-    pub ctx: AppContext<E>,
+    pub ctx: AppContext<E, C>,
 }
 
-impl<E, T> ContextDriver<E, T>
+impl<E, T, C> ContextDriver<E, T, C>
 where
     E: Event,
-    T: P4app<E>,
+    T: P4app<E, C>,
+    C: Context<E>
 {
     async fn run(mut self) {
         let mut ctx = self.ctx;

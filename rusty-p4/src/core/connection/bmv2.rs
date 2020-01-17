@@ -9,7 +9,7 @@ use crate::proto::p4runtime::{
 use rusty_p4_proto::proto::v1::{
     MasterArbitrationUpdate
 };
-use crate::core::{Context, Core};
+use crate::core::{DefaultContext, Core};
 use crate::event::{CommonEvents, Event};
 use std::fmt::Debug;
 use crate::core::connection::{Connection, ConnectionBox};
@@ -34,7 +34,7 @@ impl Bmv2Connection {
     pub async fn master_up<E>(
         &mut self,
         master_update:MasterArbitrationUpdate,
-        context:&mut Context<E>
+        context:&mut DefaultContext<E>
     ) -> Result<(), ContextError>
         where E:Event+Debug
     {

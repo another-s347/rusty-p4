@@ -3,7 +3,6 @@ use futures::prelude::*;
 use log::{debug, error, info, trace, warn};
 use rusty_p4::app::common::CommonState;
 use rusty_p4::app::P4app;
-use rusty_p4::context::ContextHandle;
 use rusty_p4::event::{CommonEvents, CoreRequest, Event, PacketReceived};
 use rusty_p4::p4rt::pipeconf::PipeconfID;
 use rusty_p4::representation::{ConnectPoint, Device, DeviceID, DeviceType, Host};
@@ -17,6 +16,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use async_trait::async_trait;
+use rusty_p4::core::context::Context;
 
 #[derive(Clone)]
 pub struct ProxyArpState {
@@ -58,18 +58,20 @@ impl ProxyArpLoader {
 }
 
 #[async_trait]
-impl<E> P4app<E> for ProxyArpState
+impl<E, C> P4app<E, C> for ProxyArpState
 where
     E: Event,
+    C: Context<E>
 {
     async fn on_packet(
         self: &mut Self,
         packet: PacketReceived,
-        ctx: &mut ContextHandle<E>,
+        ctx: &mut C,
     ) -> Option<PacketReceived> {
-        match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
+        match Ethernet::<&[u8]>::from_bytes(&packet.packet) {
             Some(ethernet) if ethernet.ether_type == 0x806 => {
-                on_arp_received(ethernet, packet.from, &self.commonstate_service, ctx);
+                let from = ctx.get_connectpoint(&packet).unwrap();
+                on_arp_received(ethernet, from, &self.commonstate_service, ctx);
                 return None;
             }
             _ => {}
@@ -77,25 +79,31 @@ where
         Some(packet)
     }
 
-    async fn on_event(self: &mut Self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
+    async fn on_event(self: &mut Self, event: E, ctx: &mut C) -> Option<E> {
         match event.try_to_common() {
             Some(CommonEvents::DeviceAdded(device)) => {
-                let interceptor = match &device.typ {
-                    DeviceType::MASTER {
+                let pipeconf = match &device.typ {
+                    DeviceType::Bmv2MASTER {
                         socket_addr,
                         device_id,
                         pipeconf,
-                    } => {
-                        if let Some(interceptor) = self.interceptor.get(pipeconf) {
-                            interceptor
-                        } else {
-                            return Some(event);
-                        }
-                    }
+                    } => pipeconf,
+                    DeviceType::StratumMASTER {
+                        socket_addr,
+                        device_id,
+                        pipeconf,
+                    } => pipeconf,
                     _ => {
-                        warn!(target:"linkprobe","It is not a master device. Proxy arp may not work.");
+                        warn!(target:"linkprobe","It is not a master device. link probe may not work.");
                         return Some(event);
                     }
+                };
+                let interceptor = if let Some(interceptor) = self.interceptor.get(pipeconf) {
+                    interceptor
+                }
+                else {
+                    warn!(target:"linkprobe","Pipeconf interceptor not found. link probe may not work.");
+                    return Some(event);
                 };
                 let flow = interceptor.new_flow(device.id);
                 ctx.insert_flow(flow, device.id);
@@ -106,13 +114,14 @@ where
     }
 }
 
-pub fn on_arp_received<E>(
+pub fn on_arp_received<E, C>(
     data: Ethernet<&[u8]>,
     cp: ConnectPoint,
     state: &CommonState,
-    ctx: &mut ContextHandle<E>,
+    ctx: &mut C,
 ) where
     E: Event,
+    C: Context<E>
 {
     let device = cp.device;
     let data = data.payload;

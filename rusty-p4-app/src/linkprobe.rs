@@ -1,4 +1,3 @@
-use rusty_p4::context::ContextHandle;
 use rusty_p4::event::{Event, CoreRequest, CommonEvents, PacketReceived};
 use std::time::Duration;
 use futures::prelude::*;
@@ -21,6 +20,7 @@ use std::any::Any;
 use rusty_p4::util::flow::Flow;
 use rusty_p4::app::P4app;
 use async_trait::async_trait;
+use rusty_p4::core::context::Context;
 
 pub struct LinkProbeLoader {
     interceptor:HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>
@@ -58,13 +58,13 @@ impl LinkProbeLoader {
 }
 
 #[async_trait]
-impl<E> P4app<E> for LinkProbeState where E:Event {
-    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut ContextHandle<E>) -> Option<PacketReceived> {
-        match Ethernet::<&[u8]>::from_bytes(packet.get_packet_bytes()) {
+impl<E, C> P4app<E, C> for LinkProbeState where E:Event,C:Context<E> {
+    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut C) -> Option<PacketReceived> {
+        match Ethernet::<&[u8]>::from_bytes(&packet.packet) {
             Some(ref ethernet) if ethernet.ether_type==0x861 => {
                 let probe:Result<ConnectPoint,serde_json::Error> = serde_json::from_slice(&ethernet.payload);
                 if let Ok(from) = probe {
-                    let this = packet.from;
+                    let this = ctx.get_connectpoint(&packet).unwrap();
                     let from = from.to_owned();
                     ctx.send_event(CommonEvents::LinkDetected(Link {
                         src: from,
@@ -81,7 +81,7 @@ impl<E> P4app<E> for LinkProbeState where E:Event {
         Some(packet)
     }
 
-    async fn on_event(&mut self, event: E, ctx: &mut ContextHandle<E>) -> Option<E> {
+    async fn on_event(&mut self, event: E, ctx: &mut C) -> Option<E> {
         match event.try_to_common() {
             Some(CommonEvents::DeviceAdded(device)) => {
                 on_device_added(self,device,ctx);
@@ -101,26 +101,30 @@ impl<E> P4app<E> for LinkProbeState where E:Event {
     }
 }
 
-pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&mut ContextHandle<E>) where E:Event
+pub fn on_device_added<E, C>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&mut C) where E:Event,C:Context<E>
 {
-    let interceptor = match &device.typ {
-        DeviceType::MASTER {
+    let pipeconf = match &device.typ {
+        DeviceType::Bmv2MASTER {
             socket_addr,
             device_id,
             pipeconf,
-        }=>{
-            if let Some(interceptor) = linkprobe_state.interceptor.get(pipeconf) {
-                interceptor
-            }
-            else {
-                warn!(target:"linkprobe","Pipeconf interceptor not found. link probe may not work.");
-                return;
-            }
-        }
-        _=>{
+        } => pipeconf,
+        DeviceType::StratumMASTER {
+            socket_addr,
+            device_id,
+            pipeconf,
+        } => pipeconf,
+        _ => {
             warn!(target:"linkprobe","It is not a master device. link probe may not work.");
             return;
         }
+    };
+    let interceptor = if let Some(interceptor) = linkprobe_state.interceptor.get(pipeconf) {
+        interceptor
+    }
+    else {
+        warn!(target:"linkprobe","Pipeconf interceptor not found. link probe may not work.");
+        return;
     };
     let flow = interceptor.new_flow(device.id);
     ctx.insert_flow(flow,device.id);
@@ -132,7 +136,7 @@ pub fn on_device_added<E>(linkprobe_state:&LinkProbeState,device:&Device, ctx:&m
         };
         let mut my_sender = ctx.clone();
         let probe = new_probe(&cp);
-        let mut interval = tokio::timer::Interval::new_interval(Duration::new(3,0));
+        let mut interval = tokio::time::interval(Duration::new(3,0));
         let (cancel,mut cancel_r) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             while let Some(s) = interval.next().await {

@@ -15,7 +15,7 @@ use jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 use rusty_p4::p4rt;
 use rusty_p4::util::flow::*;
-use rusty_p4::core::{Context, Core};
+use rusty_p4::core::{Core, DefaultContext};
 //use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
 use rusty_p4::util::value::EXACT;
 use std::path::Path;
@@ -35,42 +35,45 @@ use bytes::Bytes;
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use std::sync::{RwLock, Arc};
 use std::time::{Instant, Duration};
-use tokio::timer::Interval;
 use async_trait::async_trait;
 use rusty_p4::app::P4app;
 use rusty_p4::app::app_service::AppServiceBuilder;
-use rusty_p4::app::raw_statistic::RawStatistic;
 use std::process::exit;
 use rusty_p4::app::statistic::{Statistic, StatisticService};
+use ipip::ipv4;
+use tokio::stream::StreamExt;
+use rusty_p4::core::context::Context;
 
 pub struct Benchmark {
     bytes: Arc<AtomicUsize>,
-    statistic: StatisticService,
+    // statistic: StatisticService,
 }
 
 
 #[async_trait]
-impl P4app<CommonEvents> for Benchmark {
-    async fn on_start(&mut self, ctx: &mut Context<CommonEvents>) {
+impl<C> P4app<CommonEvents, C> for Benchmark where C:Context<CommonEvents> {
+    async fn on_start(&mut self, ctx: &mut C) {
         let bytes = self.bytes.clone();
-        let statistic = self.statistic.clone();
+        // let statistic = self.statistic.clone();
         tokio::spawn(async move {
-            let mut interval = Interval::new_interval(Duration::from_secs(1));
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
             loop {
                 interval.next().await;
                 let old_value = bytes.swap(0, Ordering::Acquire) as f64;
                 println!("transfer {} Mbits/sec", old_value * 8.0 / (1024.0 * 1024.0));
-                for (index,load) in statistic.get_load() {
-                    dbg!(load);
-                }
+//                for (index,load) in statistic.get_load() {
+//                    dbg!(load);
+//                }
             }
         });
     }
 
-    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut Context<CommonEvents>) -> Option<PacketReceived> {
-        let from = if let Some(from) = ctx.try_get_connectpoint(&packet) {
+    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut C) -> Option<PacketReceived> {
+        let from = if let Some(from) = ctx.get_connectpoint(&packet) {
             from
-        } else { return None; };
+        } else {
+            println!("???"); 
+            return None; };
         let b = packet.packet.len();
         let bytes = self.bytes.fetch_add(b, Ordering::AcqRel);
         if from.port == 1 {
@@ -86,6 +89,31 @@ impl P4app<CommonEvents> for Benchmark {
         }
         None
     }
+
+    async fn on_event(self: &mut Self, event: CommonEvents, ctx: &mut C) -> Option<CommonEvents> {
+        match event {
+            CommonEvents::DeviceMasterUp(device) => {
+                ctx.insert_flow(flow!{
+                    pipe: "MyIngress",
+                    table: "acl" {
+                        "hdr.ethernet.etherType" => rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP,
+                    }
+                    action: "send_to_cpu" {}
+                    priority: 1
+                },device).await;
+                ctx.insert_flow(flow!{
+                    pipe: "MyIngress",
+                    table: "acl" {
+                        "hdr.ethernet.etherType" => 1u16 /*ICMP*/,
+                    }
+                    action: "send_to_cpu" {}
+                    priority: 1
+                },device).await;
+            }
+            _ => {}
+        }
+        Some(event)
+    }
 }
 
 #[tokio::main]
@@ -99,20 +127,23 @@ pub async fn main() {
     );
 
     let mut pipeconfs = HashMap::new();
+    pipeconf.get_p4info().direct_counters.iter().for_each(|x|{
+        dbg!(x);
+    });
     pipeconfs.insert(pipeconf.get_id(), pipeconf);
 
-    let mut app_builder = AppServiceBuilder::new();
-    let statistic_service = app_builder.with_service(Statistic::new());
+    let mut app_builder:AppServiceBuilder<CommonEvents, DefaultContext<CommonEvents>> = AppServiceBuilder::new();
+    // let statistic_service = app_builder.with_service(Statistic::new());
     app_builder.with(Benchmark {
         bytes: Arc::new(AtomicUsize::new(0)),
-        statistic:statistic_service
+        // statistic:statistic_service
     });
 
     let app = app_builder.build();
 
     let (mut context, driver) = Core::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
 
-    context.add_device(Device::new_stratum_bmv2("s1", "127.0.0.1:50001", "benchmark", 1));
+    context.add_device(Device::new_bmv2("s1", "127.0.0.1:50001", "benchmark", 1));
 
     driver.run_to_end().await;
 }
