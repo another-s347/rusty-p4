@@ -25,6 +25,7 @@ use nom::combinator::opt;
 use tokio::io::AsyncReadExt;
 use std::convert::TryFrom;
 use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
+use crate::util::value::MAC;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -73,6 +74,10 @@ impl StratumBmv2SwitchConnection {
 
         let mut client_stub = P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
         let mut gnmi_client_stub = GNMIClient::connect(format!("http://{}",address)).await.unwrap();
+
+        for x in get_interfaces_name(&mut gnmi_client_stub).await {
+            println!("{}",x);
+        }
 
         StratumBmv2SwitchConnection {
             name,
@@ -159,4 +164,11 @@ pub async fn get_interfaces_name(client:&mut GNMIClient) -> Vec<String> {
         };
     }
     v
+}
+
+pub async fn get_interface_mac(client:&mut GNMIClient, interface:&str) -> Option<MAC> {
+//    let mut v = vec![];
+    let response = client.get(super::pure::new_stratum_get_interface_mac(interface)).await.unwrap();
+    dbg!(response);
+    unimplemented!()
 }

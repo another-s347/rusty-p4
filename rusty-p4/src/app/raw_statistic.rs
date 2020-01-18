@@ -2,19 +2,59 @@ use crate::event::Event;
 use crate::app::P4app;
 use crate::service::Service;
 use async_trait::async_trait;
-use crate::core::Context;
+use crate::core::DefaultContext;
 use crate::event::CommonEvents;
 use crate::representation::{DeviceID, Load, StratumLoad};
 use rusty_p4_proto::proto::v1::{CounterEntry, entity::Entity, DirectCounterEntry, TableEntry};
 use futures::stream::Stream;
 use rusty_p4_proto::proto::gnmi::{GetRequest};
 use rusty_p4_proto::proto::gnmi::typed_value::Value;
+use nom::character::complete::tab;
 
 type P4RuntimeClient =
 crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
 type GNMIClient = rusty_p4_proto::proto::gnmi::g_nmi_client::GNmiClient<tonic::transport::channel::Channel>;
 
 pub async fn read_counter(counter_entry:CounterEntry, client:&mut P4RuntimeClient) -> Option<Vec<CounterEntry>> {
+    let mut response = client.read(crate::proto::p4runtime::ReadRequest {
+        device_id:1,
+        entities:vec![crate::proto::p4runtime::Entity {
+            entity:Some(crate::proto::p4runtime::entity::Entity::TableEntry(
+                TableEntry {
+                    table_id: 0,
+                    r#match: vec![],
+                    controller_metadata: 4513086125078985902,
+                    ..Default::default()
+                }
+            ))
+        }]
+    }).await.ok()?;
+    let stream = response.get_mut();
+    while let Some(msg) = stream.message().await.unwrap() {
+        for e in msg.entities {
+            match e.entity {
+                Some(Entity::TableEntry(table_entry)) => {
+                    dbg!(&table_entry);
+                    let mut response = client.read(crate::proto::p4runtime::ReadRequest {
+                        device_id:1,
+                        entities:vec![crate::proto::p4runtime::Entity {
+                            entity:Some(crate::proto::p4runtime::entity::Entity::DirectCounterEntry(
+                                DirectCounterEntry {
+                                    table_entry: Some(table_entry),
+                                    data: None
+                                }
+                            ))
+                        }]
+                    }).await.ok()?;
+//                    let stream2 = response.get_mut();
+//                    while let Some(msg) = stream2.message().await.unwrap() {
+//                        dbg!(msg);
+//                    }
+                }
+                _=>{}
+            }
+        }
+    }
     let mut response = client.read(crate::proto::p4runtime::ReadRequest {
         device_id:1,
         entities:vec![crate::proto::p4runtime::Entity {

@@ -8,13 +8,13 @@ use crate::proto::p4config::*;
 use crate::proto::p4runtime::{
     field_match, stream_message_request, FieldMatch, StreamMessageRequest, TableEntry, WriteRequest,
 };
-use crate::util::flow::{FlowActionParam, FlowMatch};
+use crate::util::flow::{FlowActionParam, FlowMatch, Flow, FlowTable, FlowAction};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::{Bytes, BytesMut};
-use failure::ResultExt;
-use futures::{Future, Sink};
+use failure::{ResultExt, Fail};
+use futures::{Future, Sink, StreamExt};
 use nom::{dbg_dmp, ExtendInto};
 use rusty_p4_proto::proto::v1::{
     Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,MasterArbitrationUpdate,
@@ -22,6 +22,8 @@ use rusty_p4_proto::proto::v1::{
 use std::path::Path;
 use tokio::io::AsyncReadExt;
 use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
+use std::sync::Arc;
+use rusty_p4_proto::proto::v1::field_match::{FieldMatchType, Exact, Ternary, Lpm, Range};
 
 pub fn new_write_table_entry(
     device_id: u64,
@@ -167,6 +169,55 @@ pub fn build_table_entry(
 
     table_entry
 }
+
+//pub fn table_entry_to_flow(
+//    p4info: &P4Info,
+//    table_entry: &TableEntry
+//) -> Option<crate::util::flow::Flow> {
+//    let table_id = table_entry.table_id;
+//    let table:&Table = p4info
+//        .tables
+//        .iter()
+//        .filter(|x|x.preamble.is_some())
+//        .find(|x|x.preamble.as_ref().unwrap().id == table_id)?;
+//    let table_name = &table.preamble.as_ref().unwrap().name;
+//    let matches = &table.match_fields;
+//
+//    let mut flow_matches = vec![];
+//    for i in table_entry.r#match {
+//        if i.field_match_type.is_none() {
+//            continue;
+//        }
+//        let m:&MatchField = matches
+//            .iter()
+//            .find(|x|x.id == i.field_id)?;
+//        let match_name = &m.name;
+//        let match_value = match i.field_match_type.unwrap() {
+//            FieldMatchType::Exact(Exact { value }) => { InnerValue::EXACT(Bytes::from(value)) }
+//            FieldMatchType::Ternary(Ternary { value, mask }) => { InnerValue::TERNARY(Bytes::from(value),Bytes::from(mask)) }
+//            FieldMatchType::Lpm(Lpm { value, prefix_len }) => { InnerValue::LPM(Bytes::from(value), prefix_len) }
+//            FieldMatchType::Range(Range { low, high }) => { InnerValue::RANGE(Bytes::from(low), Bytes::from(high)) }
+//            FieldMatchType::Other(_) => {
+//                continue;
+//            }
+//        };
+//        flow_matches.push(FlowMatch {
+//            name: "",
+//            value: match_value
+//        });
+//    }
+//
+//    Flow {
+//        table: Arc::new(FlowTable {
+//            name: table_name,
+//            matches: flow_matches
+//        }),
+//        action: Arc::new(FlowAction { name: "", params: vec![] }),
+//        priority: 0,
+//        metadata: 0
+//    };
+//    unimplemented!()
+//}
 
 pub fn table_entry_to_entity(table_entry: TableEntry) -> Entity {
     Entity {

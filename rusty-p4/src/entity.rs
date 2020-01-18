@@ -4,6 +4,7 @@ pub mod clone_session;
 pub mod meter;
 pub mod multicast_group;
 pub mod counter;
+//pub mod direct_counter;
 pub type ProtoEntity = crate::proto::p4runtime::Entity;
 
 #[derive(Debug)]
