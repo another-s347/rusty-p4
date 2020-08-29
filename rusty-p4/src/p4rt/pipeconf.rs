@@ -9,6 +9,40 @@ use std::process::exit;
 use std::sync::Arc;
 use std::io::{BufReader, Read};
 
+pub trait NewPipeconf: Send+Sync {
+    fn get_id(&self) -> PipeconfID;
+    fn get_name(&self) -> &str;
+    fn get_p4info(&self) -> &P4Info;
+    fn get_bmv2_file_path(&self) -> &Path;
+    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour>;
+}
+
+impl NewPipeconf for &dyn NewPipeconf {
+    fn get_id(&self) -> PipeconfID {
+        self.get_id()
+    }
+
+    fn get_name(&self) -> &str {
+        self.get_name()
+    }
+
+    fn get_p4info(&self) -> &P4Info {
+        self.get_p4info()
+    }
+
+    fn get_bmv2_file_path(&self) -> &Path {
+        self.get_bmv2_file_path()
+    }
+
+    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour> {
+        self.get_behaviour(name)
+    }
+}
+
+pub trait Behaviour {
+
+}
+
 #[derive(Clone,Debug)]
 pub struct Pipeconf {
     id: PipeconfID,

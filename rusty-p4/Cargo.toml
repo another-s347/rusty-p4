@@ -11,8 +11,9 @@ description = "A (WIP) library for writing P4 controller in Rust."
 
 [dependencies]
 prost = "0.6"
-tonic = {version="0.1.0"}
-rusty-p4-proto = {version="0.1.0-alpha.3"}
+tonic = {version="0.3.1" }
+rusty-p4-proto = { path="../../rusty-p4-proto" }
+tower = "0.3.1"
 byteorder = "1.3.2"
 hex = "0.3"
 tokio = { version="0.2", features = ["full"]}
@@ -30,6 +31,7 @@ proc-macro-nested = "0.1"
 dashmap = "3.1.0"
 macro-impl = { path="./macro-impl"}
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
+tuple_list = "0.1.2"
 
 [workspace]
 members = [

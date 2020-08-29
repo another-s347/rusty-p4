@@ -5,6 +5,7 @@ use std::hash::{Hash, Hasher};
 pub mod flow;
 pub mod packet;
 pub mod value;
+pub mod publisher;
 
 pub fn hash<T>(obj: T) -> u64
 where

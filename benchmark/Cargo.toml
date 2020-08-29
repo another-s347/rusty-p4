@@ -15,6 +15,8 @@ bytes = "0.5"
 async-trait = "0.1.13"
 jemallocator = "0.3.0"
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
+tuple_list = "0.1.2"
+tower = "0.3.1"
 
 [profile.release]
 debug = true

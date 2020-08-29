@@ -14,12 +14,14 @@ use crate::util::value::{encode, LPM};
 use bytes::{Bytes, BytesMut};
 use futures::future::Future;
 use log::{debug, error, info, trace, warn};
-use std::any::Any;
+use std::any::{TypeId, Any};
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{collections::HashMap, sync::{Arc, Mutex, MutexGuard}};
 use crate::core::context::Context;
+use tuple_list::TupleList;
+use tuple_list::tuple_list_type;
 
 pub mod common;
 pub mod graph;
@@ -27,6 +29,77 @@ pub mod statistic;
 pub mod raw_statistic;
 pub mod stratum_statistic;
 pub mod app_service;
+pub mod options;
+pub mod store;
+pub mod default;
+
+#[async_trait]
+pub trait NewApp: Sync + Send + 'static {
+    type Dependency: Dependencies;
+    type Option: options::AppOption;
+
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore;
+
+    async fn run_to_end(&self) {}
+}
+
+impl<T> NewApp for Option<T> where T: NewApp {
+    type Dependency = T::Dependency;
+
+    type Option = T::Option;
+
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore  {
+        todo!()
+    }
+}
+
+pub trait Dependencies {
+    fn get<S>(store: &mut S) -> Self where S: store::AppStore;
+
+    fn set<S>(&self, store:&mut S) where S: store::AppStore ;
+}
+
+impl<Head, Tail> Dependencies for (Head, Tail) where
+    Head: NewApp + Clone,
+    Tail: Dependencies + TupleList + Clone,
+{
+    fn get<S>(store: &mut S) -> Self 
+    where S: store::AppStore 
+    {
+        let a:Head = if let Some(a) = store.get() {
+            a
+        } else {
+            todo!()
+        };
+
+        let b:Tail = Tail::get(store);
+
+        return (a,b);
+    }
+
+    fn set<S>(&self, store:&mut S) 
+    where S: store::AppStore 
+    {
+        todo!()
+    }
+}
+
+impl Dependencies for () {
+    fn get<S>(store: &mut S) -> Self where S: store::AppStore {
+        ()
+    }
+
+    fn set<S>(&self, store:&mut S) where S: store::AppStore  {}
+}
+
+fn install<S, T>(store: &mut S, option: T::Option) -> T 
+where T:NewApp + Clone, S: store::AppStore 
+{
+    let dependencies: T::Dependency = T::Dependency::get(store);
+    let app = T::init(dependencies, store, option);
+    store.store(&app);
+    app
+}
 
 #[async_trait]
 pub trait P4app<E, C>: 'static + Send

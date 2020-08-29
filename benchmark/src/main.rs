@@ -25,7 +25,7 @@ use tokio;
 use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::{DeviceID, ConnectPoint, Device};
-use rusty_p4::util::flow::Flow;
+use rusty_p4::util::{publisher::Handler, flow::Flow};
 use std::collections::HashMap;
 use rusty_p4::core::core::ContextConfig;
 use rusty_p4::event::{CommonEvents, PacketReceived};
@@ -43,12 +43,40 @@ use rusty_p4::app::statistic::{Statistic, StatisticService};
 use ipip::ipv4;
 use tokio::stream::StreamExt;
 use rusty_p4::core::context::Context;
+use tuple_list::{tuple_list_type, tuple_list};
 
 pub struct Benchmark {
     bytes: Arc<AtomicUsize>,
     // statistic: StatisticService,
 }
 
+pub struct NewBenchmark {
+    device_manager: rusty_p4::p4rt::bmv2::Bmv2Manager
+}
+
+#[async_trait]
+impl rusty_p4::app::NewApp for NewBenchmark {
+    type Dependency = tuple_list_type!(rusty_p4::p4rt::bmv2::Bmv2Manager);
+
+    type Option = ();
+
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: rusty_p4::app::store::AppStore {
+        let tuple_list!(device_manager) = dependencies;
+        NewBenchmark {
+            device_manager
+        }
+    }
+
+    async fn run_to_end(&self) {
+
+    }
+}
+
+impl Handler<PacketReceived> for NewBenchmark {
+    fn handle(&self, event: PacketReceived) {
+        todo!()
+    }
+}
 
 #[async_trait]
 impl<C> P4app<CommonEvents, C> for Benchmark where C:Context<CommonEvents> {
