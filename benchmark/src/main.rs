@@ -15,7 +15,6 @@ use jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 use rusty_p4::p4rt;
 use rusty_p4::util::flow::*;
-use rusty_p4::core::{Core, DefaultContext};
 //use rusty_p4::app::extended::{ExampleExtended, P4appBuilder, P4appExtended};
 use rusty_p4::util::value::EXACT;
 use std::path::Path;
@@ -27,120 +26,105 @@ use rusty_p4::p4rt::pipeconf::Pipeconf;
 use rusty_p4::representation::{DeviceID, ConnectPoint, Device};
 use rusty_p4::util::{publisher::Handler, flow::Flow};
 use std::collections::HashMap;
-use rusty_p4::core::core::ContextConfig;
 use rusty_p4::event::{CommonEvents, PacketReceived};
-use rusty_p4::app::common::CommonState;
 use log::info;
 use bytes::Bytes;
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use std::sync::{RwLock, Arc};
 use std::time::{Instant, Duration};
 use async_trait::async_trait;
-use rusty_p4::app::P4app;
-use rusty_p4::app::app_service::AppServiceBuilder;
 use std::process::exit;
-use rusty_p4::app::statistic::{Statistic, StatisticService};
+use rusty_p4::app::{App, store::install};
 use ipip::ipv4;
 use tokio::stream::StreamExt;
-use rusty_p4::core::context::Context;
 use tuple_list::{tuple_list_type, tuple_list};
+use p4rt::{bmv2::{Bmv2MasterUpdateOption, Bmv2ConnectionOption, Bmv2Event}, pipeconf::DefaultPipeconf};
 
 pub struct Benchmark {
     bytes: Arc<AtomicUsize>,
     // statistic: StatisticService,
 }
 
+#[derive(Clone)]
 pub struct NewBenchmark {
-    device_manager: rusty_p4::p4rt::bmv2::Bmv2Manager
+    device_manager: rusty_p4::p4rt::bmv2::Bmv2Manager,
+    bytes: Arc<AtomicUsize>,
 }
 
 #[async_trait]
-impl rusty_p4::app::NewApp for NewBenchmark {
+impl App for NewBenchmark {
     type Dependency = tuple_list_type!(rusty_p4::p4rt::bmv2::Bmv2Manager);
 
     type Option = ();
 
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: rusty_p4::app::store::AppStore {
         let tuple_list!(device_manager) = dependencies;
-        NewBenchmark {
-            device_manager
-        }
+        let app = NewBenchmark {
+            device_manager: device_manager.clone(),
+            bytes: Default::default()
+        };
+        device_manager.subscribe_packet(app.clone());
+        device_manager.subscribe_event(app.clone());
+        app
     }
 
-    async fn run_to_end(&self) {
+    async fn run(&self) {
 
-    }
-}
-
-impl Handler<PacketReceived> for NewBenchmark {
-    fn handle(&self, event: PacketReceived) {
-        todo!()
     }
 }
 
 #[async_trait]
-impl<C> P4app<CommonEvents, C> for Benchmark where C:Context<CommonEvents> {
-    async fn on_start(&mut self, ctx: &mut C) {
-        let bytes = self.bytes.clone();
-        // let statistic = self.statistic.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
-            loop {
-                interval.next().await;
-                let old_value = bytes.swap(0, Ordering::Acquire) as f64;
-                println!("transfer {} Mbits/sec", old_value * 8.0 / (1024.0 * 1024.0));
-//                for (index,load) in statistic.get_load() {
-//                    dbg!(load);
-//                }
-            }
-        });
-    }
-
-    async fn on_packet(&mut self, packet: PacketReceived, ctx: &mut C) -> Option<PacketReceived> {
-        let from = if let Some(from) = ctx.get_connectpoint(&packet) {
+impl Handler<PacketReceived> for NewBenchmark {
+    async fn handle(&self, packet: PacketReceived) {
+        let from = if let Some(from) = self.device_manager.get_packet_connectpoint(&packet) {
             from
         } else {
-            println!("???"); 
-            return None; };
+            panic!("???");
+        };
         let b = packet.packet.len();
         let bytes = self.bytes.fetch_add(b, Ordering::AcqRel);
         if from.port == 1 {
-            ctx.send_packet(ConnectPoint {
+            self.device_manager.send_packet(ConnectPoint {
                 device: from.device,
                 port: 2,
             }, Bytes::from(packet.packet)).await;
         } else if from.port == 2 {
-            ctx.send_packet(ConnectPoint {
+            self.device_manager.send_packet(ConnectPoint {
                 device: from.device,
                 port: 1,
             }, Bytes::from(packet.packet)).await;
         }
-        None
     }
+}
 
-    async fn on_event(self: &mut Self, event: CommonEvents, ctx: &mut C) -> Option<CommonEvents> {
+#[async_trait]
+impl Handler<Bmv2Event> for NewBenchmark {
+    async fn handle(&self, event: Bmv2Event) {
         match event {
-            CommonEvents::DeviceMasterUp(device) => {
-                ctx.insert_flow(flow!{
-                    pipe: "MyIngress",
-                    table: "acl" {
-                        "hdr.ethernet.etherType" => rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP,
+            Bmv2Event::DeviceAdded(device) => {
+                let mut device = self.device_manager.get_device(device).unwrap();
+                device.insert_flow(
+                    flow!{
+                        pipe: "MyIngress",
+                        table: "acl" {
+                            "hdr.ethernet.etherType" => rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP,
+                        }
+                        action: "send_to_cpu" {}
+                        priority: 1
                     }
-                    action: "send_to_cpu" {}
-                    priority: 1
-                },device).await;
-                ctx.insert_flow(flow!{
-                    pipe: "MyIngress",
-                    table: "acl" {
-                        "hdr.ethernet.etherType" => 1u16 /*ICMP*/,
+                ).await;
+                device.insert_flow(
+                    flow!{
+                        pipe: "MyIngress",
+                        table: "acl" {
+                            "hdr.ethernet.etherType" => 1u16 /*ICMP*/,
+                        }
+                        action: "send_to_cpu" {}
+                        priority: 1
                     }
-                    action: "send_to_cpu" {}
-                    priority: 1
-                },device).await;
+                ).await;
             }
-            _ => {}
         }
-        Some(event)
     }
 }
 
@@ -148,30 +132,24 @@ impl<C> P4app<CommonEvents, C> for Benchmark where C:Context<CommonEvents> {
 pub async fn main() {
     flexi_logger::Logger::with_str("info").start().unwrap();
 
-    let pipeconf = Pipeconf::new(
+    let pipeconf = DefaultPipeconf::new(
         "benchmark",
-        "/home/abc/rusty-p4/benchmark/build/benchmark.p4.p4info.bin",
-        "/home/abc/rusty-p4/benchmark/build/benchmark.json",
+        "/home/skye/rusty-p4/benchmark/build/benchmark.p4.p4info.bin",
+        "/home/skye/rusty-p4/benchmark/build/benchmark.json",
     );
 
-    let mut pipeconfs = HashMap::new();
-    pipeconf.get_p4info().direct_counters.iter().for_each(|x|{
-        dbg!(x);
-    });
-    pipeconfs.insert(pipeconf.get_id(), pipeconf);
+    let mut app_store = rusty_p4::app::store::DefaultAppStore::default();
+    let device_manager: Arc<rusty_p4::p4rt::bmv2::Bmv2Manager> = install(&mut app_store, ());
+    let benchmark: Arc<NewBenchmark> = install(&mut app_store, ());
 
-    let mut app_builder:AppServiceBuilder<CommonEvents, DefaultContext<CommonEvents>> = AppServiceBuilder::new();
-    // let statistic_service = app_builder.with_service(Statistic::new());
-    app_builder.with(Benchmark {
-        bytes: Arc::new(AtomicUsize::new(0)),
-        // statistic:statistic_service
-    });
+    device_manager.add_device("s1", "172.17.0.2:50051", Bmv2ConnectionOption {
+        p4_device_id: 1,
+        inner_device_id: Some(1),
+        master_update: Some(Bmv2MasterUpdateOption {
+            election_id_high: 0,
+            election_id_low: 1,
+        })
+    }, pipeconf).await;
 
-    let app = app_builder.build();
-
-    let (mut context, driver) = Core::try_new(pipeconfs, app, ContextConfig::default(), None).await.unwrap();
-
-    context.add_device(Device::new_bmv2("s1", "127.0.0.1:50001", "benchmark", 1));
-
-    driver.run_to_end().await;
+    futures::future::join_all(vec![device_manager.run(), benchmark.run()]).await;
 }
