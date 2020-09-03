@@ -24,7 +24,7 @@ import socket
 import sys
 import threading
 import time
-import urllib2
+import urllib.request as urllib
 from contextlib import closing
 from mininet.log import info, warn, debug
 from mininet.node import Switch, Host
@@ -98,7 +98,7 @@ def watchDog(sw):
                 else:
                     warn("\n*** WARN: switch %s died ☠️ \n" % sw.name)
                     sw.printBmv2Log()
-                    print ("-" * 80) + "\n"
+                    print(("-" * 80) + "\n")
                     return
     except Exception as e:
         warn("*** ERROR: " + e.message)
@@ -312,18 +312,18 @@ class RustyBmv2Switch(Switch):
         # Build netcfg URL
         url = 'http://%s:1818/' % controllerIP
         # Instantiate password manager for HTTP auth
-        # pm = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        # pm = urllib.HTTPPasswordMgrWithDefaultRealm()
         # pm.add_password(None, url, ONOS_WEB_USER, ONOS_WEB_PASS)
-        # urllib2.install_opener(urllib2.build_opener(
-        #     urllib2.HTTPBasicAuthHandler(pm)))
+        # urllib.install_opener(urllib.build_opener(
+        #     urllib.HTTPBasicAuthHandler(pm)))
         # Push config data to controller
-        req = urllib2.Request(url, json.dumps(cfgData),
+        req = urllib.Request(url, json.dumps(cfgData).encode("utf-8"),
                               {'Content-Type': 'application/json'})
         try:
-            f = urllib2.urlopen(req)
-            print f.read()
+            f = urllib.urlopen(req)
+            print(f.read())
             f.close()
-        except urllib2.URLError as e:
+        except urllib.URLError as e:
             warn("*** WARN: unable to push config to ONOS (%s)\n" % e.reason)
 
     def start(self, controllers):
@@ -442,7 +442,7 @@ class RustyBmv2Switch(Switch):
             result = sock.connect_ex(('localhost', port))
             if result == 0:
                 # No new line
-                sys.stdout.write("⚡️ %s @ %d" % (self.targetName, self.bmv2popen.pid))
+                sys.stdout.write("? %s @ %d" % (self.targetName, self.bmv2popen.pid))
                 sys.stdout.flush()
                 # The port is open. Let's go! (Close socket first)
                 sock.close()
@@ -458,14 +458,14 @@ class RustyBmv2Switch(Switch):
 
     def printBmv2Log(self):
         if os.path.isfile(self.logfile):
-            print "-" * 80
-            print "%s log (from %s):" % (self.name, self.logfile)
+            print("-" * 80)
+            print("%s log (from %s):" % (self.name, self.logfile))
             with open(self.logfile, 'r') as f:
                 lines = f.readlines()
                 if len(lines) > BMV2_LOG_LINES:
-                    print "..."
+                    print("...")
                 for line in lines[-BMV2_LOG_LINES:]:
-                    print line.rstrip()
+                    print(line.rstrip())
 
     @staticmethod
     def controllerIp(controllers):
