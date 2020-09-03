@@ -32,10 +32,10 @@ use crate::core::connection::ConnectionBox;
 use async_trait::async_trait;
 use nom::lib::std::collections::hash_map::RandomState;
 
-pub mod default_context;
-pub mod rich_context;
+// pub mod default_context;
+// pub mod rich_context;
 
-pub use default_context::DefaultContext;
+// pub use default_context::DefaultContext;
 
 #[async_trait]
 pub trait Context<E>: 'static + Send + Sync + Clone {

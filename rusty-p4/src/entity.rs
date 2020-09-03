@@ -1,4 +1,4 @@
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 
 pub mod clone_session;
 pub mod meter;
@@ -27,5 +27,5 @@ impl Into<crate::proto::p4runtime::update::Type> for UpdateType {
 }
 
 pub trait ToEntity {
-    fn to_proto_entity(&self, pipeconf: &Pipeconf) -> Option<ProtoEntity>;
+    fn to_proto_entity(&self, pipeconf: &DefaultPipeconf) -> Option<ProtoEntity>;
 }

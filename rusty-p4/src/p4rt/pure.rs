@@ -2,7 +2,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::entity::UpdateType;
 use crate::error::{ConnectionError, ConnectionErrorKind};
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::proto::p4config::P4Info;
 use crate::proto::p4config::*;
 use crate::proto::p4runtime::{
@@ -24,6 +24,7 @@ use tokio::io::AsyncReadExt;
 use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 use std::sync::Arc;
 use rusty_p4_proto::proto::v1::field_match::{FieldMatchType, Exact, Ternary, Lpm, Range};
+use super::pipeconf::Pipeconf;
 
 pub fn new_write_table_entry(
     device_id: u64,
@@ -76,15 +77,17 @@ pub fn adjust_value_with(value: Bytes, bytes_len: usize, e: u8) -> Bytes {
     }
 }
 
-pub fn new_packet_out_request(
-    pipeconf: &Pipeconf,
+pub fn new_packet_out_request<T>(
+    pipeconf: &T,
     egress_port: u32,
     packet: Bytes,
-) -> StreamMessageRequest {
+) -> StreamMessageRequest 
+where T: Pipeconf
+{
     let packetOut = PacketOut {
         payload: packet.to_vec(),
         metadata: vec![PacketMetadata {
-            metadata_id: pipeconf.packetout_egress_id,
+            metadata_id: pipeconf.get_packetout_egress_id(),
             value: adjust_value(Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()), 2).to_vec(),
         }],
     };

@@ -1,6 +1,6 @@
 use crate::error::{ConnectionError, ConnectionErrorKind};
 use crate::failure::ResultExt;
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::p4rt::pure::adjust_value;
 use crate::proto::p4config::P4Info;
 use crate::proto::p4runtime::{
@@ -91,7 +91,7 @@ impl StratumBmv2SwitchConnection {
 
     pub async fn packet_out(
         &mut self,
-        pipeconf: &Pipeconf,
+        pipeconf: &DefaultPipeconf,
         egress_port: u32,
         packet: Bytes,
     ) -> Result<(), ConnectionError> {

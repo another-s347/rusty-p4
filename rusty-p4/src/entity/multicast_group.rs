@@ -1,5 +1,5 @@
 use crate::entity::{ProtoEntity, ToEntity};
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 
 #[derive(Clone)]
 pub struct MulticastGroupEntry {
@@ -32,7 +32,7 @@ impl Replica {
 }
 
 impl ToEntity for MulticastGroupEntry {
-    fn to_proto_entity(&self, pipeconf: &Pipeconf) -> Option<ProtoEntity> {
+    fn to_proto_entity(&self, pipeconf: &DefaultPipeconf) -> Option<ProtoEntity> {
         Some(ProtoEntity {
             entity: Some(crate::proto::p4runtime::entity::Entity::PacketReplicationEngineEntry(crate::proto::p4runtime::PacketReplicationEngineEntry {
                 r#type:Some(crate::proto::p4runtime::packet_replication_engine_entry::Type::MulticastGroupEntry(self.clone().into_proto()))

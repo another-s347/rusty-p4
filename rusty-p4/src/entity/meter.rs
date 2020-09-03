@@ -1,5 +1,5 @@
 use crate::entity::{ProtoEntity, ToEntity};
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::p4rt::pure::get_meter_id;
 use rusty_p4_proto::proto::v1::{Index, MeterConfig, MeterEntry};
 
@@ -14,7 +14,7 @@ pub struct Meter {
 }
 
 impl ToEntity for Meter {
-    fn to_proto_entity(&self, pipeconf: &Pipeconf) -> Option<ProtoEntity> {
+    fn to_proto_entity(&self, pipeconf: &DefaultPipeconf) -> Option<ProtoEntity> {
         Some(ProtoEntity {
             entity: Some(crate::proto::p4runtime::entity::Entity::MeterEntry(
                 MeterEntry {

@@ -1,4 +1,4 @@
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::{Pipeconf, DefaultPipeconf};
 use crate::p4rt::pure::build_table_entry;
 use crate::proto::p4runtime::TableEntry;
 use crate::representation::DeviceID;
@@ -19,7 +19,9 @@ pub struct Flow {
 }
 
 impl Flow {
-    pub fn to_table_entry(&self, pipeconf: &Pipeconf, metadata: u64) -> TableEntry {
+    pub fn to_table_entry<T>(&self, pipeconf: &T, metadata: u64) -> TableEntry 
+    where T: Pipeconf
+    {
         let table_entry = build_table_entry(
             pipeconf.get_p4info(),
             self.table.name,

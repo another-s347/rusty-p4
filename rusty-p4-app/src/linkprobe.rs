@@ -15,7 +15,7 @@ use rusty_p4::app::common::CommonState;
 use rusty_p4::representation::DeviceType;
 //use futures::prelude::*;
 use tokio::sync::oneshot::Sender;
-use rusty_p4::p4rt::pipeconf::{Pipeconf, PipeconfID};
+use rusty_p4::p4rt::pipeconf::{DefaultPipeconf, PipeconfID};
 use std::any::Any;
 use rusty_p4::util::flow::Flow;
 use rusty_p4::app::P4app;

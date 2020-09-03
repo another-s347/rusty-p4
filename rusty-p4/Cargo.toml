@@ -25,13 +25,14 @@ failure = "0.1.5"
 nom = "5"
 async-trait = "0.1.13"
 petgraph = "0.4.13"
-parking_lot = "0.9.0"
+parking_lot = { version="0.11.0", features=["send_guard"] }
 proc-macro-hack = "0.5"
 proc-macro-nested = "0.1"
 dashmap = "3.1.0"
 macro-impl = { path="./macro-impl"}
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 tuple_list = "0.1.2"
+crossbeam = "0.7"
 
 [workspace]
 members = [

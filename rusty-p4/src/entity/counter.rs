@@ -1,6 +1,6 @@
 use rusty_p4_proto::proto::v1::{CounterEntry, Index, Entity};
 use crate::representation::DeviceID;
-use crate::p4rt::pipeconf::Pipeconf;
+use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::p4rt::pure::get_counter_id;
 use crate::entity::{ToEntity, ProtoEntity};
 
@@ -11,7 +11,7 @@ pub struct Counter {
 }
 
 impl Counter {
-    pub fn to_index(&self, device:DeviceID, pipeconf:&Pipeconf) -> Option<CounterIndex> {
+    pub fn to_index(&self, device:DeviceID, pipeconf:&DefaultPipeconf) -> Option<CounterIndex> {
         let id = get_counter_id(pipeconf.get_p4info(), self.name)?;
         Some(CounterIndex {
             device,
@@ -22,7 +22,7 @@ impl Counter {
 }
 
 impl ToEntity for Counter {
-    fn to_proto_entity(&self, pipeconf: &Pipeconf) -> Option<Entity> {
+    fn to_proto_entity(&self, pipeconf: &DefaultPipeconf) -> Option<Entity> {
         let id = get_counter_id(pipeconf.get_p4info(), self.name)?;
         Some(ProtoEntity {
             entity: Some(crate::proto::p4runtime::entity::Entity::CounterEntry(CounterEntry {

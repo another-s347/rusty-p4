@@ -7,7 +7,7 @@ use rusty_p4_proto::proto::v1::{
 };
 use std::fmt::Debug;
 use std::sync::Arc;
-use crate::p4rt::pipeconf::{Pipeconf, PipeconfID};
+use crate::p4rt::pipeconf::{DefaultPipeconf, PipeconfID};
 
 /// Event indicates that something happened. It shouldn't change the state of Core and Context
 pub enum CoreEvent<E> {
@@ -28,7 +28,7 @@ pub struct PacketReceived {
 pub enum CoreRequest {
     AddDevice { device: Device },
     RemoveDevice { device: DeviceID },
-    AddPipeconf { pipeconf:Pipeconf },
+    AddPipeconf { pipeconf:DefaultPipeconf },
     UpdatePipeconf { device: DeviceID, pipeconf:PipeconfID },
     RemovePipeconf { pipeconf: PipeconfID },
 }

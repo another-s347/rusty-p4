@@ -9,33 +9,43 @@ use std::process::exit;
 use std::sync::Arc;
 use std::io::{BufReader, Read};
 
-pub trait NewPipeconf: Send+Sync {
+pub trait Pipeconf: Send+Sync {
     fn get_id(&self) -> PipeconfID;
     fn get_name(&self) -> &str;
     fn get_p4info(&self) -> &P4Info;
     fn get_bmv2_file_path(&self) -> &Path;
     fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour>;
+    fn get_packetin_ingress_id(&self) -> u32;
+    fn get_packetout_egress_id(&self) -> u32;
 }
 
-impl NewPipeconf for &dyn NewPipeconf {
+impl Pipeconf for &Arc<dyn Pipeconf> {
     fn get_id(&self) -> PipeconfID {
-        self.get_id()
+        self.as_ref().get_id()
     }
 
     fn get_name(&self) -> &str {
-        self.get_name()
+        self.as_ref().get_name()
     }
 
     fn get_p4info(&self) -> &P4Info {
-        self.get_p4info()
+        self.as_ref().get_p4info()
     }
 
     fn get_bmv2_file_path(&self) -> &Path {
-        self.get_bmv2_file_path()
+        self.as_ref().get_bmv2_file_path()
     }
 
     fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour> {
-        self.get_behaviour(name)
+        self.as_ref().get_behaviour(name)
+    }
+
+    fn get_packetin_ingress_id(&self) -> u32 {
+        self.as_ref().get_packetin_ingress_id()
+    }
+
+    fn get_packetout_egress_id(&self) -> u32 {
+        self.as_ref().get_packetout_egress_id()
     }
 }
 
@@ -44,7 +54,7 @@ pub trait Behaviour {
 }
 
 #[derive(Clone,Debug)]
-pub struct Pipeconf {
+pub struct DefaultPipeconf {
     id: PipeconfID,
     name: String,
     inner: Arc<Inner>,
@@ -52,12 +62,12 @@ pub struct Pipeconf {
     pub packetin_ingress_id: u32,
 }
 
-impl Pipeconf {
+impl DefaultPipeconf {
     pub fn new<T: AsRef<Path> + Debug>(
         name: &str,
         p4info_file_path: T,
         bmv2_file_path: T,
-    ) -> Pipeconf {
+    ) -> DefaultPipeconf {
         let file = std::fs::File::open(&p4info_file_path);
         if file.is_err() {
             error!(target:"pipeconf", "critical: Opening P4 info file fail: {:?}, path: {:?}", file.err().unwrap(), &p4info_file_path);
@@ -70,7 +80,7 @@ impl Pipeconf {
         let packetout_id = get_packout_egress_port_metaid(&p4info).unwrap();
         let packetin_id = get_packin_egress_port_metaid(&p4info).unwrap();
         let id = crate::util::hash(name);
-        Pipeconf {
+        DefaultPipeconf {
             id: PipeconfID(id),
             name: name.to_owned(),
             inner: Arc::new(Inner {
@@ -103,3 +113,33 @@ struct Inner {
 
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PipeconfID(pub u64);
+
+impl Pipeconf for DefaultPipeconf {
+    fn get_id(&self) -> PipeconfID {
+        self.id
+    }
+
+    fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    fn get_p4info(&self) -> &P4Info {
+        &self.inner.p4info
+    }
+
+    fn get_bmv2_file_path(&self) -> &Path {
+        &self.inner.bmv2_json_file_path
+    }
+
+    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour> {
+        todo!()
+    }
+
+    fn get_packetin_ingress_id(&self) -> u32 {
+        self.packetin_ingress_id
+    }
+
+    fn get_packetout_egress_id(&self) -> u32 {
+        self.packetout_egress_id
+    }
+}
