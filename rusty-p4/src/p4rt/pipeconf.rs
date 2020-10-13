@@ -14,7 +14,7 @@ pub trait Pipeconf: Send+Sync {
     fn get_name(&self) -> &str;
     fn get_p4info(&self) -> &P4Info;
     fn get_bmv2_file_path(&self) -> &Path;
-    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour>;
+    fn get_any_behaviour(&self, name: &str) -> Box<dyn std::any::Any>;
     fn get_packetin_ingress_id(&self) -> u32;
     fn get_packetout_egress_id(&self) -> u32;
 }
@@ -36,8 +36,8 @@ impl Pipeconf for &Arc<dyn Pipeconf> {
         self.as_ref().get_bmv2_file_path()
     }
 
-    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour> {
-        self.as_ref().get_behaviour(name)
+    fn get_any_behaviour(&self, name: &str) -> Box<dyn std::any::Any> {
+        self.as_ref().get_any_behaviour(name)
     }
 
     fn get_packetin_ingress_id(&self) -> u32 {
@@ -47,10 +47,6 @@ impl Pipeconf for &Arc<dyn Pipeconf> {
     fn get_packetout_egress_id(&self) -> u32 {
         self.as_ref().get_packetout_egress_id()
     }
-}
-
-pub trait Behaviour {
-
 }
 
 #[derive(Clone,Debug)]
@@ -131,7 +127,7 @@ impl Pipeconf for DefaultPipeconf {
         &self.inner.bmv2_json_file_path
     }
 
-    fn get_behaviour(&self, name: &str) -> Box<dyn Behaviour> {
+    fn get_any_behaviour(&self, name: &str) -> Box<dyn std::any::Any> {
         todo!()
     }
 
@@ -141,5 +137,11 @@ impl Pipeconf for DefaultPipeconf {
 
     fn get_packetout_egress_id(&self) -> u32 {
         self.packetout_egress_id
+    }
+}
+
+impl Pipeconf {
+    pub fn get_behaviour<T:'static>(self: &Self, name: &str) -> Option<Box<T>> {
+        self.get_any_behaviour(name).downcast().ok()
     }
 }

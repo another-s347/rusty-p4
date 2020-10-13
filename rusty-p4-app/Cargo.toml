@@ -20,3 +20,4 @@ async-trait = "0.1.13"
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tuple_list = "0.1.2"

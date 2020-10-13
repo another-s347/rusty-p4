@@ -23,8 +23,10 @@ use std::{collections::HashMap, sync::{Arc, Mutex, MutexGuard}};
 use tuple_list::TupleList;
 use tuple_list::tuple_list_type;
 
-// pub mod common;
-// pub mod graph;
+pub mod common;
+pub mod graph;
+pub mod device_manager;
+// pub mod rest;
 // pub mod statistic;
 // pub mod raw_statistic;
 // pub mod stratum_statistic;

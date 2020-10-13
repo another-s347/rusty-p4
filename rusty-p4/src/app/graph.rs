@@ -26,12 +26,12 @@ impl DefaultGraph {
         }
     }
 
-    pub fn add_device(&mut self, device: &Device) {
-        if self.node_index.contains_key(&device.id) {
+    pub fn add_device(&mut self, device: DeviceID) {
+        if self.node_index.contains_key(&device) {
             return;
         }
-        let node = self.base.add_node(device.id);
-        self.node_index.insert(device.id, node);
+        let node = self.base.add_node(device);
+        self.node_index.insert(device, node);
     }
 
     pub fn remove_device(&mut self, device: &DeviceID) {
