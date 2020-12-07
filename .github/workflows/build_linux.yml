@@ -130,13 +130,13 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --manifest-path ./proto/Cargo.toml --no-deps
+          args: --manifest-path ./rusty-p4/proto/Cargo.toml --no-deps
 
       - name: Copy
         run: |
-          mkdir -p ./pages/docs
-          cp -r ./rusty-p4/target/doc ./pages/docs/rusty_p4
-          cp -r ./rusty-p4-proto/target/doc ./pages/docs/rusty_p4_proto
+          mkdir -p ./rusty-p4/pages/docs
+          cp -r ./rusty-p4/target/doc ./rusty-p4/pages/docs/rusty_p4
+          cp -r ./rusty-p4/proto/target/doc ./rusty-p4/pages/docs/rusty_p4_proto
 
       - name: Push
         run: |
