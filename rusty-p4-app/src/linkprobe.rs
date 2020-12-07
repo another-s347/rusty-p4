@@ -34,7 +34,7 @@ pub struct LinkProbeState {
     pub inner: Arc<Mutex<HashMap<DeviceID, Vec<Sender<()>>>>>,
     pub interceptor: Arc<HashMap<PipeconfID, Box<dyn LinkProbeInterceptor>>>,
     pub bmv2_manager: rusty_p4::p4rt::bmv2::Bmv2Manager,
-    pub device_manager: rusty_p4::app::device_manager::DeviceManager
+    pub device_manager: rusty_p4::app::device_manager::DeviceManager,
 }
 
 pub trait LinkProbeInterceptor: Sync + Send {
@@ -68,6 +68,7 @@ pub trait LinkProbeInterceptor: Sync + Send {
 
 #[async_trait]
 impl App for LinkProbeState {
+    type Container = Self;
     type Dependency = tuple_list::tuple_list_type!(rusty_p4::p4rt::bmv2::Bmv2Manager, rusty_p4::app::device_manager::DeviceManager);
 
     type Option = ();
@@ -89,6 +90,10 @@ impl App for LinkProbeState {
         device_manager.subscribe(app);
 
         todo!()
+    }
+
+    fn from_inner(app: Option<Self::Container>) -> Option<Self> {
+        app
     }
 
     async fn run(&self) {

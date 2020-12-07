@@ -53,6 +53,7 @@ pub struct NewBenchmark {
 
 #[async_trait]
 impl App for NewBenchmark {
+    type Container = Self;
     type Dependency = tuple_list_type!(rusty_p4::p4rt::bmv2::Bmv2Manager);
 
     type Option = ();
@@ -65,6 +66,10 @@ impl App for NewBenchmark {
         };
         device_manager.subscribe_packet(app.clone());
         device_manager.subscribe_event(app.clone());
+        app
+    }
+
+    fn from_inner(app: Option<Self::Container>) -> Option<Self> {
         app
     }
 

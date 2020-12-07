@@ -18,6 +18,7 @@ pub enum DeviceEvent {
 
 #[async_trait]
 impl crate::app::App for DeviceManager {
+    type Container = Self;
     type Dependency = tuple_list::tuple_list_type!(crate::p4rt::bmv2::Bmv2Manager);
 
     type Option = ();
@@ -33,6 +34,10 @@ impl crate::app::App for DeviceManager {
         bmv2_manager.subscribe_event(app.clone());
         store.store(app.clone());
 
+        app
+    }
+
+    fn from_inner(app: Option<Self::Container>) -> Option<Self> {
         app
     }
 

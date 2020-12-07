@@ -116,6 +116,7 @@ pub enum MergeResult<T> {
 #[async_trait]
 impl App for CommonState
 {
+    type Container = Self;
     type Dependency = tuple_list_type!(crate::app::device_manager::DeviceManager);
 
     type Option = ();
@@ -125,6 +126,10 @@ impl App for CommonState
         let app = Self::new();
         device_manager.subscribe(app.clone());
         store.store(app.clone());
+        app
+    }
+
+    fn from_inner(app: Option<Self::Container>) -> Option<Self> {
         app
     }
 

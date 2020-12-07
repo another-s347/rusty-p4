@@ -49,6 +49,7 @@ pub enum Bmv2Event {
 
 #[async_trait]
 impl crate::app::App for Bmv2Manager {
+    type Container = Self;
     type Dependency = ();
 
     type Option = ();
@@ -62,6 +63,10 @@ impl crate::app::App for Bmv2Manager {
             finish_signal_sender: Arc::new(AtomicCell::new(Some(finish_signal_sender))),
             finish_signal: crate::util::FinishSignal::new(finish_signal).shared()
         }
+    }
+
+    fn from_inner(app: Option<Self::Container>) -> Option<Self> {
+        app
     }
 
     async fn run(&self) {
