@@ -26,6 +26,7 @@ jobs:
 
   test:
     name: Test Suite
+    needs: check
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -47,6 +48,7 @@ jobs:
 
   fmt:
     name: Rustfmt
+    needs: check
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -69,6 +71,7 @@ jobs:
 
   clippy:
     name: Clippy
+    needs: check
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -88,3 +91,61 @@ jobs:
         with:
           command: clippy
           args: --manifest-path ./${{ matrix.part }}/Cargo.toml -- -D warnings 
+
+  doc:
+    name: Documentation
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+        part:
+          - rusty-p4
+    steps:
+      - name: Checkout proto
+        uses: actions/checkout@v2
+        with:
+          repository: 'another-s347/rusty-p4-proto'
+          path: 'proto'
+  
+      - name: Checkout pages
+        uses: actions/checkout@v2
+        with:
+          repository: 'another-s347/another-s347.github.io'
+          path: 'pages'
+          token: ${{secrets.PAT_FOR_PUSH}}
+  
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --manifest-path ./rusty-p4/Cargo.toml --no-deps
+      
+      - uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --manifest-path ./proto/Cargo.toml --no-deps
+
+      - name: Copy
+        run: |
+          mkdir -p ./pages/docs
+          cp -r ./rusty-p4/target/doc ./pages/docs/rusty_p4
+          cp -r ./rusty-p4-proto/target/doc ./pages/docs/rusty_p4_proto
+
+      - name: Push
+        run: |
+          git config user.name another-s347
+          git config user.email s347419313@gmail.com
+          git add .
+          git commit -m "update docs by rusty-p4 push"
+          git push -u https://another-s347:$REPO_KEY@github.com/another-s347/another-s347.github.io.git main
+        working-directory: pages
+        env:
+          REPO_KEY: ${{secrets.PAT_FOR_PUSH}}
+      
