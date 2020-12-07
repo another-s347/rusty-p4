@@ -21,7 +21,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: check --manifest-path ./${{ matrix.part }}/Cargo.toml
+          command: check
+          args: --manifest-path ./${{ matrix.part }}/Cargo.toml
 
   test:
     name: Test Suite
@@ -41,7 +42,8 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          command: test --manifest-path ./${{ matrix.part }}/Cargo.toml
+          command: test
+          args: --manifest-path ./${{ matrix.part }}/Cargo.toml
 
   fmt:
     name: Rustfmt
@@ -63,7 +65,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check --manifest-path ./${{ matrix.part }}/Cargo.toml
+          args: --manifest-path ./${{ matrix.part }}/Cargo.toml --all -- --check
 
   clippy:
     name: Clippy
@@ -85,4 +87,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings --manifest-path ./${{ matrix.part }}/Cargo.toml
+          args: --manifest-path ./${{ matrix.part }}/Cargo.toml -- -D warnings 
