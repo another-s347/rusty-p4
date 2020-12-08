@@ -103,6 +103,8 @@ jobs:
         part:
           - rusty-p4
     steps:
+      - uses: actions/checkout@v2
+
       - name: Checkout proto
         uses: actions/checkout@v2
         with:
@@ -116,7 +118,6 @@ jobs:
           path: 'pages'
           token: ${{secrets.PAT_FOR_PUSH}}
   
-      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -127,16 +128,17 @@ jobs:
           command: doc
           args: --manifest-path ./rusty-p4/Cargo.toml --no-deps
       
-      - uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --manifest-path ./rusty-p4/proto/Cargo.toml --no-deps
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: doc
+      #     args: --manifest-path ./rusty-p4/proto/Cargo.toml --no-deps
+      - name: LS
+        run: ls
 
       - name: Copy
         run: |
-          mkdir -p ./rusty-p4/pages/docs
-          cp -r ./rusty-p4/target/doc ./rusty-p4/pages/docs/rusty_p4
-          cp -r ./rusty-p4/proto/target/doc ./rusty-p4/pages/docs/rusty_p4_proto
+          mkdir -p ./pages/docs
+          cp -r ./rusty-p4/target/doc ./pages/docs/rusty_p4
 
       - name: Push
         run: |
