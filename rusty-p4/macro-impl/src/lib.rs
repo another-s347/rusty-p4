@@ -16,7 +16,7 @@ use proc_macro_hack::proc_macro_hack;
 use quote::quote;
 use quote::{ToTokens, TokenStreamExt};
 use std::convert::TryInto;
-use syn::export::{Debug, Formatter};
+use std::fmt::{Debug, Formatter};
 use syn::group::Group;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;

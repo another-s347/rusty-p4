@@ -256,7 +256,7 @@ impl Bmv2SwitchConnection {
                let (mut send_stream, receiver) = tokio::sync::mpsc::channel(4096);
                let master_up_req = crate::p4rt::pure::new_master_update_request(self.device_id,self.master_arbitration.unwrap());
                send_stream.send(master_up_req).await;
-               let recv_stream = self.client.stream_channel(tonic::Request::new(receiver)).await.unwrap().into_inner();
+               let recv_stream = self.client.stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver)).await.unwrap().into_inner();
                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
                    sender: send_stream.clone(),
                    receiver: recv_stream,
@@ -284,7 +284,7 @@ impl Bmv2SwitchConnection {
         let mut sender = match self.conn_status {
             Bmv2SwitchConnectionStatus::None => {
                let (send_stream, receiver) = tokio::sync::mpsc::channel(4096); 
-               let recv_stream = self.client.stream_channel(tonic::Request::new(receiver)).await.unwrap().into_inner();
+               let recv_stream = self.client.stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver)).await.unwrap().into_inner();
                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
                    sender: send_stream.clone(),
                    receiver: recv_stream,

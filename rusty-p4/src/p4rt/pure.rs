@@ -85,10 +85,10 @@ pub fn new_packet_out_request<T>(
 where T: Pipeconf
 {
     let packetOut = PacketOut {
-        payload: packet.to_vec(),
+        payload: packet,
         metadata: vec![PacketMetadata {
             metadata_id: pipeconf.get_packetout_egress_id(),
-            value: adjust_value(Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()), 2).to_vec(),
+            value: adjust_value(Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()), 2),
         }],
     };
     let request = StreamMessageRequest {
@@ -151,6 +151,7 @@ pub fn build_table_entry(
     };
 
     let mut table_entry = TableEntry {
+        metadata: Bytes::new(),
         table_id: get_table_id(p4info, table_name).unwrap(),
         r#match: vec![],
         action: Some(TableAction {
@@ -361,14 +362,14 @@ pub fn get_match_field_pb(
                         //                assert_eq!(byte_len, v.len());
                         let v = adjust_value(v.clone(), byte_len);
                         field_match::FieldMatchType::Exact(
-                            crate::proto::p4runtime::field_match::Exact { value: v.to_vec() },
+                            crate::proto::p4runtime::field_match::Exact { value: v },
                         )
                     }
                     (Some(match_field::MatchType::Lpm), InnerValue::LPM(v, l)) => {
                         assert_eq!(byte_len, v.len());
                         field_match::FieldMatchType::Lpm(
                             crate::proto::p4runtime::field_match::Lpm {
-                                value: v.to_vec(),
+                                value: v.clone(),
                                 prefix_len: *l,
                             },
                         )
@@ -379,8 +380,8 @@ pub fn get_match_field_pb(
                         let mask = adjust_value(mask.clone(), byte_len);
                         field_match::FieldMatchType::Ternary(
                             crate::proto::p4runtime::field_match::Ternary {
-                                value: v.to_vec(),
-                                mask: mask.to_vec(),
+                                value: v.clone(),
+                                mask,
                             },
                         )
                     }
@@ -389,8 +390,8 @@ pub fn get_match_field_pb(
                         assert_eq!(byte_len, high.len());
                         field_match::FieldMatchType::Range(
                             crate::proto::p4runtime::field_match::Range {
-                                low: low.to_vec(),
-                                high: high.to_vec(),
+                                low: low.clone(),
+                                high: high.clone(),
                             },
                         )
                     }
@@ -407,8 +408,8 @@ pub fn get_match_field_pb(
                         }
                         field_match::FieldMatchType::Ternary(
                             crate::proto::p4runtime::field_match::Ternary {
-                                value: v.to_vec(),
-                                mask: mask.to_vec(),
+                                value: v.clone(),
+                                mask,
                             },
                         )
                     }
@@ -487,7 +488,7 @@ pub fn get_action_param_pb(
     let value = adjust_value(value, bytes_len);
     let p4runtime_param = crate::proto::p4runtime::action::Param {
         param_id: p4info_param.id,
-        value: value.to_vec(),
+        value,
     };
     return p4runtime_param;
 }
@@ -512,7 +513,7 @@ pub async fn new_set_forwarding_pipeline_config_request(
         action: crate::proto::p4runtime::set_forwarding_pipeline_config_request::Action::VerifyAndCommit.into(),
         config: Some(crate::proto::p4runtime::ForwardingPipelineConfig {
             p4info: Some(p4info.clone()),
-            p4_device_config: buffer.into_bytes(),
+            p4_device_config: buffer.into(),
             cookie: None,
         }),
     })

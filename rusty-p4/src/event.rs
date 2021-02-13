@@ -18,7 +18,7 @@ pub enum CoreEvent<E> {
 
 #[derive(Debug, Clone)]
 pub struct PacketReceived {
-    pub packet: Vec<u8>,
+    pub packet: bytes::Bytes,
     pub from: DeviceID,
     pub metadata: Vec<PacketMetadata>
 }
