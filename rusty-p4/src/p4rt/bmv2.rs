@@ -1,16 +1,32 @@
-use crate::error::{ConnectionError, ConnectionErrorKind, ContextError};
-use crate::failure::ResultExt;
+use super::{
+    pipeconf::Pipeconf,
+    pure::{new_set_entity_request, table_entry_to_entity},
+};
 use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::p4rt::pure::adjust_value;
 use crate::proto::p4config::P4Info;
 use crate::proto::p4runtime::{
-    stream_message_request, PacketMetadata, StreamMessageRequest, StreamMessageResponse, TableEntry,
-    stream_message_response
+    stream_message_request, stream_message_response, PacketMetadata, StreamMessageRequest,
+    StreamMessageResponse, TableEntry,
 };
-use crate::{util::{flow::Flow, publisher::{Publisher, Handler}}, representation::{ConnectPoint, DeviceID}, event::PacketReceived, entity::UpdateType};
+use crate::{
+    entity::UpdateType,
+    event::PacketReceived,
+    representation::{ConnectPoint, DeviceID},
+    util::{
+        flow::Flow,
+        publisher::{Handler, Publisher},
+    },
+};
+use async_trait::async_trait;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
+use crossbeam::atomic::AtomicCell;
+use futures::{future::BoxFuture, FutureExt, SinkExt, StreamExt, TryFutureExt, TryStreamExt};
+use log::{debug, error};
+use nom::combinator::opt;
+use parking_lot::RwLock;
 use prost::Message;
 use rusty_p4_proto::proto::v1::{
     Entity, ForwardingPipelineConfig, MasterArbitrationUpdate, Uint128, Update,
@@ -19,16 +35,9 @@ use std::fs::File;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::{Arc};
-use parking_lot::RwLock;
-use futures::{StreamExt, FutureExt, TryFutureExt, TryStreamExt, SinkExt, future::BoxFuture};
-use nom::combinator::opt;
-use tokio::{sync::mpsc::Sender, io::AsyncReadExt};
+use std::sync::Arc;
 use std::{collections::HashMap, convert::TryFrom};
-use log::{error, debug};
-use super::{pure::{table_entry_to_entity, new_set_entity_request}, pipeconf::Pipeconf};
-use async_trait::async_trait;
-use crossbeam::atomic::AtomicCell;
+use tokio::{io::AsyncReadExt, sync::mpsc::Sender};
 
 type P4RuntimeClient =
     crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -38,13 +47,14 @@ pub struct Bmv2Manager {
     connections: Arc<RwLock<HashMap<DeviceID, Bmv2SwitchConnection>>>,
     publisher: Arc<crate::util::publisher::Publisher<Bmv2Event>>,
     packet_publisher: Arc<crate::util::publisher::Publisher<PacketReceived>>,
-    finish_signal_sender: Arc<crossbeam::atomic::AtomicCell<Option<tokio::sync::oneshot::Sender<()>>>>,
-    finish_signal: futures::future::Shared<crate::util::FinishSignal>
+    finish_signal_sender:
+        Arc<crossbeam::atomic::AtomicCell<Option<tokio::sync::oneshot::Sender<()>>>>,
+    finish_signal: futures::future::Shared<crate::util::FinishSignal>,
 }
 
 #[derive(Clone)]
 pub enum Bmv2Event {
-    DeviceAdded(DeviceID)
+    DeviceAdded(DeviceID),
 }
 
 #[async_trait]
@@ -56,14 +66,17 @@ impl crate::app::App for Bmv2Manager {
 
     const Name: &'static str = "Bmv2Manager";
 
-    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: crate::app::store::AppStore  {
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+    where
+        S: crate::app::store::AppStore,
+    {
         let (finish_signal_sender, finish_signal) = tokio::sync::oneshot::channel();
         Bmv2Manager {
             connections: Default::default(),
             publisher: Arc::new(Publisher::default()),
             packet_publisher: Default::default(),
             finish_signal_sender: Arc::new(AtomicCell::new(Some(finish_signal_sender))),
-            finish_signal: crate::util::FinishSignal::new(finish_signal).shared()
+            finish_signal: crate::util::FinishSignal::new(finish_signal).shared(),
         }
     }
 
@@ -77,11 +90,17 @@ impl crate::app::App for Bmv2Manager {
 }
 
 impl Bmv2Manager {
-    pub fn subscribe_event<T>(&self, handler: T) where T: Handler<Bmv2Event> {
+    pub fn subscribe_event<T>(&self, handler: T)
+    where
+        T: Handler<Bmv2Event>,
+    {
         self.publisher.add_handler(handler);
     }
 
-    pub fn subscribe_packet<T>(&self, handler: T) where T: Handler<PacketReceived> {
+    pub fn subscribe_packet<T>(&self, handler: T)
+    where
+        T: Handler<PacketReceived>,
+    {
         self.packet_publisher.add_handler(handler);
     }
 
@@ -99,8 +118,14 @@ impl Bmv2Manager {
         }
     }
 
-    pub async fn add_device<T>(&self, name:&str, address: &str, option: Bmv2ConnectionOption, pipeconf: T)
-    where T: Pipeconf + 'static
+    pub async fn add_device<T>(
+        &self,
+        name: &str,
+        address: &str,
+        option: Bmv2ConnectionOption,
+        pipeconf: T,
+    ) where
+        T: Pipeconf + 'static,
     {
         let mut device = Bmv2SwitchConnection::try_new(name, address, option).await;
         device.pipeconf = Some(Arc::new(pipeconf));
@@ -119,9 +144,9 @@ impl Bmv2Manager {
                         }
                         stream_message_response::Update::Packet(packet) => {
                             let x = PacketReceived {
-                                packet:packet.payload,
+                                packet: packet.payload,
                                 from: id,
-                                metadata: packet.metadata
+                                metadata: packet.metadata,
                             };
                             manager.packet_publisher.emit(x).await;
                         }
@@ -147,7 +172,12 @@ impl Bmv2Manager {
     }
 
     pub async fn device_master_updated(&self, device: DeviceID) {
-        self.get_device(device).unwrap().get_handle().set_forwarding_pipeline_config().await.unwrap();
+        self.get_device(device)
+            .unwrap()
+            .get_handle()
+            .set_forwarding_pipeline_config()
+            .await
+            .unwrap();
         self.publisher.emit(Bmv2Event::DeviceAdded(device)).await;
     }
 
@@ -156,21 +186,37 @@ impl Bmv2Manager {
     }
 
     pub fn get_packet_connectpoint(&self, packet: &PacketReceived) -> Option<ConnectPoint> {
-        self.connections.read().get(&packet.from)
-        .and_then(|conn| conn.pipeconf.as_ref())
-        .and_then(|pipeconf| {
-            packet.metadata.iter()
-                .find(|x| x.metadata_id == pipeconf.get_packetin_ingress_id())
-                .map(|x| BigEndian::read_u16(x.value.as_ref()))
-        })
-        .map(|port| ConnectPoint {
-            device: packet.from,
-            port: port as u32,
-        })
+        self.connections
+            .read()
+            .get(&packet.from)
+            .and_then(|conn| conn.pipeconf.as_ref())
+            .and_then(|pipeconf| {
+                packet
+                    .metadata
+                    .iter()
+                    .find(|x| x.metadata_id == pipeconf.get_packetin_ingress_id())
+                    .map(|x| BigEndian::read_u16(x.value.as_ref()))
+            })
+            .map(|port| ConnectPoint {
+                device: packet.from,
+                port: port as u32,
+            })
     }
 
-    pub async fn send_packet(&self, cp: ConnectPoint, bytes: bytes::Bytes) {
-        self.connections.read().get(&cp.device).unwrap().get_handle().packet_out(cp.port, bytes).await.unwrap();
+    pub async fn send_packet(
+        &self,
+        cp: ConnectPoint,
+        bytes: bytes::Bytes,
+    ) -> crate::error::Result<()> {
+        self.connections
+            .read()
+            .get(&cp.device)
+            .ok_or(crate::error::DeviceError::DeviceNotConnected { device: cp.device })?
+            .get_handle()
+            .packet_out(cp.port, bytes)
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -183,13 +229,13 @@ pub struct Bmv2SwitchConnection {
     pub conn_status: Bmv2SwitchConnectionStatus,
     pub pipeconf: Option<Arc<dyn Pipeconf>>,
     pub master_arbitration: Option<Bmv2MasterUpdateOption>,
-    is_handle: bool
+    is_handle: bool,
 }
 
 pub struct Bmv2ConnectionOption {
-    pub p4_device_id:u64,
-    pub inner_device_id:Option<u64>,
-    pub master_update:Option<Bmv2MasterUpdateOption>,
+    pub p4_device_id: u64,
+    pub inner_device_id: Option<u64>,
+    pub master_update: Option<Bmv2MasterUpdateOption>,
 }
 
 impl Default for Bmv2ConnectionOption {
@@ -197,22 +243,22 @@ impl Default for Bmv2ConnectionOption {
         Self {
             p4_device_id: 1,
             inner_device_id: None,
-            master_update: Some(Bmv2MasterUpdateOption::default())
+            master_update: Some(Bmv2MasterUpdateOption::default()),
         }
     }
 }
 
 #[derive(Copy, Clone)]
 pub struct Bmv2MasterUpdateOption {
-    pub election_id_high:u64,
-    pub election_id_low:u64
+    pub election_id_high: u64,
+    pub election_id_low: u64,
 }
 
 impl Default for Bmv2MasterUpdateOption {
     fn default() -> Self {
         Bmv2MasterUpdateOption {
             election_id_high: 0,
-            election_id_low: 1
+            election_id_low: 1,
         }
     }
 }
@@ -221,7 +267,7 @@ impl Bmv2SwitchConnection {
     pub async fn try_new(
         name: &str,
         address: &str,
-        options: Bmv2ConnectionOption
+        options: Bmv2ConnectionOption,
     ) -> Bmv2SwitchConnection {
         let name = name.to_owned();
         let address = address.to_owned();
@@ -233,8 +279,11 @@ impl Bmv2SwitchConnection {
         };
         let device_id = options.p4_device_id;
 
-        let mut client_stub =
-            crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient::connect(format!("http://{}",address)).await.unwrap();
+        let mut client_stub = crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient::connect(
+            format!("http://{}", address),
+        )
+        .await
+        .unwrap();
 
         Bmv2SwitchConnection {
             name,
@@ -245,7 +294,7 @@ impl Bmv2SwitchConnection {
             conn_status: Bmv2SwitchConnectionStatus::None,
             pipeconf: None,
             is_handle: false,
-            master_arbitration: options.master_update
+            master_arbitration: options.master_update,
         }
     }
 
@@ -255,22 +304,28 @@ impl Bmv2SwitchConnection {
         }
         match self.conn_status {
             Bmv2SwitchConnectionStatus::None => {
-               let (mut send_stream, receiver) = tokio::sync::mpsc::channel(4096);
-               let master_up_req = crate::p4rt::pure::new_master_update_request(self.device_id,self.master_arbitration.unwrap());
-               send_stream.send(master_up_req).await;
-               let recv_stream = self.client.stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver)).await.unwrap().into_inner();
-               self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
-                   sender: send_stream.clone(),
-                   receiver: recv_stream,
-               };
-               send_stream
+                let (mut send_stream, receiver) = tokio::sync::mpsc::channel(4096);
+                let master_up_req = crate::p4rt::pure::new_master_update_request(
+                    self.device_id,
+                    self.master_arbitration.unwrap(),
+                );
+                send_stream.send(master_up_req).await;
+                let recv_stream = self
+                    .client
+                    .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
+                    .await
+                    .unwrap()
+                    .into_inner();
+                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
+                    sender: send_stream.clone(),
+                    receiver: recv_stream,
+                };
+                send_stream
             }
             Bmv2SwitchConnectionStatus::StreamOpened {
                 ref sender,
-                ref receiver
-            } => {
-                sender.clone()
-            }
+                ref receiver,
+            } => sender.clone(),
             Bmv2SwitchConnectionStatus::Streaming(ref sender) => {
                 unimplemented!()
             }
@@ -281,27 +336,28 @@ impl Bmv2SwitchConnection {
         &mut self,
         egress_port: u32,
         packet: Bytes,
-    ) -> Result<(), ConnectionError> {
+    ) -> crate::error::Result<()> {
         let pipeconf = self.pipeconf.as_ref().unwrap();
         let mut sender = match self.conn_status {
             Bmv2SwitchConnectionStatus::None => {
-               let (send_stream, receiver) = tokio::sync::mpsc::channel(4096); 
-               let recv_stream = self.client.stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver)).await.unwrap().into_inner();
-               self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
-                   sender: send_stream.clone(),
-                   receiver: recv_stream,
-               };
-               send_stream
+                let (send_stream, receiver) = tokio::sync::mpsc::channel(4096);
+                let recv_stream = self
+                    .client
+                    .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
+                    .await
+                    .unwrap()
+                    .into_inner();
+                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
+                    sender: send_stream.clone(),
+                    receiver: recv_stream,
+                };
+                send_stream
             }
             Bmv2SwitchConnectionStatus::StreamOpened {
                 ref sender,
-                ref receiver
-            } => {
-                sender.clone()
-            }
-            Bmv2SwitchConnectionStatus::Streaming(ref sender) => {
-                sender.clone()
-            }
+                ref receiver,
+            } => sender.clone(),
+            Bmv2SwitchConnectionStatus::Streaming(ref sender) => sender.clone(),
         };
 
         let request = super::pure::new_packet_out_request(&pipeconf, egress_port, packet);
@@ -309,30 +365,47 @@ impl Bmv2SwitchConnection {
         Ok(())
     }
 
-    pub async fn set_forwarding_pipeline_config(
-        &mut self,
-    ) -> Result<(), ConnectionError> 
-    {
+    pub async fn set_forwarding_pipeline_config(&mut self) -> crate::error::Result<()> {
         let pipeconf = self.pipeconf.as_ref().unwrap();
-        let master_arbitration = if let Some(x) = self.master_arbitration { x } else {todo!()};
+        let master_arbitration = if let Some(x) = self.master_arbitration {
+            x
+        } else {
+            todo!()
+        };
         let master_arbitration = MasterArbitrationUpdate {
             device_id: self.device_id,
             role: None,
-            election_id: Uint128 { high: master_arbitration.election_id_high, low: master_arbitration.election_id_low }.into(),
+            election_id: Uint128 {
+                high: master_arbitration.election_id_high,
+                low: master_arbitration.election_id_low,
+            }
+            .into(),
             status: None,
         };
         let p4info = pipeconf.get_p4info();
         let bmv2_json_file_path = pipeconf.get_bmv2_file_path();
-        let request = super::pure::new_set_forwarding_pipeline_config_request(p4info,bmv2_json_file_path,&master_arbitration,self.device_id).await?;
+        let request = super::pure::new_set_forwarding_pipeline_config_request(
+            p4info,
+            bmv2_json_file_path,
+            &master_arbitration,
+            self.device_id,
+        )
+        .await?;
         self.client
             .set_forwarding_pipeline_config(tonic::Request::new(request))
             .await
-            .context(ConnectionErrorKind::GRPCSendError)?;
+            .map_err(|e|crate::error::DeviceError::DeviceGrpcError {
+                device: self.inner_id,
+                error: e,
+            })?;
 
         Ok(())
     }
 
-    pub async fn write_table_entry(&mut self, table_entry: TableEntry) -> Result<(), ConnectionError> {
+    pub async fn write_table_entry(
+        &mut self,
+        table_entry: TableEntry,
+    ) -> crate::error::Result<()> {
         let update_type = if table_entry.is_default_action {
             crate::proto::p4runtime::update::Type::Modify
         } else {
@@ -355,20 +428,26 @@ impl Bmv2SwitchConnection {
         self.client
             .write(tonic::Request::new(request))
             .await
-            .context(ConnectionErrorKind::GRPCSendError)?;
+            .map_err(|error|{
+                crate::error::DeviceError::DeviceGrpcError {
+                    device: self.inner_id,
+                    error,
+                }
+            })?;
 
         Ok(())
     }
 
-    pub fn take_channel_receiver(&mut self) -> Option<tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>> {
+    pub fn take_channel_receiver(
+        &mut self,
+    ) -> Option<tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>> {
         let status = std::mem::replace(&mut self.conn_status, Bmv2SwitchConnectionStatus::None);
         let (next_status, ret) = match status {
-            Bmv2SwitchConnectionStatus::StreamOpened { sender, receiver } => {
-                (Bmv2SwitchConnectionStatus::Streaming(sender),Some(receiver))
-            }
-            other => {
-                (other, None)
-            }
+            Bmv2SwitchConnectionStatus::StreamOpened { sender, receiver } => (
+                Bmv2SwitchConnectionStatus::Streaming(sender),
+                Some(receiver),
+            ),
+            other => (other, None),
         };
         self.conn_status = next_status;
         ret
@@ -400,17 +479,15 @@ impl Bmv2SwitchConnection {
         &mut self,
         mut flow: Flow,
         update: UpdateType,
-    ) -> Result<Flow, ContextError> {
+    ) -> crate::error::Result<Flow> {
         let pipeconf = if let Some(pipeconf) = self.pipeconf.as_ref() {
             pipeconf
-        }
-        else {
+        } else {
             todo!()
         };
         let hash = crate::util::hash(&flow);
         let table_entry = flow.to_table_entry(&pipeconf, hash);
-        let request =
-            new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
+        let request = new_set_entity_request(1, table_entry_to_entity(table_entry), update.into());
         match self.client.write(tonic::Request::new(request)).await {
             Ok(response) => {
                 debug!(target: "core", "set entity response: {:?}", response);
@@ -423,7 +500,7 @@ impl Bmv2SwitchConnection {
         Ok(flow)
     }
 
-    pub async fn insert_flow(&mut self, mut flow: Flow) -> Result<Flow, ContextError> {
+    pub async fn insert_flow(&mut self, mut flow: Flow) -> crate::error::Result<Flow> {
         self.set_flow(flow, UpdateType::Insert).await
     }
 }
@@ -432,7 +509,7 @@ pub enum Bmv2SwitchConnectionStatus {
     None,
     StreamOpened {
         sender: tokio::sync::mpsc::Sender<rusty_p4_proto::proto::v1::StreamMessageRequest>,
-        receiver: tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>
+        receiver: tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>,
     },
-    Streaming(tokio::sync::mpsc::Sender<rusty_p4_proto::proto::v1::StreamMessageRequest>)
+    Streaming(tokio::sync::mpsc::Sender<rusty_p4_proto::proto::v1::StreamMessageRequest>),
 }

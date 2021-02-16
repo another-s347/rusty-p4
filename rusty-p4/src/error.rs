@@ -1,95 +1,57 @@
 use crate::representation::DeviceID;
-use failure::{Backtrace, Context, Fail};
 use std::error::Error as StdError;
 use std::fmt::{Display, Formatter};
 use std::result::Result as StdResult;
-
-#[derive(Debug)]
-pub struct ContextError {
-    inner: Context<ContextErrorKind>,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
-pub enum ContextErrorKind {
-    #[fail(display = "Device not connected: {:?}.", device)]
-    DeviceNotConnected { device: DeviceID },
-    #[fail(display = "Internal connection error.")]
-    ConnectionError,
-    #[fail(display = "Entity cannot be converted to proto.")]
-    EntityIsNone,
-}
-
-impl Fail for ContextError {
-    fn cause(&self) -> Option<&Fail> {
-        self.inner.cause()
-    }
-
-    fn backtrace(&self) -> Option<&Backtrace> {
-        self.inner.backtrace()
+use thiserror::Error;
+#[derive(Error, Debug)]
+pub enum DeviceError {
+    #[error("Device {:?} not connected", device)]
+    DeviceNotConnected {
+        device: DeviceID
+    },
+    #[error("Device {:?} gRPC Error {:?}", device, error)]
+    DeviceGrpcError {
+        device: DeviceID,
+        error: tonic::Status
+    },
+    #[error("Device config file {} error: {:?}", path, error)]
+    DeviceConfigFileError {
+        path: String,
+        error: std::io::Error
     }
 }
 
-impl Display for ContextError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(&self.inner, f)
-    }
+#[derive(Error, Debug)]
+pub enum InternalError {
+
 }
 
-impl From<ContextErrorKind> for ContextError {
-    fn from(kind: ContextErrorKind) -> ContextError {
-        ContextError {
-            inner: Context::new(kind),
-        }
-    }
+#[derive(Error, Debug)]
+pub enum ServiceError {
+    #[error("Service {} not found.", 0)]
+    ServiceNotFound(String),
+    #[error("Action {} not found.", 0)]
+    ActionNotFound(String),
+    #[error("Process request error")]
+    RequestError(#[source] anyhow::Error),
 }
 
-impl From<Context<ContextErrorKind>> for ContextError {
-    fn from(inner: Context<ContextErrorKind>) -> ContextError {
-        ContextError { inner }
-    }
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("App {} not found.", 0)]
+    AppNotFound(String),
 }
 
-#[derive(Debug)]
-pub struct ConnectionError {
-    inner: Context<ConnectionErrorKind>,
+#[derive(Error, Debug)]
+pub enum MyError {
+    #[error("Internal error {:#?}", 0)]
+    Internal(#[from] InternalError),
+    #[error(transparent)]
+    App(#[from] AppError),
+    #[error(transparent)]
+    Service(#[from] ServiceError),
+    #[error(transparent)]
+    Device(#[from] DeviceError)
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Fail)]
-pub enum ConnectionErrorKind {
-    #[fail(display = "Sending gRPC request failed.")]
-    GRPCSendError,
-    #[fail(display = "Error when processing device config file.")]
-    DeviceConfigFileError,
-    #[fail(display = "Build request from pipeconf failed: {}.", _0)]
-    PipeconfError(String),
-}
-
-impl Fail for ConnectionError {
-    fn cause(&self) -> Option<&Fail> {
-        self.inner.cause()
-    }
-
-    fn backtrace(&self) -> Option<&Backtrace> {
-        self.inner.backtrace()
-    }
-}
-
-impl Display for ConnectionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Display::fmt(&self.inner, f)
-    }
-}
-
-impl From<ConnectionErrorKind> for ConnectionError {
-    fn from(kind: ConnectionErrorKind) -> ConnectionError {
-        ConnectionError {
-            inner: Context::new(kind),
-        }
-    }
-}
-
-impl From<Context<ConnectionErrorKind>> for ConnectionError {
-    fn from(inner: Context<ConnectionErrorKind>) -> ConnectionError {
-        ConnectionError { inner }
-    }
-}
+pub type Result<T> = std::result::Result<T, MyError>;

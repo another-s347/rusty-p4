@@ -1,30 +1,30 @@
 use log::{debug, error, info, trace, warn};
 
+use super::pipeconf::Pipeconf;
 use crate::entity::UpdateType;
-use crate::error::{ConnectionError, ConnectionErrorKind};
+use crate::error::Result;
+use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 use crate::p4rt::pipeconf::DefaultPipeconf;
 use crate::proto::p4config::P4Info;
 use crate::proto::p4config::*;
 use crate::proto::p4runtime::{
     field_match, stream_message_request, FieldMatch, StreamMessageRequest, TableEntry, WriteRequest,
 };
-use crate::util::flow::{FlowActionParam, FlowMatch, Flow, FlowTable, FlowAction};
+use crate::util::flow::{Flow, FlowAction, FlowActionParam, FlowMatch, FlowTable};
 use crate::util::value::{Encode, InnerParamValue, InnerValue};
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::{Bytes, BytesMut};
-use failure::{ResultExt, Fail};
 use futures::{Future, Sink, StreamExt};
 use nom::{dbg_dmp, ExtendInto};
+use rusty_p4_proto::proto::v1::field_match::{Exact, FieldMatchType, Lpm, Range, Ternary};
 use rusty_p4_proto::proto::v1::{
-    Entity, Index, MeterConfig, MeterEntry, PacketMetadata, PacketOut, TableAction, Uint128, Update,MasterArbitrationUpdate,
+    Entity, Index, MasterArbitrationUpdate, MeterConfig, MeterEntry, PacketMetadata, PacketOut,
+    TableAction, Uint128, Update,
 };
 use std::path::Path;
-use tokio::io::AsyncReadExt;
-use crate::p4rt::bmv2::Bmv2MasterUpdateOption;
 use std::sync::Arc;
-use rusty_p4_proto::proto::v1::field_match::{FieldMatchType, Exact, Ternary, Lpm, Range};
-use super::pipeconf::Pipeconf;
+use tokio::io::AsyncReadExt;
 
 pub fn new_write_table_entry(
     device_id: u64,
@@ -81,14 +81,18 @@ pub fn new_packet_out_request<T>(
     pipeconf: &T,
     egress_port: u32,
     packet: Bytes,
-) -> StreamMessageRequest 
-where T: Pipeconf
+) -> StreamMessageRequest
+where
+    T: Pipeconf,
 {
     let packetOut = PacketOut {
         payload: packet,
         metadata: vec![PacketMetadata {
             metadata_id: pipeconf.get_packetout_egress_id(),
-            value: adjust_value(Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()), 2),
+            value: adjust_value(
+                Bytes::copy_from_slice(egress_port.to_be_bytes().as_ref()),
+                2,
+            ),
         }],
     };
     let request = StreamMessageRequest {
@@ -322,7 +326,7 @@ pub fn get_counter<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Counter> 
         })
 }
 
-pub fn get_counter_id(pipeconf: &P4Info, name:&str) -> Option<u32> {
+pub fn get_counter_id(pipeconf: &P4Info, name: &str) -> Option<u32> {
     get_counter(pipeconf, name).map(|table| table.preamble.as_ref().unwrap().id)
 }
 
@@ -337,7 +341,7 @@ pub fn get_directcounter<'a>(pipeconf: &'a P4Info, name: &str) -> Option<&'a Dir
         })
 }
 
-pub fn get_directcounter_id(pipeconf: &P4Info, name:&str) -> Option<u32> {
+pub fn get_directcounter_id(pipeconf: &P4Info, name: &str) -> Option<u32> {
     get_directcounter(pipeconf, name).map(|table| table.preamble.as_ref().unwrap().id)
 }
 
@@ -496,15 +500,22 @@ pub fn get_action_param_pb(
 pub async fn new_set_forwarding_pipeline_config_request(
     p4info: &P4Info,
     bmv2_json_file_path: &Path,
-    master_arbitration:&MasterArbitrationUpdate,
-    device_id:u64
-) -> Result<crate::proto::p4runtime::SetForwardingPipelineConfigRequest, ConnectionError>
-{
-    let mut file =
-        tokio::fs::File::open(bmv2_json_file_path).await.context(ConnectionErrorKind::DeviceConfigFileError)?;
+    master_arbitration: &MasterArbitrationUpdate,
+    device_id: u64,
+) -> Result<crate::proto::p4runtime::SetForwardingPipelineConfigRequest> {
+    let mut file = tokio::fs::File::open(bmv2_json_file_path)
+        .await
+        .map_err(|e| crate::error::DeviceError::DeviceConfigFileError {
+            path: bmv2_json_file_path.display().to_string(),
+            error: e,
+        })?;
     let mut buffer = String::new();
-    file.read_to_string(&mut buffer).await
-        .context(ConnectionErrorKind::DeviceConfigFileError)?;
+    file.read_to_string(&mut buffer).await.map_err(|e| {
+        crate::error::DeviceError::DeviceConfigFileError {
+            path: bmv2_json_file_path.display().to_string(),
+            error: e,
+        }
+    })?;
     let election_id = master_arbitration.election_id.clone();
     Ok(crate::proto::p4runtime::SetForwardingPipelineConfigRequest {
         device_id,
@@ -520,16 +531,19 @@ pub async fn new_set_forwarding_pipeline_config_request(
 }
 
 pub fn new_master_update_request(
-    device_id:u64,
-    option:Bmv2MasterUpdateOption
-) -> StreamMessageRequest
-{
+    device_id: u64,
+    option: Bmv2MasterUpdateOption,
+) -> StreamMessageRequest {
     StreamMessageRequest {
         update: Some(stream_message_request::Update::Arbitration(
             MasterArbitrationUpdate {
                 device_id,
                 role: None,
-                election_id: Uint128 { high: option.election_id_high, low: option.election_id_low }.into(),
+                election_id: Uint128 {
+                    high: option.election_id_high,
+                    low: option.election_id_low,
+                }
+                .into(),
                 status: None,
             },
         )),
@@ -538,22 +552,27 @@ pub fn new_master_update_request(
 
 pub fn new_stratum_get_interfaces_name() -> rusty_p4_proto::proto::gnmi::GetRequest {
     rusty_p4_proto::proto::gnmi::GetRequest {
-        prefix:None,
-        path:vec![crate::gnmi::new_gnmi_path("/interfaces/interface[name=*]/state/name")],
-        r#type:1,
-        encoding:2,
-        use_models:vec![],
-        extension:vec![]
+        prefix: None,
+        path: vec![crate::gnmi::new_gnmi_path(
+            "/interfaces/interface[name=*]/state/name",
+        )],
+        r#type: 1,
+        encoding: 2,
+        use_models: vec![],
+        extension: vec![],
     }
 }
 
-pub fn new_stratum_get_interface_mac(name:&str) -> rusty_p4_proto::proto::gnmi::GetRequest {
+pub fn new_stratum_get_interface_mac(name: &str) -> rusty_p4_proto::proto::gnmi::GetRequest {
     rusty_p4_proto::proto::gnmi::GetRequest {
-        prefix:None,
-        path:vec![crate::gnmi::new_gnmi_path(&format!("/interfaces/interface[name={}]/ethernet/state/mac-address",name))],
-        r#type:1,
-        encoding:2,
-        use_models:vec![],
-        extension:vec![]
+        prefix: None,
+        path: vec![crate::gnmi::new_gnmi_path(&format!(
+            "/interfaces/interface[name={}]/ethernet/state/mac-address",
+            name
+        ))],
+        r#type: 1,
+        encoding: 2,
+        use_models: vec![],
+        extension: vec![],
     }
 }

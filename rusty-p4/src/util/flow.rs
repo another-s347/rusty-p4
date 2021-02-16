@@ -4,7 +4,7 @@ use crate::proto::p4runtime::TableEntry;
 use crate::representation::DeviceID;
 use crate::util::value::{InnerValue, Value};
 use bytes::Bytes;
-use failure::_core::fmt::Debug;
+use std::fmt::Debug;
 //use smallvec::SmallVec;
 use std::fmt::Formatter;
 use std::net::IpAddr;

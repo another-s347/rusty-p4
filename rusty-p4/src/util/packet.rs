@@ -2,7 +2,6 @@ use bytes::{BufMut, Bytes, BytesMut};
 
 pub use arp::Arp;
 pub use ethernet::Ethernet;
-use failure::_core::marker::PhantomData;
 
 pub mod arp;
 pub mod data;

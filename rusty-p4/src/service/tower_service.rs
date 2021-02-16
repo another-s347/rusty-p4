@@ -12,7 +12,7 @@ where T: Service<Request = R> + Send + Sync
 {
     type Response = Option<usize>;
 
-    type Error = std::io::Error;
+    type Error = crate::error::MyError;
 
     type Future = futures::future::Ready<Result<Self::Response, Self::Error>>;
 

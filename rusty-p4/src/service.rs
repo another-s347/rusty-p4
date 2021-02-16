@@ -14,6 +14,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tower::util::BoxService;
 use tower::Service as towerService;
 use crate::app::options;
+use crate::error::Result;
 
 #[cfg(test)]
 pub mod dummy;
@@ -40,11 +41,11 @@ pub trait Service {
     const NAME: &'static str;
 
     /// process your request and send back response via request.respond(), the return value `Option<usize>` is the size hint (upper bound) of your response stream.
-    fn process(&mut self, request: Request<Self::Request>) -> std::io::Result<Option<usize>>;
+    fn process(&mut self, request: Request<Self::Request>) -> Result<Option<usize>>;
 }
 
 pub struct ServiceBus {
-    services: Arc<DashMap<&'static str, BoxService<Request<DefaultRequest>, Option<usize>, std::io::Error>>>,
+    services: Arc<DashMap<&'static str, BoxService<Request<DefaultRequest>, Option<usize>, crate::error::MyError>>>,
 }
 
 impl ServiceBus {
@@ -71,7 +72,7 @@ impl ServiceBus {
         self.services.insert(T::NAME, b);
     }
 
-    pub async fn send<E: Server>(&self, target: &'static str, request: DefaultRequest, option: RequestOption) -> std::io::Result<impl futures::stream::Stream<Item=E::EncodeTarget>> {
+    pub async fn send<E: Server>(&self, target: &'static str, request: DefaultRequest, option: RequestOption) -> Result<impl futures::stream::Stream<Item=E::EncodeTarget>> {
         if let Some(mut s) = self.services.get_mut(target) {
             let mut service = (&mut *s);
             let (s, r) = tokio::sync::mpsc::channel(option.queue_size_hint);
@@ -88,7 +89,7 @@ impl ServiceBus {
             }));
         }
         else {
-            return Err(std::io::ErrorKind::NotFound.into())
+            return Err(crate::error::ServiceError::ServiceNotFound(target.to_owned()).into())
         }
     }
 }

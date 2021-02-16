@@ -1,6 +1,5 @@
 use crate::p4rt::pure::{get_packin_egress_port_metaid, get_packout_egress_port_metaid};
 use crate::proto::p4config::P4Info;
-use failure::ResultExt;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;

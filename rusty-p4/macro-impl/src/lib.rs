@@ -19,8 +19,7 @@ use std::convert::TryInto;
 use std::fmt::{Debug, Formatter};
 use syn::group::Group;
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
-use syn::token::Token;
+use syn::{spanned::Spanned, token::Token};
 
 #[derive(Debug)]
 struct _FlowMatchItem {

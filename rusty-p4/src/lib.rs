@@ -1,7 +1,5 @@
 #![allow(warnings)]
 #![recursion_limit = "512"]
-#[macro_use]
-extern crate failure;
 
 use proc_macro_hack::proc_macro_hack;
 

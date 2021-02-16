@@ -25,7 +25,7 @@ impl super::Service for DummyService {
 
     const NAME: &'static str = "Dummy";
 
-    fn process(&mut self, request: super::Request<Self::Request>) -> std::io::Result<Option<usize>> {
+    fn process(&mut self, request: super::Request<Self::Request>) -> crate::error::Result<Option<usize>> {
         match request.inner.action.as_ref() {
             "set" => {
                 self.size = 5;
@@ -40,8 +40,8 @@ impl super::Service for DummyService {
                 });
                 Ok(Some(self.size))
             }
-            _ => {
-                Err(std::io::ErrorKind::NotFound.into())
+            other => {
+                Err(crate::error::ServiceError::ActionNotFound(other.to_owned()).into())
             }
         }
     }
@@ -62,7 +62,7 @@ impl Server for DummyServer {
 }
 
 impl DummyServer {
-    pub async fn run(&self, service_bus: &super::ServiceBus, request: DefaultRequest) -> std::io::Result<Vec<String>> {
+    pub async fn run(&self, service_bus: &super::ServiceBus, request: DefaultRequest) -> crate::error::Result<Vec<String>> {
         let mut response = service_bus.send::<Self>(DummyService::NAME, request, RequestOption::default()).await?;
 
         Ok(response.collect::<Vec<String>>().await)
