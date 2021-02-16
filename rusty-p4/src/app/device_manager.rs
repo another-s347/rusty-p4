@@ -23,6 +23,8 @@ impl crate::app::App for DeviceManager {
 
     type Option = ();
 
+    const Name: &'static str = "DeviceManager";
+
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: crate::app::store::AppStore {
         let tuple_list::tuple_list!(bmv2_manager) = dependencies;
         let app = Self {

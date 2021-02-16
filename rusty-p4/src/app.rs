@@ -51,6 +51,8 @@ pub trait App: Sync + Send + 'static + Sized {
     /// Use `()` for no dependency.
     type Dependency: Dependencies;
     type Option: options::AppOption;
+    /// Name your app please.
+    const Name: &'static str;
 
     /// This is where app get their dependencies, option then initialize, returns a new instance of app.
     /// Container type should not be `install`ed directly, so this method should not be called for container type. 
@@ -70,6 +72,7 @@ impl<T> App for Option<T> where T: App + Clone {
     type Dependency = T::Dependency;
 
     type Option = T::Option;
+    const Name: &'static str = "Option";
 
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore  {
         todo!()
@@ -94,6 +97,7 @@ impl<T> App for Arc<T> where T: App + Clone {
     type Dependency = T::Dependency;
 
     type Option = T::Option;
+    const Name: &'static str = "Arc";
 
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore  {
         todo!()
@@ -232,6 +236,8 @@ mod test {
 
         type Option = ();
 
+        const Name: &'static str = "TestAppA";
+
         fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
             TestAppA
         }
@@ -257,6 +263,8 @@ mod test {
         type Dependency = tuple_list_type!(TestAppA);
 
         type Option = ();
+
+        const Name: &'static str = "TestAppB";
 
         fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
             let tuple_list::tuple_list!(app_a) = dependencies;
@@ -287,6 +295,8 @@ mod test {
         type Dependency = tuple_list_type!(Option<TestAppA>);
 
         type Option = ();
+
+        const Name: &'static str = "TestAppC";
 
         fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
             let tuple_list::tuple_list!(app_a) = dependencies;

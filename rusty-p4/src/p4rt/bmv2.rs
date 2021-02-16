@@ -54,6 +54,8 @@ impl crate::app::App for Bmv2Manager {
 
     type Option = ();
 
+    const Name: &'static str = "Bmv2Manager";
+
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: crate::app::store::AppStore  {
         let (finish_signal_sender, finish_signal) = tokio::sync::oneshot::channel();
         Bmv2Manager {

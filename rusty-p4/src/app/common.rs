@@ -120,6 +120,8 @@ impl App for CommonState
 
     type Option = ();
 
+    const Name: &'static str = "CommonState";
+
     fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
         let tuple_list!(device_manager) = dependencies;
         let app = Self::new();

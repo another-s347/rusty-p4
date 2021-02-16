@@ -12,9 +12,9 @@ pub trait AppStore {
 
     fn get<T>(&self) -> Option<T> where T: App + Clone + 'static;
 
-    fn store_handler<T, E>(&mut self, app: T) where T: Handler<E>,E:'static;
+    // fn store_handler<T, E>(&mut self, app: T) where T: Handler<E>,E:'static;
 
-    fn get_handlers<E>(&self) -> Vec<Arc<dyn crate::util::publisher::Handler<E>>> where E:'static;
+    // fn get_handlers<E>(&self) -> Vec<Arc<dyn crate::util::publisher::Handler<E>>> where E:'static;
 }
 
 pub fn install<S, T>(store: &mut S, option: T::Option) -> Option<Arc<T>>
@@ -25,12 +25,12 @@ where T:App + Clone, S: AppStore
     Some(store.store(app))
 }
 
-/// The default implementation of `AppStore` which should just works.
+/// The default implementation of `AppStore` which should just work.
 #[derive(Default)]
 pub struct DefaultAppStore {
     pub map: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
-    pub handler_map: HashMap<TypeId, Vec<Arc<dyn Any+Send+Sync>>>,
-    pub join_handle: Vec<BoxFuture<'static, ()>>
+    // pub handler_map: HashMap<TypeId, Vec<Arc<dyn Any+Send+Sync>>>,
+    // pub join_handle: Vec<BoxFuture<'static, ()>>
 }
 
 impl AppStore for  DefaultAppStore {
@@ -51,19 +51,19 @@ impl AppStore for  DefaultAppStore {
         }))
     }
 
-    fn store_handler<T, E>(&mut self, app: T) where T: Handler<E>,E:'static {
-        let a = Arc::new(app) as Arc<dyn Handler<E>>;
+    // fn store_handler<T, E>(&mut self, app: T) where T: Handler<E>,E:'static {
+    //     let a = Arc::new(app) as Arc<dyn Handler<E>>;
 
-        let a = Arc::new(a) as Arc<dyn Any + Send + Sync>;
-        self.handler_map.insert(TypeId::of::<E>(), vec![a]);
-    }
+    //     let a = Arc::new(a) as Arc<dyn Any + Send + Sync>;
+    //     self.handler_map.insert(TypeId::of::<E>(), vec![a]);
+    // }
 
-    fn get_handlers<E>(&self) -> Vec<Arc<dyn crate::util::publisher::Handler<E>>> where E:'static {
-        let a = self.handler_map.get(&TypeId::of::<E>()).unwrap();
-        a.iter().filter_map(|x|{
-            x.clone().downcast::<Arc<dyn crate::util::publisher::Handler<E>>>().map(|x|{
-                x.as_ref().clone()
-            }).ok()
-        }).collect::<Vec<_>>()
-    }
+    // fn get_handlers<E>(&self) -> Vec<Arc<dyn crate::util::publisher::Handler<E>>> where E:'static {
+    //     let a = self.handler_map.get(&TypeId::of::<E>()).unwrap();
+    //     a.iter().filter_map(|x|{
+    //         x.clone().downcast::<Arc<dyn crate::util::publisher::Handler<E>>>().map(|x|{
+    //             x.as_ref().clone()
+    //         }).ok()
+    //     }).collect::<Vec<_>>()
+    // }
 }
