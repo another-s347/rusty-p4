@@ -1,5 +1,5 @@
 [package]
-name = "rusty-p4"
+name = "rusty-p4-app"
 version = "0.1.0-alpha.2"
 authors = ["skye347 <s347419313@gmail.com>"]
 edition = "2018"
@@ -24,28 +24,14 @@ log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1"
 anyhow = "1"
-nom = "5"
 async-trait = "0.1.42"
 petgraph = "0.4.13"
 parking_lot = { version="0.11.0", features=["send_guard"] }
-proc-macro-hack = "0.5"
-proc-macro-nested = "0.1"
 dashmap = "4.0.2"
-macro-impl = { path="./macro-impl"}
-rusty-p4-core = { path="./rusty-p4-core" }
-rusty-p4-packet = { path="./rusty-p4-packet" }
+# macro-impl = { path="./macro-impl"}
 ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
 tuple_list = "0.1.2"
 crossbeam = "0.7"
 downcast-rs = "1.2.0"
 erased-serde = "0.3"
 serde_json = "1.0"
-
-[workspace]
-members = [
-    "macro-impl",
-    "rusty-p4-core",
-    "rusty-p4-packet",
-    "rusty-p4-northbound",
-    "rusty-p4-app"
-]
