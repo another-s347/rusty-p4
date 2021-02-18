@@ -28,8 +28,6 @@ nom = "5"
 async-trait = "0.1.42"
 petgraph = "0.4.13"
 parking_lot = { version="0.11.0", features=["send_guard"] }
-proc-macro-hack = "0.5"
-proc-macro-nested = "0.1"
 dashmap = "4.0.2"
 macro-impl = { path="./macro-impl"}
 rusty-p4-core = { path="./rusty-p4-core" }
@@ -40,6 +38,7 @@ crossbeam = "0.7"
 downcast-rs = "1.2.0"
 erased-serde = "0.3"
 serde_json = "1.0"
+smallvec = "1.6"
 
 [workspace]
 members = [

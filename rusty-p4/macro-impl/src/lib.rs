@@ -4,22 +4,15 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use proc_macro2;
-use syn::ext::IdentExt;
-use syn::parse::{Parse, ParseBuffer, ParseStream, Peek, Result};
-use syn::token::Brace;
 use syn::{
-    braced, parse_macro_input, BinOp, Error, Expr, ExprBlock, ExprCall, ExprGroup, Field, Ident,
-    Lit, LitFloat, LitInt, LitStr, Token,
+    braced,
+    parse::{Parse, ParseBuffer, Result},
+    parse_macro_input, BinOp, Expr, Ident, LitStr, Token,
 };
 
-use proc_macro_hack::proc_macro_hack;
 use quote::quote;
-use quote::{ToTokens, TokenStreamExt};
-use std::convert::TryInto;
-use std::fmt::{Debug, Formatter};
-use syn::group::Group;
+use std::fmt::Debug;
 use syn::punctuated::Punctuated;
-use syn::{spanned::Spanned, token::Token};
 
 #[derive(Debug)]
 struct _FlowMatchItem {
@@ -48,11 +41,13 @@ impl Parse for _FlowMatchValue {
             // range
             Expr::Range(range) => {
                 match range.limits {
-                    syn::RangeLimits::Closed(_) => unimplemented!("unsupported range limits"),
+                    syn::RangeLimits::Closed(_) => {
+                        return Err(input.error("Unsupported range limits"))
+                    }
                     syn::RangeLimits::HalfOpen(_) => {}
                 }
-                let from: Box<Expr> = range.from.unwrap();
-                let to: Box<Expr> = range.to.unwrap();
+                let from: Box<Expr> = range.from.ok_or(input.error("Missing range 'from'"))?;
+                let to: Box<Expr> = range.to.ok_or(input.error("Missing range 'to'"))?;
                 return Ok(_FlowMatchValue::Range(from, to));
             }
             Expr::Binary(binary) => {
@@ -69,9 +64,9 @@ impl Parse for _FlowMatchValue {
                         let left: Box<Expr> = binary.left;
                         let right: Box<Expr> = binary.right;
                         // compile time check lpm
-                        return Ok(_FlowMatchValue::Ternary(left, right));
+                        return Ok(_FlowMatchValue::Lpm(left, right));
                     }
-                    _ => unimplemented!("unsupported op"),
+                    _ => return Err(input.error("Unsupported operator")),
                 }
             }
             // exact
@@ -85,6 +80,7 @@ impl Parse for _FlowMatchValue {
 #[derive(Debug)]
 struct _FlowMatch {
     pub items: Punctuated<_FlowMatchItem, Token![,]>,
+    pub default: Option<Expr>,
 }
 
 impl Parse for _FlowMatchItem {
@@ -114,17 +110,48 @@ impl Parse for _FlowActionItem {
 
 impl Parse for _FlowMatch {
     fn parse(input: &ParseBuffer) -> Result<Self> {
-        Ok(Self {
-            items: input.parse_terminated(_FlowMatchItem::parse)?,
-        })
+        let mut default = None;
+        let mut punct = Punctuated::new();
+        loop {
+            if input.is_empty() {
+                break;
+            }
+            if input.peek(Token![..]) {
+                let _ = input.parse::<Token![..]>()?;
+                default = Some(input.parse()?);
+            } else {
+                let value = _FlowMatchItem::parse(input)?;
+                if punct
+                    .iter()
+                    .find(|x: &&_FlowMatchItem| x.key.as_str() == value.key.as_str())
+                    .is_some()
+                {
+                    return Err(input.error(format!("Duplicated match field: {}", value.key)));
+                }
+                punct.push_value(value);
+            }
+            if input.is_empty() {
+                break;
+            }
+            let p = input.parse()?;
+            punct.push_punct(p);
+        }
+        let items = punct;
+        Ok(Self { items, default })
     }
 }
 
-fn flow_match_to_quotes(flow_match:_FlowMatch) -> proc_macro2::TokenStream {
-    if flow_match.items.is_empty() {
-        return quote! {
-            <Vec<rusty_p4::util::flow::FlowMatch>>::new()
-        };
+fn flow_match_to_quotes(flow_match: _FlowMatch) -> proc_macro2::TokenStream {
+    if flow_match.items.is_empty() && flow_match.default.is_none() {
+        if let Some(default) = flow_match.default {
+            return quote! {
+                #default.clone()
+            };
+        } else {
+            return quote! {
+                std::sync::Arc::new(<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]>>::new())
+            };
+        }
     }
 
     let mut quotes = Vec::with_capacity(flow_match.items.len());
@@ -133,41 +160,54 @@ fn flow_match_to_quotes(flow_match:_FlowMatch) -> proc_macro2::TokenStream {
         match m.value {
             _FlowMatchValue::Exact(expr) => {
                 quotes.push(quote! {
-                    rusty_p4::util::flow::FlowMatch {
+                    rusty_p4_core::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4::util::value::EXACT(#expr)
+                        value: rusty_p4_core::util::value::EXACT(#expr)
                     }
                 });
             }
             _FlowMatchValue::Range(from, two) => {
                 quotes.push(quote! {
-                    rusty_p4::util::flow::FlowMatch {
+                    rusty_p4_core::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4::util::value::RANGE(#from,#two)
+                        value: rusty_p4_core::util::value::RANGE(#from,#two)
                     }
                 });
             }
             _FlowMatchValue::Lpm(v, lpm) => {
                 quotes.push(quote! {
-                    rusty_p4::util::flow::FlowMatch {
+                    rusty_p4_core::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4::util::value::LPM(#v,#lpm)
+                        value: rusty_p4_core::util::value::LPM(#v,#lpm)
                     }
                 });
             }
             _FlowMatchValue::Ternary(v, t) => {
                 quotes.push(quote! {
-                    rusty_p4::util::flow::FlowMatch {
+                    rusty_p4_core::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4::util::value::TERNARY(#v,#t)
+                        value: rusty_p4_core::util::value::TERNARY(#v,#t)
                     }
                 });
             }
         }
     }
 
-    quote! {
-        vec![#(#quotes),*]
+    if let Some(d) = flow_match.default {
+        quote! {{
+            let mut _v:smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]> = smallvec::smallvec![#(#quotes),*];
+            _v.sort_by(|a,b|a.name.cmp(b.name));
+            rusty_p4_core::util::flow::merge_matches(&mut _v, &#d);
+            let _t = std::sync::Arc::new(_v);
+            _t
+        }}
+    } else {
+        quote! {{
+            let mut _v:smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]> = smallvec::smallvec![#(#quotes),*];
+            _v.sort_by(|a,b|a.name.cmp(b.name));
+            let _t = std::sync::Arc::new(_v);
+            _t
+        }}
     }
 }
 /*
@@ -176,7 +216,7 @@ let flow_match = flow_match!{
     key => value
 };
 */
-#[proc_macro_hack]
+#[proc_macro]
 pub fn flow_match(input: TokenStream) -> TokenStream {
     let flow_match = parse_macro_input!(input as _FlowMatch);
 
@@ -186,7 +226,7 @@ pub fn flow_match(input: TokenStream) -> TokenStream {
 struct _Flow {
     pipe: Option<String>,
     table: String,
-    table_match: Punctuated<_FlowMatchItem, Token![,]>,
+    table_match: _FlowMatch,
     action_name: String,
     action_parameters: Option<Punctuated<_FlowActionItem, Token![,]>>,
     priority: Option<Expr>,
@@ -211,12 +251,6 @@ impl Parse for _Flow {
                     let pipe_name_lit = input.parse::<LitStr>()?;
                     let pipe_name = pipe_name_lit.value();
                     pipe = Some(pipe_name);
-                    if input.parse::<Token![,]>().is_err() {
-                        if !input.is_empty() {
-                            return Err(syn::Error::new(pipe_name_lit.span(), "Missing ending ,"));
-                        }
-                        break;
-                    }
                 }
                 "table" => {
                     if table.is_some() {
@@ -227,9 +261,8 @@ impl Parse for _Flow {
                     let content;
                     braced!(content in input);
                     table = Some(table_name);
-                    let matches = content.parse_terminated(_FlowMatchItem::parse)?;
+                    let matches = _FlowMatch::parse(&content)?;
                     table_matches = Some(matches);
-                    input.parse::<Token![,]>();
                 }
                 "action" => {
                     if action.is_some() {
@@ -255,58 +288,54 @@ impl Parse for _Flow {
                     }
                     input.parse::<Token![:]>()?;
                     let p = input.parse::<Expr>()?;
-                    let span = p.span().clone();
                     priority = Some(p);
-                    if input.parse::<Token![,]>().is_err() {
-                        if !input.is_empty() {
-                            return Err(syn::Error::new(span, "Missing ending ,"));
-                        }
-                        break;
-                    }
                 }
                 other => {
                     unimplemented!("Unsupported flow field {}", other);
                 }
             }
-        }
-        if table.is_none() {
-            return Err(input.error("Missing table field"));
-        }
-        if action.is_none() {
-            return Err(input.error("Missing action field"));
+            if input.parse::<Token![,]>().is_err() {
+                if !input.is_empty() {
+                    return Err(syn::Error::new(input.span(), "Missing ending ,"));
+                }
+                break;
+            }
         }
         Ok(Self {
             pipe,
-            table: table.unwrap(),
-            table_match: table_matches.unwrap(),
-            action_name: action.unwrap(),
+            table: table.ok_or(input.error("Missing table field"))?,
+            table_match: table_matches.ok_or(input.error("Missing match field"))?,
+            action_name: action.ok_or(input.error("Missing action field"))?,
             action_parameters: action_params,
             priority,
         })
     }
 }
 
-fn action_params_to_quote(params:Option<Punctuated<_FlowActionItem, Token![,]>>) -> proc_macro2::TokenStream {
-    if params.is_none() {
-        return quote! {
-            <Vec<rusty_p4::util::flow::FlowActionParam>>::new()
-        };
-    }
-    let params = params.unwrap();
-    let mut quotes = Vec::with_capacity(params.len());
-    for m in params {
-        let name = m.key;
-        let expr = m.value;
-        quotes.push(quote! {
-                    rusty_p4::util::flow::FlowActionParam {
-                        name: #name,
-                        value: rusty_p4::util::value::encode(#expr)
-                    }
-                });
-    }
+fn action_params_to_quote(
+    params: Option<Punctuated<_FlowActionItem, Token![,]>>,
+) -> proc_macro2::TokenStream {
+    if let Some(params) = params {
+        let mut quotes = Vec::with_capacity(params.len());
+        for m in params {
+            let name = m.key;
+            let expr = m.value;
+            quotes.push(quote! {
+                rusty_p4_core::util::flow::FlowActionParam {
+                    name: #name,
+                    value: rusty_p4_core::util::value::encode(#expr)
+                }
+            });
+        }
 
-    quote! {
-        vec![#(#quotes),*]
+        quote! {{
+            let _t:std::sync::Arc<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowActionParam;3]>> = std::sync::Arc::new(smallvec::smallvec![#(#quotes),*]);
+            _t
+        }}
+    } else {
+        quote! {
+            std::sync::Arc::new(<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowActionParam;3]>>::new())
+        }
     }
 }
 
@@ -322,32 +351,35 @@ let flow = flow!{
     }
 }
 */
-#[proc_macro_hack]
+#[proc_macro]
 pub fn flow(input: TokenStream) -> TokenStream {
     let flow = parse_macro_input!(input as _Flow);
-    let flow_table_name = flow.pipe.as_ref().map(|pipe|format!("{}.{}",pipe,&flow.table)).unwrap_or(flow.table.clone());
-    let action_name = if flow.action_name=="NoAction" {
+    let flow_table_name = flow
+        .pipe
+        .as_ref()
+        .map(|pipe| format!("{}.{}", pipe, &flow.table))
+        .unwrap_or(flow.table.clone());
+    let action_name = if flow.action_name == "NoAction" {
         flow.action_name
     } else {
-        flow.pipe.as_ref().map(|pipe|format!("{}.{}",pipe,flow.action_name)).unwrap_or(flow.action_name)
+        flow.pipe
+            .as_ref()
+            .map(|pipe| format!("{}.{}", pipe, flow.action_name))
+            .unwrap_or(flow.action_name)
     };
-    let flow_matches = flow_match_to_quotes(_FlowMatch {
-        items: flow.table_match
-    });
+    let flow_matches = flow_match_to_quotes(flow.table_match);
     let action_params = action_params_to_quote(flow.action_parameters);
-    let priority = flow.priority.map(|expr|{
-        quote!(#expr)
-    }).unwrap_or(quote!(1));
+    let priority = flow.priority.map(|expr| quote!(#expr)).unwrap_or(quote!(1));
     TokenStream::from(quote! {
-        rusty_p4::util::flow::Flow {
-            table: std::sync::Arc::new(rusty_p4::util::flow::FlowTable {
+        rusty_p4_core::util::flow::Flow {
+            table: rusty_p4_core::util::flow::FlowTable {
                 name:#flow_table_name,
                 matches:#flow_matches
-            }),
-            action: std::sync::Arc::new(rusty_p4::util::flow::FlowAction {
+            },
+            action: rusty_p4_core::util::flow::FlowAction {
                 name:#action_name,
                 params:#action_params
-            }),
+            },
             priority:#priority,
             metadata:0
         }

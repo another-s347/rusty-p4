@@ -1,11 +1,7 @@
 #![allow(warnings)]
 #![recursion_limit = "512"]
 
-use proc_macro_hack::proc_macro_hack;
-
-#[proc_macro_hack(support_nested)]
 pub use macro_impl::flow;
-#[proc_macro_hack(support_nested)]
 pub use macro_impl::flow_match;
 //#[macro_use]
 //pub mod exported_macro;
@@ -22,3 +18,8 @@ pub use macro_impl::flow_match;
 // pub mod gnmi;
 // pub mod system;
 pub use rusty_p4_core::util;
+pub use rusty_p4_core::app;
+pub use rusty_p4_core::p4rt;
+pub use rusty_p4_core::representation;
+pub use rusty_p4_packet::packet;
+pub use rusty_p4_core::event;

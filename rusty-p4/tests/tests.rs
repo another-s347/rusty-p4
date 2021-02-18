@@ -60,11 +60,26 @@ fn test_one() {
 #[test]
 fn test_two() {
     flow_match! {
-        "abcd" => 1u32..2u32,
-        "abcd" => 1u32,
-        "abcd" => 1u32/8,
-        "abcd" => 1u32&2u32
+        "abcd1" => 1u32..2u32,
+        "abcd2" => 1u32,
+        "abcd3" => 1u32/8,
+        "abcd4" => 1u32&2u32,
     };
+}
+
+#[test]
+fn test_merge() {
+    let whatever = flow_match!{
+        "abcde" => 1u32,
+    };
+    let result = flow_match! {
+        "abcd1" => 1u32..2u32,
+        "abcd2" => 1u32,
+        "abcd3" => 1u32/8,
+        "abcd4" => 1u32&2u32,
+        ..whatever
+    };
+    dbg!(result);
 }
 
 #[test]
@@ -75,12 +90,35 @@ fn test_flow() {
             "abcd1" => 1u32..2u32,
             "abcd2" => 1u32,
             "abcd3" => 1u32/8,
-            "abcd4" => 1u32&2u32
-        }
+            "abcd4" => 1u32&2u32,
+        },
         action: "Hi" {
             "abcd5": 5,
             "abcd6": 1
-        }
+        },
         priority:1
     };
+}
+
+#[test]
+fn test_flow_merge() {
+    let whatever = flow_match!{
+        "abcde" => 1u32,
+    };
+    let result = flow! {
+        pipe:"abcd",
+        table: "efg" {
+            "abcd1" => 1u32..2u32,
+            "abcd2" => 1u32,
+            "abcd3" => 1u32/8,
+            "abcd4" => 1u32&2u32,
+            ..whatever
+        },
+        action: "Hi" {
+            "abcd5": 5,
+            "abcd6": 1
+        },
+        priority:1
+    };
+    dbg!(result);
 }
