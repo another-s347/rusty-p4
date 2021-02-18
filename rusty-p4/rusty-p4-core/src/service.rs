@@ -11,12 +11,11 @@ use futures::{StreamExt, future::BoxFuture, stream::BoxStream};
 use serde::{Serialize, de::DeserializeOwned, Deserialize};
 use async_trait::async_trait;
 use tokio_stream::wrappers::ReceiverStream;
-use tower::util::BoxService;
+use crate::util::BoxService;
 use tower::Service as towerService;
 use crate::app::options;
 use crate::error::Result;
 
-#[cfg(test)]
 pub mod dummy;
 pub mod server;
 pub mod request;
@@ -25,7 +24,7 @@ pub mod tower_service;
 pub use request::*;
 use tower_service::*;
 
-use self::server::Server;
+pub use self::server::Server;
 
 /// `Service` is used to expose an application to various northbound api.
 /// The app implement the trait `Service` to `process` request and produce a stream of response.
@@ -44,6 +43,7 @@ pub trait Service {
     fn process(&mut self, request: Request<Self::Request>) -> Result<Option<usize>>;
 }
 
+#[derive(Clone)]
 pub struct ServiceBus {
     services: Arc<DashMap<&'static str, BoxService<Request<DefaultRequest>, Option<usize>, crate::error::MyError>>>,
 }
@@ -57,7 +57,7 @@ impl ServiceBus {
     }
 
     pub fn install_service<T>(&self, service: T)
-    where T: Service + Send + Sync + 'static
+    where T: Service + Send + Sync + 'static, T::Request: Sync
     {
         if self.services.contains_key(T::NAME) {
             todo!()
@@ -72,13 +72,13 @@ impl ServiceBus {
         self.services.insert(T::NAME, b);
     }
 
-    pub async fn send<E: Server>(&self, target: &'static str, request: DefaultRequest, option: RequestOption) -> Result<impl futures::stream::Stream<Item=E::EncodeTarget>> {
+    pub async fn send<E: Server>(&self, target: &str, request: DefaultRequest, option: RequestOption) -> Result<impl futures::stream::Stream<Item=E::EncodeTarget>> {
         if let Some(mut s) = self.services.get_mut(target) {
             let mut service = (&mut *s);
             let (s, r) = tokio::sync::mpsc::channel(option.queue_size_hint);
             let request = Request {
                 source: E::NAME,
-                target,
+                target: target.to_owned(),
                 inner: request,
                 channel: s,
                 option

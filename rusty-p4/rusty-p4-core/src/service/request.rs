@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 pub struct Request<T> {
     pub source: &'static str,
-    pub target: &'static str,
+    pub target: String,
     pub inner: T,
     pub channel: tokio::sync::mpsc::Sender<Box<dyn erased_serde::Serialize + Send>>,
     pub option: RequestOption
@@ -38,6 +38,7 @@ pub struct DefaultRequest {
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct RequestOption {
     /// size for the mpsc channel.
+    #[serde(default= "_default_1")]
     pub queue_size_hint: usize
 }
 
@@ -58,3 +59,6 @@ impl ParseRequest for DefaultRequest {
         req
     }
 }
+
+// https://github.com/serde-rs/serde/issues/1030
+fn _default_1() -> usize { 1 }

@@ -5,7 +5,7 @@ use futures::{Stream, StreamExt};
 use super::{DefaultRequest, ParseRequest, RequestOption, Service, request, server::Server};
 
 pub struct DummyService {
-    size: usize
+    pub size: usize
 }
 
 pub struct DummyRequest {
