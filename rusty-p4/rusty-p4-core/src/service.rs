@@ -85,9 +85,13 @@ impl ServiceBus {
                 option
             };
             let response: Option<usize> = service.call(request).await?;
-            return Ok(ReceiverStream::new(r).map(|x|{
+            let s = ReceiverStream::new(r).map(|x|{
                 E::encode(x)
-            }));
+            });
+            return Ok(crate::util::SizeHintStream {
+                inner: s,
+                size_hint: response
+            })
         }
         else {
             return Err(crate::error::ServiceError::ServiceNotFound(target.to_owned()).into())

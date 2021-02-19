@@ -531,7 +531,7 @@ pub async fn new_set_forwarding_pipeline_config_request(
 
 pub fn new_master_update_request(
     device_id: u64,
-    option: Bmv2MasterUpdateOption,
+    option: (u64, u64),
 ) -> StreamMessageRequest {
     StreamMessageRequest {
         update: Some(stream_message_request::Update::Arbitration(
@@ -539,8 +539,8 @@ pub fn new_master_update_request(
                 device_id,
                 role: None,
                 election_id: Uint128 {
-                    high: option.election_id_high,
-                    low: option.election_id_low,
+                    high: option.1,
+                    low: option.0,
                 }
                 .into(),
                 status: None,

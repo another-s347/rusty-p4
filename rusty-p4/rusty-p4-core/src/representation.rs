@@ -9,7 +9,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Instant;
 use async_trait::async_trait;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Hash, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DeviceID(pub u64);
 
 impl ToString for DeviceID {
@@ -18,13 +18,7 @@ impl ToString for DeviceID {
     }
 }
 
-impl Hash for DeviceID {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_u64(self.0)
-    }
-}
-
-#[derive(Eq, Hash, Copy, Clone, Serialize, Deserialize)]
+#[derive(Eq, Hash, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConnectPoint {
     pub device: DeviceID,
     pub port: u32,
@@ -33,12 +27,6 @@ pub struct ConnectPoint {
 impl Debug for ConnectPoint {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "{:?}[{}]", self.device, self.port)
-    }
-}
-
-impl PartialEq for ConnectPoint {
-    fn eq(&self, other: &Self) -> bool {
-        self.device == other.device && self.port == other.port
     }
 }
 

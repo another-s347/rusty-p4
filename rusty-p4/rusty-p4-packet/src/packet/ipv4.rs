@@ -1,6 +1,5 @@
 use super::Packet;
-use std::net::Ipv4Addr;
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::BufMut;
 use nom::bytes::complete::take;
 
 #[derive(Debug)]
@@ -55,8 +54,8 @@ impl<'a, P> Packet<'a> for Ipv4<'a, P>
         let (b, total_len) = nom::number::complete::be_u16::<()>(b).ok()?;
         let (b, identification) = nom::number::complete::be_u16::<()>(b).ok()?;
         let (b, flags_fragmentoffset) = nom::number::complete::be_u16::<()>(b).ok()?;
-        let flags = ((flags_fragmentoffset & 0b11100000_00000000) >> 13) as u8;
-        let fragment_offset = flags_fragmentoffset & 0b00011111_11111111;
+        let flags = ((flags_fragmentoffset & 0b1110_0000_0000_0000) >> 13) as u8;
+        let frag_offset = flags_fragmentoffset & 0b0001_1111_1111_1111;
         let (b, ttl) = nom::number::complete::be_u8::<()>(b).ok()?;
         let (b, protocol) = nom::number::complete::be_u8::<()>(b).ok()?;
         let (b, hdr_checksum) = nom::number::complete::be_u16::<()>(b).ok()?;
@@ -69,9 +68,9 @@ impl<'a, P> Packet<'a> for Ipv4<'a, P>
             dscp,
             ecn,
             total_len,
-            identification: 0,
+            identification,
             flags,
-            frag_offset: 0,
+            frag_offset,
             ttl,
             protocol,
             hdr_checksum,
@@ -88,7 +87,7 @@ impl<'a, P> Packet<'a> for Ipv4<'a, P>
         buf.put_u8(dscp_ecn);
         buf.put_u16(self.total_len);
         buf.put_u16(self.identification);
-        let flags_fragmentoffset = ((self.flags as u16) << 13) + (self.frag_offset & 0b00011111_11111111);
+        let flags_fragmentoffset = ((self.flags as u16) << 13) + (self.frag_offset & 0b0001_1111_1111_1111);
         buf.put_u16(flags_fragmentoffset);
         buf.put_u8(self.ttl);
         buf.put_u8(self.protocol);

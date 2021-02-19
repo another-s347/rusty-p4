@@ -1,8 +1,6 @@
-use byteorder::ByteOrder;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::BufMut;
 
 use super::Packet;
-use ipip::MAC;
 use nom::bytes::complete::take;
 use nom::IResult;
 use std::convert::TryFrom;

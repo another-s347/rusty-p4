@@ -30,7 +30,7 @@ where
     fn get_payload(&self) -> Option<&Self::Payload>;
 
     fn bytes_hint(&self) -> usize {
-        let mut packet = self;
+        let packet = self;
         let mut size = 0;
         size += packet.self_bytes_hint();
         if let Some(payload) = packet.get_payload() {
@@ -54,11 +54,11 @@ impl<'a> Packet<'a> for () {
         0
     }
 
-    fn from_bytes(b: &'a [u8]) -> Option<Self> {
+    fn from_bytes(_b: &'a [u8]) -> Option<Self> {
         Some(())
     }
 
-    fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {}
+    fn write_self_to_buf<T: BufMut>(&self, _buf: &mut T) {}
 
     fn get_payload(&self) -> Option<&Self::Payload> {
         None

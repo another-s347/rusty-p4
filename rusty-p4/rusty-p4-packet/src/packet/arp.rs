@@ -1,7 +1,6 @@
 use super::Packet;
 use ipip::MAC;
-use byteorder::ByteOrder;
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::BufMut;
 use nom::bytes::complete::take;
 use std::net::Ipv4Addr;
 
@@ -65,7 +64,7 @@ impl<'a> Packet<'a> for Arp<'a> {
         let (b, sender_mac) = take::<_, _, ()>(hw_addr_len)(b).ok()?;
         let (b, sender_ip) = take::<_, _, ()>(proto_addr_len)(b).ok()?;
         let (b, target_mac) = take::<_, _, ()>(hw_addr_len)(b).ok()?;
-        let (b, target_ip) = take::<_, _, ()>(proto_addr_len)(b).ok()?;
+        let (_b, target_ip) = take::<_, _, ()>(proto_addr_len)(b).ok()?;
         Some(Arp {
             hw_type,
             proto_type,
@@ -113,12 +112,12 @@ impl From<u16> for ArpOp {
     }
 }
 
-impl Into<u16> for ArpOp {
-    fn into(self) -> u16 {
-        match self {
-            ArpOp::Unknown(o) => o,
-            ArpOp::Reply => 0x2,
+impl From<ArpOp> for u16 {
+    fn from(op: ArpOp) -> Self {
+        match op {
             ArpOp::Request => 0x1,
+            ArpOp::Reply => 0x2,
+            ArpOp::Unknown(o) => o
         }
     }
 }

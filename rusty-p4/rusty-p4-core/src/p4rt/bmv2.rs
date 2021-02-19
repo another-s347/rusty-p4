@@ -2,8 +2,6 @@ use super::{
     pipeconf::Pipeconf,
     pure::{new_set_entity_request, table_entry_to_entity},
 };
-use crate::p4rt::pipeconf::DefaultPipeconf;
-use crate::p4rt::pure::adjust_value;
 use crate::proto::p4config::P4Info;
 use crate::proto::p4runtime::{
     stream_message_request, stream_message_response, PacketMetadata, StreamMessageRequest,
@@ -18,6 +16,8 @@ use crate::{
         publisher::{Handler, Publisher},
     },
 };
+use crate::{error::DeviceError, p4rt::pipeconf::DefaultPipeconf};
+use crate::{error::InternalError, p4rt::pure::adjust_value};
 use async_trait::async_trait;
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
@@ -123,14 +123,19 @@ impl Bmv2Manager {
         address: &str,
         option: Bmv2ConnectionOption,
         pipeconf: T,
-    ) where
+    ) -> crate::error::Result<()>
+    where
         T: Pipeconf + 'static,
     {
-        let mut device = Bmv2SwitchConnection::try_new(name, address, option).await;
-        device.pipeconf = Some(Arc::new(pipeconf));
+        let mut device = Bmv2SwitchConnection::new(name, address, option).await?;
+        let pipeconf = Arc::new(pipeconf);
         let id = device.inner_id;
         let mut sender = device.open_stream().await;
-        let mut stream = device.take_channel_receiver().unwrap();
+        let mut stream = device
+            .take_channel_receiver()
+            .ok_or_else(|| InternalError::Other {
+                err: "take channel receiver failed".to_owned(),
+            })?;
         self.connections.write().insert(id, device);
         let manager = self.clone();
         tokio::spawn(async move {
@@ -139,7 +144,9 @@ impl Bmv2Manager {
                     match update {
                         stream_message_response::Update::Arbitration(masterUpdate) => {
                             debug!(target: "core", "StreamMessageResponse?: {:#?}", &masterUpdate);
-                            manager.device_master_updated(id).await;
+                            // todo: check master update
+
+                            manager.device_master_updated(id, pipeconf.clone()).await;
                         }
                         stream_message_response::Update::Packet(packet) => {
                             let x = PacketReceived {
@@ -168,16 +175,23 @@ impl Bmv2Manager {
             // clean up
             manager.del_device(id).await;
         });
+
+        Ok(())
     }
 
-    pub async fn device_master_updated(&self, device: DeviceID) {
+    pub async fn device_master_updated(
+        &self,
+        device: DeviceID,
+        pipeconf: Arc<dyn Pipeconf>,
+    ) -> crate::error::Result<()> {
         self.get_device(device)
-            .unwrap()
+            .ok_or(InternalError::DeviceNotFound)?
             .get_handle()
-            .set_forwarding_pipeline_config()
-            .await
-            .unwrap();
+            .set_forwarding_pipeline_config(pipeconf)
+            .await?;
         self.publisher.emit(Bmv2Event::DeviceAdded(device)).await;
+
+        Ok(())
     }
 
     pub fn get_device<'a>(&self, device: DeviceID) -> Option<Bmv2SwitchConnection> {
@@ -219,21 +233,36 @@ impl Bmv2Manager {
     }
 }
 
+/// A connection to bmv2 switch using p4runtime API.
+///
+/// To connect and use a bmv2 switch, you need to:
+/// - make a connection using [Bmv2SwitchConnection::new] with some options [Bmv2ConnectionOption].
+/// - open bi-direction stream using [Bmv2SwitchConnection::open_stream],
+///   it will send request to acquire the privilage of the switch,
+///   open a bi-stream gRPC channel, and returns the send side channel
+/// - take the receiver using [Bmv2SwitchConnection::take_channel_receiver], then process the message from switch.
+///   If we acquired the privilage successfully, we will receive a msg [stream_message_response::Update::Arbitration],
+///   then we can set the pipeline config using [Bmv2SwitchConnection::set_forwarding_pipeline_config].
+/// - Done.
 pub struct Bmv2SwitchConnection {
     pub name: String,
     pub inner_id: DeviceID,
     pub address: String,
     pub device_id: u64,
     pub client: P4RuntimeClient,
-    pub conn_status: Bmv2SwitchConnectionStatus,
-    pub pipeconf: Option<Arc<dyn Pipeconf>>,
-    pub master_arbitration: Option<Bmv2MasterUpdateOption>,
+    pub stream_status: Bmv2StreamStatus,
+    pipeconf: Option<Arc<dyn Pipeconf>>,
+    pub master_status: Bmv2MasterStatus,
     is_handle: bool,
 }
 
 pub struct Bmv2ConnectionOption {
+    /// the device id used in p4runtime
     pub p4_device_id: u64,
+    /// the device id used in rusty_p4, wrapped in [DeviceID].
+    /// if this field is None, it will be generated.
     pub inner_device_id: Option<u64>,
+    /// the p4runtime election id
     pub master_update: Option<Bmv2MasterUpdateOption>,
 }
 
@@ -263,11 +292,11 @@ impl Default for Bmv2MasterUpdateOption {
 }
 
 impl Bmv2SwitchConnection {
-    pub async fn try_new(
+    pub async fn new(
         name: &str,
         address: &str,
         options: Bmv2ConnectionOption,
-    ) -> Bmv2SwitchConnection {
+    ) -> crate::error::Result<Bmv2SwitchConnection> {
         let name = name.to_owned();
         let address = address.to_owned();
 
@@ -282,51 +311,65 @@ impl Bmv2SwitchConnection {
             format!("http://{}", address),
         )
         .await
-        .unwrap();
+        .map_err(|e| crate::error::DeviceError::DeviceGrpcTransportError {
+            device: DeviceID(inner_id),
+            error: e,
+        })?;
 
-        Bmv2SwitchConnection {
+        Ok(Bmv2SwitchConnection {
             name,
             inner_id: DeviceID(inner_id),
             address,
             device_id,
             client: client_stub,
-            conn_status: Bmv2SwitchConnectionStatus::None,
+            stream_status: Bmv2StreamStatus::None,
             pipeconf: None,
             is_handle: false,
-            master_arbitration: options.master_update,
-        }
+            master_status: Bmv2MasterStatus::from(options.master_update),
+        })
     }
 
-    pub async fn open_stream(&mut self) -> Sender<StreamMessageRequest> {
+    pub async fn open_stream(&mut self) -> crate::error::Result<Sender<StreamMessageRequest>> {
         if self.is_handle {
-            todo!("cannot open stream on handle");
+            return Err(DeviceError::Other {
+                device: self.inner_id,
+                error: "cannot open stream on handle".to_owned(),
+            }
+            .into());
         }
-        match self.conn_status {
-            Bmv2SwitchConnectionStatus::None => {
+        match self.stream_status {
+            Bmv2StreamStatus::None => {
                 let (mut send_stream, receiver) = tokio::sync::mpsc::channel(4096);
                 let master_up_req = crate::p4rt::pure::new_master_update_request(
                     self.device_id,
-                    self.master_arbitration.unwrap(),
+                    self.get_master()?,
                 );
                 send_stream.send(master_up_req).await;
                 let recv_stream = self
                     .client
                     .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
                     .await
-                    .unwrap()
+                    .map_err(|e| DeviceError::DeviceGrpcError {
+                        device: self.inner_id,
+                        error: e,
+                    })?
                     .into_inner();
-                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
+                self.stream_status = Bmv2StreamStatus::StreamOpened {
                     sender: send_stream.clone(),
                     receiver: recv_stream,
                 };
-                send_stream
+                Ok(send_stream)
             }
-            Bmv2SwitchConnectionStatus::StreamOpened {
+            Bmv2StreamStatus::StreamOpened {
                 ref sender,
                 ref receiver,
-            } => sender.clone(),
-            Bmv2SwitchConnectionStatus::Streaming(ref sender) => {
-                unimplemented!()
+            } => Ok(sender.clone()),
+            Bmv2StreamStatus::Streaming(ref sender) => {
+                return Err(DeviceError::Other {
+                    device: self.inner_id,
+                    error: "already streaming".to_owned(),
+                }
+                .into());
             }
         }
     }
@@ -336,27 +379,33 @@ impl Bmv2SwitchConnection {
         egress_port: u32,
         packet: Bytes,
     ) -> crate::error::Result<()> {
-        let pipeconf = self.pipeconf.as_ref().unwrap();
-        let mut sender = match self.conn_status {
-            Bmv2SwitchConnectionStatus::None => {
+        let pipeconf = self.pipeconf.as_ref().ok_or_else(|| DeviceError::Other {
+            device: self.inner_id,
+            error: "pipeconf not set".to_owned(),
+        })?;
+        let mut sender = match self.stream_status {
+            Bmv2StreamStatus::None => {
                 let (send_stream, receiver) = tokio::sync::mpsc::channel(4096);
                 let recv_stream = self
                     .client
                     .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
                     .await
-                    .unwrap()
+                    .map_err(|e| crate::error::DeviceError::DeviceGrpcError {
+                        device: self.inner_id,
+                        error: e,
+                    })?
                     .into_inner();
-                self.conn_status = Bmv2SwitchConnectionStatus::StreamOpened {
+                self.stream_status = Bmv2StreamStatus::StreamOpened {
                     sender: send_stream.clone(),
                     receiver: recv_stream,
                 };
                 send_stream
             }
-            Bmv2SwitchConnectionStatus::StreamOpened {
+            Bmv2StreamStatus::StreamOpened {
                 ref sender,
                 ref receiver,
             } => sender.clone(),
-            Bmv2SwitchConnectionStatus::Streaming(ref sender) => sender.clone(),
+            Bmv2StreamStatus::Streaming(ref sender) => sender.clone(),
         };
 
         let request = super::pure::new_packet_out_request(&pipeconf, egress_port, packet);
@@ -364,19 +413,17 @@ impl Bmv2SwitchConnection {
         Ok(())
     }
 
-    pub async fn set_forwarding_pipeline_config(&mut self) -> crate::error::Result<()> {
-        let pipeconf = self.pipeconf.as_ref().unwrap();
-        let master_arbitration = if let Some(x) = self.master_arbitration {
-            x
-        } else {
-            todo!()
-        };
+    pub async fn set_forwarding_pipeline_config(
+        &mut self,
+        pipeconf: Arc<dyn Pipeconf>,
+    ) -> crate::error::Result<()> {
+        let (e_low, e_high) = self.get_master()?;
         let master_arbitration = MasterArbitrationUpdate {
             device_id: self.device_id,
             role: None,
             election_id: Uint128 {
-                high: master_arbitration.election_id_high,
-                low: master_arbitration.election_id_low,
+                high: e_high,
+                low: e_low,
             }
             .into(),
             status: None,
@@ -393,18 +440,18 @@ impl Bmv2SwitchConnection {
         self.client
             .set_forwarding_pipeline_config(tonic::Request::new(request))
             .await
-            .map_err(|e|crate::error::DeviceError::DeviceGrpcError {
+            .map_err(|e| crate::error::DeviceError::DeviceGrpcError {
                 device: self.inner_id,
                 error: e,
             })?;
 
+        self.pipeconf = Some(pipeconf);
+
         Ok(())
     }
 
-    pub async fn write_table_entry(
-        &mut self,
-        table_entry: TableEntry,
-    ) -> crate::error::Result<()> {
+    pub async fn write_table_entry(&mut self, table_entry: TableEntry) -> crate::error::Result<()> {
+        let (e_low, e_high) = self.get_master()?;
         let update_type = if table_entry.is_default_action {
             crate::proto::p4runtime::update::Type::Modify
         } else {
@@ -413,7 +460,10 @@ impl Bmv2SwitchConnection {
         let mut request = crate::proto::p4runtime::WriteRequest {
             device_id: self.device_id,
             role_id: 0,
-            election_id: Some(Uint128 { high: 0, low: 1 }),
+            election_id: Some(Uint128 {
+                high: e_high,
+                low: e_low,
+            }),
             updates: vec![Update {
                 r#type: update_type as i32,
                 entity: Some(Entity {
@@ -427,11 +477,9 @@ impl Bmv2SwitchConnection {
         self.client
             .write(tonic::Request::new(request))
             .await
-            .map_err(|error|{
-                crate::error::DeviceError::DeviceGrpcError {
-                    device: self.inner_id,
-                    error,
-                }
+            .map_err(|error| crate::error::DeviceError::DeviceGrpcError {
+                device: self.inner_id,
+                error,
             })?;
 
         Ok(())
@@ -440,23 +488,20 @@ impl Bmv2SwitchConnection {
     pub fn take_channel_receiver(
         &mut self,
     ) -> Option<tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>> {
-        let status = std::mem::replace(&mut self.conn_status, Bmv2SwitchConnectionStatus::None);
+        let status = std::mem::replace(&mut self.stream_status, Bmv2StreamStatus::None);
         let (next_status, ret) = match status {
-            Bmv2SwitchConnectionStatus::StreamOpened { sender, receiver } => (
-                Bmv2SwitchConnectionStatus::Streaming(sender),
-                Some(receiver),
-            ),
+            Bmv2StreamStatus::StreamOpened { sender, receiver } => {
+                (Bmv2StreamStatus::Streaming(sender), Some(receiver))
+            }
             other => (other, None),
         };
-        self.conn_status = next_status;
+        self.stream_status = next_status;
         ret
     }
 
     pub fn get_handle(&self) -> Self {
-        let status = match &self.conn_status {
-            Bmv2SwitchConnectionStatus::Streaming(sender) => {
-                Bmv2SwitchConnectionStatus::Streaming(sender.clone())
-            }
+        let status = match &self.stream_status {
+            Bmv2StreamStatus::Streaming(sender) => Bmv2StreamStatus::Streaming(sender.clone()),
             _ => {
                 todo!()
             }
@@ -467,9 +512,9 @@ impl Bmv2SwitchConnection {
             address: self.address.clone(),
             device_id: self.device_id,
             client: self.client.clone(),
-            conn_status: status,
+            stream_status: status,
             pipeconf: self.pipeconf.clone(),
-            master_arbitration: self.master_arbitration.clone(),
+            master_status: self.master_status.clone(),
             is_handle: true,
         }
     }
@@ -502,13 +547,74 @@ impl Bmv2SwitchConnection {
     pub async fn insert_flow(&mut self, mut flow: Flow) -> crate::error::Result<Flow> {
         self.set_flow(flow, UpdateType::Insert).await
     }
+
+    pub fn get_master(&self) -> crate::error::Result<(u64, u64)> {
+        match self.master_status {
+            Bmv2MasterStatus::Elect {
+                election_id_low,
+                election_id_high,
+            } => {
+                return Err(DeviceError::NotMaster {
+                    device: self.inner_id,
+                    reason: "Not elected".to_owned(),
+                }
+                .into());
+            }
+            Bmv2MasterStatus::Master {
+                election_id_low,
+                election_id_high,
+            } => {
+                return Ok((election_id_low, election_id_high));
+            }
+            Bmv2MasterStatus::NotMaster {} => {
+                return Err(DeviceError::NotMaster {
+                    device: self.inner_id,
+                    reason: "Not master".to_owned(),
+                }
+                .into());
+            }
+            Bmv2MasterStatus::NoElect => {
+                return Err(DeviceError::NotMaster {
+                    device: self.inner_id,
+                    reason: "No elect".to_owned(),
+                }
+                .into());
+            }
+        }
+    }
 }
 
-pub enum Bmv2SwitchConnectionStatus {
+pub enum Bmv2StreamStatus {
     None,
     StreamOpened {
         sender: tokio::sync::mpsc::Sender<rusty_p4_proto::proto::v1::StreamMessageRequest>,
         receiver: tonic::Streaming<rusty_p4_proto::proto::v1::StreamMessageResponse>,
     },
     Streaming(tokio::sync::mpsc::Sender<rusty_p4_proto::proto::v1::StreamMessageRequest>),
+}
+
+#[derive(Clone)]
+pub enum Bmv2MasterStatus {
+    NoElect,
+    Elect {
+        election_id_low: u64,
+        election_id_high: u64,
+    },
+    Master {
+        election_id_low: u64,
+        election_id_high: u64,
+    },
+    NotMaster {},
+}
+
+impl Bmv2MasterStatus {
+    pub fn from(option: Option<Bmv2MasterUpdateOption>) -> Self {
+        match option {
+            Some(o) => Self::Elect {
+                election_id_low: o.election_id_low,
+                election_id_high: o.election_id_high,
+            },
+            None => Self::NoElect,
+        }
+    }
 }

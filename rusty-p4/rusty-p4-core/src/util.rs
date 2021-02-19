@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::{future::Future, task::Poll};
+use pin_project::pin_project;
 
 pub mod flow;
 // pub mod packet;
@@ -44,28 +45,32 @@ impl std::future::Future for FinishSignal {
     }
 }
 
-// pub struct SizeHintStream<S> {
-//     inner: S,
-//     size_hint: Option<usize>
-// }
+#[pin_project]
+pub struct SizeHintStream<S> {
+    #[pin]
+    pub inner: S,
+    pub size_hint: Option<usize>
+}
 
-// impl<S> futures::Stream for SizeHintStream<S> where S: futures::Stream {
-//     type Item = S::Item;
+impl<S> futures::Stream for SizeHintStream<S> where S: futures::Stream {
+    type Item = S::Item;
 
-//     fn poll_next(
-//         mut self: Pin<&mut Self>,
-//         cx: &mut std::task::Context<'_>,
-//     ) -> Poll<Option<Self::Item>> {
-//         match unsafe { Pin::new_unchecked(&mut self.inner) }.poll_next(cx) {
-//             Poll::Ready(r) => Poll::Ready(r),
-//             Poll::Pending => Poll::Pending
-//         }
-//     }
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let inner = this.inner;
+        match inner.poll_next(cx) {
+            Poll::Ready(r) => Poll::Ready(r),
+            Poll::Pending => Poll::Pending
+        }
+    }
 
-//     fn size_hint(&self) -> (usize, Option<usize>) {
-//         (0, self.size_hint)
-//     }
-// }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, self.size_hint)
+    }
+}
 
 /// A boxed `Service + Send` trait object.
 ///
@@ -74,7 +79,7 @@ impl std::future::Future for FinishSignal {
 /// response future to be [`Send`].
 ///
 /// See module level documentation for more details.
-pub struct BoxService<T, U, E> {
+pub(crate) struct BoxService<T, U, E> {
     inner:
         Box<dyn tower::Service<T, Response = U, Error = E, Future = BoxFuture<U, E>> + Send + Sync>,
 }
