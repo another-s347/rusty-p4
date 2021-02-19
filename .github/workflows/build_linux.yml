@@ -10,8 +10,6 @@ jobs:
       matrix:
         rust:
           - stable
-        part:
-          - rusty-p4
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -22,7 +20,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --manifest-path ./${{ matrix.part }}/Cargo.toml
+          args: --manifest-path ./Cargo.toml
 
   test:
     name: Test Suite
@@ -32,8 +30,6 @@ jobs:
       matrix:
         rust:
           - stable
-        part:
-          - rusty-p4
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -44,7 +40,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ./${{ matrix.part }}/Cargo.toml
+          args: --manifest-path ./Cargo.toml
 
   fmt:
     name: Rustfmt
@@ -54,8 +50,6 @@ jobs:
       matrix:
         rust:
           - stable
-        part:
-          - rusty-p4
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -67,7 +61,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --manifest-path ./${{ matrix.part }}/Cargo.toml --all -- --check
+          args: --manifest-path ./Cargo.toml --all -- --check
 
   clippy:
     name: Clippy
@@ -77,8 +71,6 @@ jobs:
       matrix:
         rust:
           - stable
-        part:
-          - rusty-p4
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -90,7 +82,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path ./${{ matrix.part }}/Cargo.toml -- -D warnings 
+          args: --manifest-path ./Cargo.toml -- -D warnings 
 
   doc:
     name: Documentation
@@ -100,8 +92,6 @@ jobs:
       matrix:
         rust:
           - stable
-        part:
-          - rusty-p4
     steps:
       - uses: actions/checkout@v2
 
@@ -126,7 +116,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --manifest-path ./rusty-p4/Cargo.toml --no-deps
+          args: --manifest-path ./Cargo.toml --no-deps
       
       # - uses: actions-rs/cargo@v1
       #   with:
@@ -138,7 +128,7 @@ jobs:
       - name: Copy
         run: |
           mkdir -p ./pages/docs
-          cp -r ./rusty-p4/target/doc ./pages/docs/rusty_p4
+          cp -r ./target/doc ./pages/docs/rusty_p4
 
       - name: Push
         run: |

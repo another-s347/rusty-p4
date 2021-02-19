@@ -4,7 +4,6 @@ use crate::util::publisher::Handler;
 use super::App;
 use super::Dependencies;
 use futures::future::BoxFuture;
-use downcast_rs::DowncastSync;
 
 /// The trait defines how should we store many apps.
 pub trait AppStore {

@@ -21,12 +21,12 @@ use std::path::Path;
 use tokio;
 //use rusty_p4::app::linkprobe::{LinkProbeLoader, LinkProbeInterceptor};
 //use rusty_p4::app::proxyarp::{ProxyArpLoader, ArpInterceptor};
-use rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP;
+use rusty_p4::packet::arp::ETHERNET_TYPE_ARP;
 use rusty_p4::p4rt::pipeconf::Pipeconf;
-use rusty_p4::representation::{DeviceID, ConnectPoint, Device};
+use rusty_p4::representation::{DeviceID, ConnectPoint};
 use rusty_p4::util::{publisher::Handler, flow::Flow};
 use std::collections::HashMap;
-use rusty_p4::event::{CommonEvents, PacketReceived};
+use rusty_p4::event::{PacketReceived};
 use log::info;
 use bytes::Bytes;
 use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
@@ -76,6 +76,8 @@ impl App for NewBenchmark {
     async fn run(&self) {
 
     }
+
+    const Name: &'static str = "Benchmark";
 }
 
 #[async_trait]
@@ -92,12 +94,12 @@ impl Handler<PacketReceived> for NewBenchmark {
             self.device_manager.send_packet(ConnectPoint {
                 device: from.device,
                 port: 2,
-            }, Bytes::from(packet.packet)).await;
+            }, packet.packet).await;
         } else if from.port == 2 {
             self.device_manager.send_packet(ConnectPoint {
                 device: from.device,
                 port: 1,
-            }, Bytes::from(packet.packet)).await;
+            }, packet.packet).await;
         }
     }
 }
@@ -112,7 +114,7 @@ impl Handler<Bmv2Event> for NewBenchmark {
                     flow!{
                         pipe: "MyIngress",
                         table: "acl" {
-                            "hdr.ethernet.etherType" => rusty_p4::util::packet::arp::ETHERNET_TYPE_ARP,
+                            "hdr.ethernet.etherType" => rusty_p4::packet::arp::ETHERNET_TYPE_ARP,
                         }
                         action: "send_to_cpu" {}
                         priority: 1
@@ -144,8 +146,8 @@ pub async fn main() {
     );
 
     let mut app_store = rusty_p4::app::store::DefaultAppStore::default();
-    let device_manager: Arc<rusty_p4::p4rt::bmv2::Bmv2Manager> = install(&mut app_store, ());
-    let benchmark: Arc<NewBenchmark> = install(&mut app_store, ());
+    let device_manager: Arc<rusty_p4::p4rt::bmv2::Bmv2Manager> = install(&mut app_store, ()).unwrap();
+    let benchmark: Arc<NewBenchmark> = install(&mut app_store, ()).unwrap();
 
     device_manager.add_device("s1", "172.17.0.2:50051", Bmv2ConnectionOption {
         p4_device_id: 1,
