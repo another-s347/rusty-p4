@@ -1,32 +1,32 @@
-[![Build Status](https://s347419313.visualstudio.com/rusty-p4/_apis/build/status/rusty-p4-CI?branchName=dev)](https://s347419313.visualstudio.com/rusty-p4/_build/latest?definitionId=6&branchName=dev)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-
-
 # Work in Progress
+
 
 I hope I can finish this.
 
-# Rusty P4
-A Work-in-progress lightweight library for writing [P4Runtime](https://p4.org/specs/) controller in Rust. The goal is to bring powerful & expressive tools into the world of P4 and SDN so that developers can test their idea-sets faster.
+# Rusty P4 [![Build (Linux)](https://github.com/another-s347/rusty-p4/actions/workflows/build_linux.yml/badge.svg?branch=new_app&event=push)](https://github.com/another-s347/rusty-p4/actions/workflows/build_linux.yml) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![dev doc](https://img.shields.io/badge/-dev%20doc-ff69b4)](https://another-s347.github.io/docs/rusty_p4/rusty_p4/)
+A Work-in-progress composable and lightweight library for writing [P4Runtime](https://p4.org/specs/) controller in Rust. The goal is to bring powerful & expressive tools into the world of P4 and SDN so that developers can test their ideas faster.
 
 It's trying to provide multi-level APIs for writing controllers with different complexity (see Examples below). Some design come from the tutorials of P4 and [ONOS](https://onosproject.org/).
 
+## Repo structure
+
+- rusty-p4-core. The core of rusty-p4, providing the basic building blocks like App trait, Service trait, P4 runtime, Pipeconf, flow and some other things.
+- rusty-p4-packet. Provides methods to parse packets.
+- rusty-p4-northbound. Provides impls for northbound server.
+- rusty-p4-app. Provides some simple application implementation.
+
 ## Getting Started
 
-1. Install protobuf and grpc compiler
+Current version hasn't been published, so to use it, add
 ```
-$ cargo install protobuf-codegen
-$ cargo install grpcio-compiler
+rusty-p4 = { git="https://github.com/another-s347/rusty-p4" }
 ```
-
-2. Run bootstrap.sh.  
-It will clone the stable release of P4Runtime Proto and compiles them to Rust code.
-
-3. Add dependency to your own project.
+to your Cargo.toml.
 
 ## Examples
 
-1. [tutorials from P4](https://github.com/p4lang/tutorials/blob/master/exercises/p4runtime/mycontroller.py) (low-level API) (See src/p4rt/mycontroller.rs)
+TODO
+<!-- 1. [tutorials from P4](https://github.com/p4lang/tutorials/blob/master/exercises/p4runtime/mycontroller.py) (low-level API) (See src/p4rt/mycontroller.rs)
 ```rust
 pub fn run() {
     let p4info_helper = P4InfoHelper::new(&Path::new("path_to/advanced_tunnel.p4.p4info.bin"));
@@ -110,8 +110,8 @@ impl P4appExtended<CommonEvents> for AdhocApp {
 
     }
 }
-```
-## TODO
+``` -->
+<!-- ## TODO
 0. Migrate to tokio 0.2/ hyper 0.13/ tower-grpc.
 1. Complete P4Runtime API (read/write table, counter...).
 2. More packet parser.
@@ -123,10 +123,10 @@ impl P4appExtended<CommonEvents> for AdhocApp {
 8. ~~Multiple p4 pipeline~~(need test and app update).
 9. Rest API for external control (CLI and ONOS restconf driver..etc).
 10. More API.
-11. Maybe more.
+11. Maybe more. -->
 
 ## Built With
 
-* [grpc-rs](https://github.com/pingcap/grpc-rs) - gRPC for Rust.
+* [tonic](https://github.com/hyperium/tonic) - gRPC for Rust.
 * [PI](https://github.com/p4lang/PI) - P4Runtime
 * [tokio](https://tokio.rs) - The asynchronous run-time for the Rust programming language.

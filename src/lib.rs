@@ -5,6 +5,8 @@
 /// 
 /// # Examples
 /// ```
+/// use rusty_p4::flow;
+///
 /// flow! {
 ///     pipe: "your pipe name",
 ///     table: "your table name" {
@@ -18,13 +20,23 @@
 ///         "param name 2": 2,
 ///     },
 ///     priority: 1
-/// }
+/// };
 /// ```
 /// will generate a [util::flow::Flow] struct.
 /// ### Merge matches.
 /// You can reuse your flow match struct by:
 /// ```
-/// let other_matches = flow_match!{...};
+/// use rusty_p4::{flow, flow_match};
+///
+/// let other_matches = flow_match!{
+///     "other match key" => 1u32
+/// };
+///
+/// let other_matches_2 = flow_match!{
+///     "other match key 2" => 2u8,
+///     ..other_matches // merge other_matches
+/// };
+///
 /// flow! {
 ///     pipe: "your pipe name",
 ///     table: "your table name" {
@@ -32,14 +44,14 @@
 ///         "match key 2" => 1u32..2u32, // range match
 ///         "match key 3" => 1u32/8,     // lpm match
 ///         "match key 4" => 1u32&2u32,   // ternary match
-///         ..other_matches
+///         ..other_matches_2 // merge other_matches_2
 ///     },
 ///     action: "your action name" {
 ///         "param name 1": 1,
 ///         "param name 2": 2,
 ///     },
 ///     priority: 1
-/// }
+/// };
 /// ```
 /// which will call [util::flow::FlowTable::merge_matches] to merge `other_matches` to this flow.
 pub use macro_impl::flow;
@@ -47,12 +59,14 @@ pub use macro_impl::flow;
 /// 
 /// # Examples
 /// ```
+/// use rusty_p4::flow_match;
+///
 /// flow_match! {
 ///     "match key 1" => 1u32,       // exact match
 ///     "match key 2" => 1u32..2u32, // range match
 ///     "match key 3" => 1u32/8,     // lpm match
 ///     "match key 4" => 1u32&2u32   // ternary match
-/// }
+/// };
 /// ```
 /// will generate a [util::flow::FlowMatches] struct.
 pub use macro_impl::flow_match;
