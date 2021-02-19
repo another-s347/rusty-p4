@@ -10,6 +10,8 @@ use std::fmt::Formatter;
 use std::net::IpAddr;
 use std::sync::Arc;
 
+pub type FlowMatches = Arc<SmallVec<[FlowMatch; 3]>>;
+
 #[derive(Debug, Hash, Clone)]
 pub struct Flow {
     pub table: FlowTable,
@@ -40,7 +42,7 @@ impl Flow {
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct FlowTable {
     pub name: &'static str,
-    pub matches: Arc<SmallVec<[FlowMatch; 3]>>,
+    pub matches: FlowMatches,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -50,7 +52,7 @@ pub struct FlowMatch {
 }
 
 impl FlowTable {
-    pub fn new(name: &'static str, matches: Arc<SmallVec<[FlowMatch; 3]>>) -> FlowTable {
+    pub fn new(name: &'static str, matches: FlowMatches) -> FlowTable {
         FlowTable { name, matches }
     }
 
@@ -73,6 +75,7 @@ pub struct FlowActionParam {
     pub value: Bytes,
 }
 
+#[doc(hidden)]
 pub fn merge_matches(ours: &mut SmallVec<[FlowMatch; 3]>, other: &SmallVec<[FlowMatch; 3]>) {
     let len = ours.len();
     for i in other.iter() {

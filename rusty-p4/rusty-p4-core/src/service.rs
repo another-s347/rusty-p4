@@ -19,7 +19,7 @@ use crate::error::Result;
 pub mod dummy;
 pub mod server;
 pub mod request;
-pub mod tower_service;
+mod tower_service;
 
 pub use request::*;
 use tower_service::*;
@@ -31,15 +31,16 @@ pub use self::server::Server;
 /// Northbound api might be implemented as multiple different backend.
 /// The service is compatiable to tower eco system.
 pub trait Service {
-    /// Your request type must be deserialized from `DefaultRequest`, which has:
+    /// Your request type must be parsed from [DefaultRequest], which has:
     /// - a path: a Vec<String>.
     /// - a action: a String like 'get' or 'set'
     /// - parameters: a HashMap<String, String>
     type Request: ParseRequest + Send;
 
+    /// Name your service, which would be used as [Request::source].
     const NAME: &'static str;
 
-    /// process your request and send back response via request.respond(), the return value `Option<usize>` is the size hint (upper bound) of your response stream.
+    /// process your request and send back response via [Request::respond], the return value `Option<usize>` is the size hint (upper bound) of your response stream.
     fn process(&mut self, request: Request<Self::Request>) -> Result<Option<usize>>;
 }
 
