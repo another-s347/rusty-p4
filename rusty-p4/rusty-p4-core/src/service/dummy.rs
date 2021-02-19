@@ -13,10 +13,10 @@ pub struct DummyRequest {
 }
 
 impl ParseRequest for DummyRequest {
-    fn parse(req: super::DefaultRequest) -> Self {
-        DummyRequest {
+    fn parse(req: super::DefaultRequest) -> crate::error::Result<Self> {
+        Ok(DummyRequest {
             action: req.action,
-        }
+        })
     }
 }
 

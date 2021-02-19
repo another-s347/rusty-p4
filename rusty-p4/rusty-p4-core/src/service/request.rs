@@ -16,14 +16,14 @@ impl<T> Request<T> {
 }
 
 impl Request<DefaultRequest> {
-    pub fn parse<T>(self) -> Request<T> where T:ParseRequest {
-        Request {
+    pub fn parse<T>(self) -> crate::error::Result<Request<T>> where T:ParseRequest {
+        Ok(Request {
             source: self.source,
             target: self.target,
-            inner: T::parse(self.inner),
+            inner: T::parse(self.inner)?,
             channel: self.channel,
             option: self.option,
-        }
+        })
     }
 }
 
@@ -50,13 +50,13 @@ impl Default for RequestOption {
     }
 }
 
-pub trait ParseRequest {
-    fn parse(req: DefaultRequest) -> Self;
+pub trait ParseRequest: Sized {
+    fn parse(req: DefaultRequest) -> crate::error::Result<Self>;
 }
 
 impl ParseRequest for DefaultRequest {
-    fn parse(req: DefaultRequest) -> Self {
-        req
+    fn parse(req: DefaultRequest) -> crate::error::Result<Self> {
+        Ok(req)
     }
 }
 
