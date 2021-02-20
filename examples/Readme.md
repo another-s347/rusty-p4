@@ -6,7 +6,7 @@
 
 The extension must be '.bin' instead of '.txt'.
 ```
-p4c-bm2-ss --p4v 16 --p4runtime-files my_pipeconf.p4.p4info.bin -o build/my_pipeconf.json my_pipeconf.p4
+p4c-bm2-ss --p4v 16 --p4runtime-files my_pipeconf.p4.p4info.bin -o my_pipeconf.json my_pipeconf.p4
 ```
 
 - Start your network with bmv2.
@@ -21,11 +21,11 @@ mininet> h1 ethtool --offload h1-eth0 tx off
 mininet> h1 ethtool --offload h1-eth0 rx off
 ```
 
-## bmv2_conn
+## [bmv2_conn](https://github.com/another-s347/rusty-p4/blob/main/examples/bmv2_conn.rs)
 - Connect to a bmv2 switch at 172.17.0.2 using Bmv2SwitchConnection.
 - Process p4 stream response.
 
-## forward_app
+## [forward_app](https://github.com/another-s347/rusty-p4/blob/main/examples/forward_app.rs)
 - A simple forward app with dependency.
 - Use flow macro and write flow table.
 - Send packet.

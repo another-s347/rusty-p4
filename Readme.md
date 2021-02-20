@@ -23,9 +23,6 @@ rusty-p4 = { git="https://github.com/another-s347/rusty-p4" }
 ```
 to your Cargo.toml.
 
-## Examples
-
-TODO
 <!-- 1. [tutorials from P4](https://github.com/p4lang/tutorials/blob/master/exercises/p4runtime/mycontroller.py) (low-level API) (See src/p4rt/mycontroller.rs)
 ```rust
 pub fn run() {
