@@ -12,6 +12,9 @@ pub mod flow;
 pub mod publisher;
 pub mod value;
 
+pub use smallvec::SmallVec;
+pub use smallvec::smallvec;
+
 pub fn hash<T>(obj: T) -> u64
 where
     T: Hash,

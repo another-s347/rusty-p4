@@ -91,3 +91,4 @@ pub use rusty_p4_core::representation;
 pub use rusty_p4_packet::packet;
 pub use rusty_p4_core::event;
 pub use rusty_p4_core::service;
+pub use rusty_p4_core::proto;

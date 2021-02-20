@@ -23,20 +23,32 @@ use byteorder::BigEndian;
 use byteorder::ByteOrder;
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
-use futures::{future::BoxFuture, FutureExt, SinkExt, StreamExt, TryFutureExt, TryStreamExt};
+use dashmap::DashMap;
+use futures::{
+    future::BoxFuture, FutureExt, SinkExt, Stream, StreamExt, TryFutureExt, TryStreamExt,
+};
 use log::{debug, error};
 use parking_lot::RwLock;
 use prost::Message;
 use rusty_p4_proto::proto::v1::{
     Entity, ForwardingPipelineConfig, MasterArbitrationUpdate, Uint128, Update,
 };
-use std::fs::File;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, convert::TryFrom};
-use tokio::{io::AsyncReadExt, sync::mpsc::Sender};
+use std::{
+    fs::File,
+    pin::Pin,
+    task::{Context, Poll},
+    thread,
+    time::Duration,
+};
+use tokio::{
+    io::AsyncReadExt,
+    sync::mpsc::{Receiver, Sender},
+};
 
 type P4RuntimeClient =
     crate::proto::p4runtime::p4_runtime_client::P4RuntimeClient<tonic::transport::channel::Channel>;
@@ -130,7 +142,7 @@ impl Bmv2Manager {
         let mut device = Bmv2SwitchConnection::new(name, address, option).await?;
         let pipeconf = Arc::new(pipeconf);
         let id = device.inner_id;
-        let mut sender = device.open_stream().await;
+        let mut sender = device.open_stream().await?;
         let mut stream = device
             .take_channel_receiver()
             .ok_or_else(|| InternalError::Other {
@@ -143,10 +155,10 @@ impl Bmv2Manager {
                 if let Some(update) = r.update {
                     match update {
                         stream_message_response::Update::Arbitration(masterUpdate) => {
-                            debug!(target: "core", "StreamMessageResponse?: {:#?}", &masterUpdate);
-                            // todo: check master update
-
-                            manager.device_master_updated(id, pipeconf.clone()).await;
+                            manager
+                                .device_master_updated(id, pipeconf.clone(), masterUpdate)
+                                .await
+                                .unwrap();
                         }
                         stream_message_response::Update::Packet(packet) => {
                             let x = PacketReceived {
@@ -181,20 +193,24 @@ impl Bmv2Manager {
 
     pub async fn device_master_updated(
         &self,
-        device: DeviceID,
+        device_id: DeviceID,
         pipeconf: Arc<dyn Pipeconf>,
+        update: MasterArbitrationUpdate,
     ) -> crate::error::Result<()> {
-        self.get_device(device)
-            .ok_or(InternalError::DeviceNotFound)?
-            .get_handle()
-            .set_forwarding_pipeline_config(pipeconf)
-            .await?;
-        self.publisher.emit(Bmv2Event::DeviceAdded(device)).await;
+        let mut conns = self.connections.write();
+        let mut device = conns
+            .get_mut(&device_id)
+            .ok_or(InternalError::DeviceNotFound)?;
+        if device.set_master(update).is_ok() {
+            device.set_forwarding_pipeline_config(pipeconf).await?;
+        }
+        drop(conns);
 
+        self.publisher.emit(Bmv2Event::DeviceAdded(device_id)).await;
         Ok(())
     }
 
-    pub fn get_device<'a>(&self, device: DeviceID) -> Option<Bmv2SwitchConnection> {
+    pub fn get_device(&self, device: DeviceID) -> Option<Bmv2SwitchConnection> {
         Some(self.connections.read().get(&device)?.get_handle())
     }
 
@@ -202,13 +218,14 @@ impl Bmv2Manager {
         self.connections
             .read()
             .get(&packet.from)
-            .and_then(|conn| conn.pipeconf.as_ref())
-            .and_then(|pipeconf| {
-                packet
-                    .metadata
-                    .iter()
-                    .find(|x| x.metadata_id == pipeconf.get_packetin_ingress_id())
-                    .map(|x| BigEndian::read_u16(x.value.as_ref()))
+            .and_then(|conn| {
+                conn.pipeconf.as_ref().and_then(|pipeconf| {
+                    packet
+                        .metadata
+                        .iter()
+                        .find(|x| x.metadata_id == pipeconf.get_packetin_ingress_id())
+                        .map(|x| BigEndian::read_u16(x.value.as_ref()))
+                })
             })
             .map(|port| ConnectPoint {
                 device: packet.from,
@@ -342,9 +359,9 @@ impl Bmv2SwitchConnection {
                 let (mut send_stream, receiver) = tokio::sync::mpsc::channel(4096);
                 let master_up_req = crate::p4rt::pure::new_master_update_request(
                     self.device_id,
-                    self.get_master()?,
+                    self.get_elect().unwrap(),
                 );
-                send_stream.send(master_up_req).await;
+                send_stream.send(master_up_req).await.unwrap();
                 let recv_stream = self
                     .client
                     .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
@@ -388,7 +405,7 @@ impl Bmv2SwitchConnection {
                 let (send_stream, receiver) = tokio::sync::mpsc::channel(4096);
                 let recv_stream = self
                     .client
-                    .stream_channel(tokio_stream::wrappers::ReceiverStream::new(receiver))
+                    .stream_channel(ReceiverStream::new(receiver))
                     .await
                     .map_err(|e| crate::error::DeviceError::DeviceGrpcError {
                         device: self.inner_id,
@@ -446,6 +463,8 @@ impl Bmv2SwitchConnection {
             })?;
 
         self.pipeconf = Some(pipeconf);
+
+        println!("pipeconf set");
 
         Ok(())
     }
@@ -548,6 +567,44 @@ impl Bmv2SwitchConnection {
         self.set_flow(flow, UpdateType::Insert).await
     }
 
+    pub fn set_master(&mut self, update: MasterArbitrationUpdate) -> crate::error::Result<()> {
+        if let Some(eid) = update.election_id {
+            match self.master_status {
+                Bmv2MasterStatus::NoElect => {}
+                Bmv2MasterStatus::Elect {
+                    election_id_low,
+                    election_id_high,
+                } if election_id_low == eid.low && election_id_high == eid.high => {
+                    self.master_status = Bmv2MasterStatus::Master {
+                        election_id_low,
+                        election_id_high,
+                    }
+                }
+                Bmv2MasterStatus::Elect {
+                    election_id_low,
+                    election_id_high,
+                } => {}
+                Bmv2MasterStatus::Master {
+                    election_id_low,
+                    election_id_high,
+                } => {}
+                Bmv2MasterStatus::NotMaster {} => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_elect(&self) -> Option<(u64, u64)> {
+        match self.master_status {
+            Bmv2MasterStatus::Elect {
+                election_id_low,
+                election_id_high,
+            } => Some((election_id_low, election_id_high)),
+            _ => None,
+        }
+    }
+
     pub fn get_master(&self) -> crate::error::Result<(u64, u64)> {
         match self.master_status {
             Bmv2MasterStatus::Elect {
@@ -616,5 +673,62 @@ impl Bmv2MasterStatus {
             },
             None => Self::NoElect,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReceiverStream<T> {
+    inner: Receiver<T>,
+}
+
+impl<T> ReceiverStream<T> {
+    /// Create a new `ReceiverStream`.
+    pub fn new(recv: Receiver<T>) -> Self {
+        Self { inner: recv }
+    }
+
+    // /// Get back the inner `Receiver`.
+    // pub fn into_inner(self) -> Receiver<T> {
+    //     self.inner
+    // }
+
+    /// Closes the receiving half of a channel without dropping it.
+    ///
+    /// This prevents any further messages from being sent on the channel while
+    /// still enabling the receiver to drain messages that are buffered. Any
+    /// outstanding [`Permit`] values will still be able to send messages.
+    ///
+    /// To guarantee no messages are dropped, after calling `close()`, you must
+    /// receive all items from the stream until `None` is returned.
+    ///
+    /// [`Permit`]: struct@tokio::sync::mpsc::Permit
+    pub fn close(&mut self) {
+        self.inner.close()
+    }
+}
+
+impl<T> Stream for ReceiverStream<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.inner.poll_recv(cx)
+    }
+}
+
+impl<T> AsRef<Receiver<T>> for ReceiverStream<T> {
+    fn as_ref(&self) -> &Receiver<T> {
+        &self.inner
+    }
+}
+
+impl<T> AsMut<Receiver<T>> for ReceiverStream<T> {
+    fn as_mut(&mut self) -> &mut Receiver<T> {
+        &mut self.inner
+    }
+}
+
+impl<T> Drop for ReceiverStream<T> {
+    fn drop(&mut self) {
+        println!("drop receiver stream");
     }
 }

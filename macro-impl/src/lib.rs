@@ -148,7 +148,7 @@ fn flow_match_to_quotes(flow_match: _FlowMatch) -> proc_macro2::TokenStream {
             };
         } else {
             return quote! {
-                std::sync::Arc::new(<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]>>::new())
+                std::sync::Arc::new(<rusty_p4::util::SmallVec<[rusty_p4::util::flow::FlowMatch;3]>>::new())
             };
         }
     }
@@ -159,33 +159,33 @@ fn flow_match_to_quotes(flow_match: _FlowMatch) -> proc_macro2::TokenStream {
         match m.value {
             _FlowMatchValue::Exact(expr) => {
                 quotes.push(quote! {
-                    rusty_p4_core::util::flow::FlowMatch {
+                    rusty_p4::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4_core::util::value::EXACT(#expr)
+                        value: rusty_p4::util::value::EXACT(#expr)
                     }
                 });
             }
             _FlowMatchValue::Range(from, two) => {
                 quotes.push(quote! {
-                    rusty_p4_core::util::flow::FlowMatch {
+                    rusty_p4::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4_core::util::value::RANGE(#from,#two)
+                        value: rusty_p4::util::value::RANGE(#from,#two)
                     }
                 });
             }
             _FlowMatchValue::Lpm(v, lpm) => {
                 quotes.push(quote! {
-                    rusty_p4_core::util::flow::FlowMatch {
+                    rusty_p4::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4_core::util::value::LPM(#v,#lpm)
+                        value: rusty_p4::util::value::LPM(#v,#lpm)
                     }
                 });
             }
             _FlowMatchValue::Ternary(v, t) => {
                 quotes.push(quote! {
-                    rusty_p4_core::util::flow::FlowMatch {
+                    rusty_p4::util::flow::FlowMatch {
                         name: #name,
-                        value: rusty_p4_core::util::value::TERNARY(#v,#t)
+                        value: rusty_p4::util::value::TERNARY(#v,#t)
                     }
                 });
             }
@@ -194,15 +194,15 @@ fn flow_match_to_quotes(flow_match: _FlowMatch) -> proc_macro2::TokenStream {
 
     if let Some(d) = flow_match.default {
         quote! {{
-            let mut _v:smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]> = smallvec::smallvec![#(#quotes),*];
+            let mut _v: rusty_p4::util::SmallVec<[rusty_p4::util::flow::FlowMatch;3]> = rusty_p4::util::smallvec![#(#quotes),*];
             _v.sort_by(|a,b|a.name.cmp(b.name));
-            rusty_p4_core::util::flow::merge_matches(&mut _v, &#d);
+            rusty_p4::util::flow::merge_matches(&mut _v, &#d);
             let _t = std::sync::Arc::new(_v);
             _t
         }}
     } else {
         quote! {{
-            let mut _v:smallvec::SmallVec<[rusty_p4_core::util::flow::FlowMatch;3]> = smallvec::smallvec![#(#quotes),*];
+            let mut _v:rusty_p4::util::SmallVec<[rusty_p4::util::flow::FlowMatch;3]> = rusty_p4::util::smallvec![#(#quotes),*];
             _v.sort_by(|a,b|a.name.cmp(b.name));
             let _t = std::sync::Arc::new(_v);
             _t
@@ -320,20 +320,20 @@ fn action_params_to_quote(
             let name = m.key;
             let expr = m.value;
             quotes.push(quote! {
-                rusty_p4_core::util::flow::FlowActionParam {
+                rusty_p4::util::flow::FlowActionParam {
                     name: #name,
-                    value: rusty_p4_core::util::value::encode(#expr)
+                    value: rusty_p4::util::value::encode(#expr)
                 }
             });
         }
 
         quote! {{
-            let _t:std::sync::Arc<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowActionParam;3]>> = std::sync::Arc::new(smallvec::smallvec![#(#quotes),*]);
+            let _t:std::sync::Arc<rusty_p4::util::SmallVec<[rusty_p4::util::flow::FlowActionParam;3]>> = std::sync::Arc::new(rusty_p4::util::smallvec![#(#quotes),*]);
             _t
         }}
     } else {
         quote! {
-            std::sync::Arc::new(<smallvec::SmallVec<[rusty_p4_core::util::flow::FlowActionParam;3]>>::new())
+            std::sync::Arc::new(<rusty_p4::util::SmallVec<[rusty_p4::util::flow::FlowActionParam;3]>>::new())
         }
     }
 }
@@ -370,12 +370,12 @@ pub fn flow(input: TokenStream) -> TokenStream {
     let action_params = action_params_to_quote(flow.action_parameters);
     let priority = flow.priority.map(|expr| quote!(#expr)).unwrap_or(quote!(1));
     TokenStream::from(quote! {
-        rusty_p4_core::util::flow::Flow {
-            table: rusty_p4_core::util::flow::FlowTable {
+        rusty_p4::util::flow::Flow {
+            table: rusty_p4::util::flow::FlowTable {
                 name:#flow_table_name,
                 matches:#flow_matches
             },
-            action: rusty_p4_core::util::flow::FlowAction {
+            action: rusty_p4::util::flow::FlowAction {
                 name:#action_name,
                 params:#action_params
             },
