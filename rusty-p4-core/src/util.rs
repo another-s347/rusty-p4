@@ -1,19 +1,19 @@
 use futures::StreamExt;
 
 use crate::util::flow::Flow;
+use pin_project::pin_project;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::{future::Future, task::Poll};
-use pin_project::pin_project;
 
 pub mod flow;
 // pub mod packet;
 pub mod publisher;
 pub mod value;
 
-pub use smallvec::SmallVec;
 pub use smallvec::smallvec;
+pub use smallvec::SmallVec;
 
 pub fn hash<T>(obj: T) -> u64
 where
@@ -52,10 +52,13 @@ impl std::future::Future for FinishSignal {
 pub struct SizeHintStream<S> {
     #[pin]
     pub inner: S,
-    pub size_hint: Option<usize>
+    pub size_hint: Option<usize>,
 }
 
-impl<S> futures::Stream for SizeHintStream<S> where S: futures::Stream {
+impl<S> futures::Stream for SizeHintStream<S>
+where
+    S: futures::Stream,
+{
     type Item = S::Item;
 
     fn poll_next(
@@ -66,7 +69,7 @@ impl<S> futures::Stream for SizeHintStream<S> where S: futures::Stream {
         let inner = this.inner;
         match inner.poll_next(cx) {
             Poll::Ready(r) => Poll::Ready(r),
-            Poll::Pending => Poll::Pending
+            Poll::Pending => Poll::Pending,
         }
     }
 

@@ -2,7 +2,7 @@
 #![recursion_limit = "512"]
 
 /// A macro to help creating flow entry.
-/// 
+///
 /// # Examples
 /// ```
 /// use rusty_p4::flow;
@@ -56,7 +56,7 @@
 /// which will call [util::flow::FlowTable::merge_matches] to merge `other_matches` to this flow.
 pub use macro_impl::flow;
 /// A macro to help creating flow match entry.
-/// 
+///
 /// # Examples
 /// ```
 /// use rusty_p4::flow_match;
@@ -84,11 +84,11 @@ pub use macro_impl::flow_match;
 // pub mod util;
 // pub mod gnmi;
 // pub mod system;
-pub use rusty_p4_core::util;
 pub use rusty_p4_core::app;
-pub use rusty_p4_core::p4rt;
-pub use rusty_p4_core::representation;
-pub use rusty_p4_packet::packet;
 pub use rusty_p4_core::event;
-pub use rusty_p4_core::service;
+pub use rusty_p4_core::p4rt;
 pub use rusty_p4_core::proto;
+pub use rusty_p4_core::representation;
+pub use rusty_p4_core::service;
+pub use rusty_p4_core::util;
+pub use rusty_p4_packet::packet;

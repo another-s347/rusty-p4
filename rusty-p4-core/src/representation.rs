@@ -1,13 +1,17 @@
 use crate::{p4rt::pipeconf::PipeconfID, util::publisher::Handler};
 // use crate::util::value::MAC;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::{collections::{HashMap, HashSet}, sync::Arc, sync::Mutex};
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Instant;
-use async_trait::async_trait;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    sync::Mutex,
+};
 
 #[derive(Hash, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DeviceID(pub u64);

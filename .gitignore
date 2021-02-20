@@ -15,3 +15,5 @@ pcaps/
 *.pyc
 rusty-p4-proto/src/google.*
 rusty-p4-proto/src/p4.*
+examples/pipeconf/my_pipeconf.p4.p4info.bin
+examples/pipeconf/my_pipeconf.json

@@ -1,13 +1,13 @@
-use parking_lot::RwLock;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 
 #[async_trait]
-pub trait Handler<E>:'static + Send + Sync {
+pub trait Handler<E>: 'static + Send + Sync {
     async fn handle(&self, event: E);
 }
 
 pub struct Publisher<E> {
-    handlers: RwLock<Vec<Box<dyn Handler<E>>>>
+    handlers: RwLock<Vec<Box<dyn Handler<E>>>>,
 }
 
 impl<E> Default for Publisher<E> {
@@ -18,14 +18,20 @@ impl<E> Default for Publisher<E> {
     }
 }
 
-impl<E> Publisher<E> where E:Clone + 'static {
+impl<E> Publisher<E>
+where
+    E: Clone + 'static,
+{
     pub async fn emit(&self, event: E) {
         for x in self.handlers.read().iter() {
             x.handle(event.clone()).await;
         }
     }
 
-    pub fn add_handler<H>(&self, handler: H) where H: Handler<E> {
+    pub fn add_handler<H>(&self, handler: H)
+    where
+        H: Handler<E>,
+    {
         self.handlers.write().push(Box::new(handler));
     }
 }

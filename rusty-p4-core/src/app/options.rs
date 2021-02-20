@@ -1,5 +1,3 @@
-pub trait AppOption {
-    
-}
+pub trait AppOption {}
 
 impl AppOption for () {}

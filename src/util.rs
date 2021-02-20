@@ -11,6 +11,9 @@ pub mod packet;
 pub mod value;
 pub mod publisher;
 
+pub use smallvec::SmallVec;
+pub use smallvec::smallvec;
+
 pub fn hash<T>(obj: T) -> u64
 where
     T: Hash,

@@ -1,6 +1,6 @@
 use super::Packet;
-use ipip::MAC;
 use bytes::BufMut;
+use ipip::MAC;
 use nom::bytes::complete::take;
 use std::net::Ipv4Addr;
 
@@ -117,7 +117,7 @@ impl From<ArpOp> for u16 {
         match op {
             ArpOp::Request => 0x1,
             ArpOp::Reply => 0x2,
-            ArpOp::Unknown(o) => o
+            ArpOp::Unknown(o) => o,
         }
     }
 }

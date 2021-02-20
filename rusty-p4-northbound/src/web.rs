@@ -13,9 +13,7 @@ use warp::{path::Tail, ws::WebSocket, Filter, Rejection};
 /// POST /action/{target name}/{action name}/{paths} BODY {params}
 /// Streaming via websocket:
 /// /ws/{target name}/{action name}/{paths}{params}
-pub struct WebServer {
-
-}
+pub struct WebServer {}
 
 impl WebServer {
     pub async fn run(&self, service_bus: &ServiceBus) {
@@ -75,7 +73,12 @@ impl WebServer {
             .and(warp::ws())
             .and(with_bus(service_bus.clone()))
             .map(
-                |target: String, action:String, path, params, ws: warp::ws::Ws, service_bus: ServiceBus| {
+                |target: String,
+                 action: String,
+                 path,
+                 params,
+                 ws: warp::ws::Ws,
+                 service_bus: ServiceBus| {
                     ws.on_upgrade(move |socket| {
                         stream(target, action, path, params, service_bus, socket)
                     })

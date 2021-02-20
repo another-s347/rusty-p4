@@ -464,8 +464,6 @@ impl Bmv2SwitchConnection {
 
         self.pipeconf = Some(pipeconf);
 
-        println!("pipeconf set");
-
         Ok(())
     }
 

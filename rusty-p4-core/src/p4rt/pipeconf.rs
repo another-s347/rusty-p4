@@ -3,12 +3,12 @@ use crate::proto::p4config::P4Info;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::sync::Arc;
-use std::io::{BufReader, Read};
 
-pub trait Pipeconf: Send+Sync {
+pub trait Pipeconf: Send + Sync {
     fn get_id(&self) -> PipeconfID;
     fn get_name(&self) -> &str;
     fn get_p4info(&self) -> &P4Info;
@@ -48,7 +48,7 @@ impl Pipeconf for &Arc<dyn Pipeconf> {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct DefaultPipeconf {
     id: PipeconfID,
     name: String,
@@ -140,7 +140,7 @@ impl Pipeconf for DefaultPipeconf {
 }
 
 impl Pipeconf {
-    pub fn get_behaviour<T:'static>(self: &Self, name: &str) -> Option<Box<T>> {
+    pub fn get_behaviour<T: 'static>(self: &Self, name: &str) -> Option<Box<T>> {
         self.get_any_behaviour(name).downcast().ok()
     }
 }

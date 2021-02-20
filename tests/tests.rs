@@ -69,7 +69,7 @@ fn test_two() {
 
 #[test]
 fn test_merge() {
-    let whatever = flow_match!{
+    let whatever = flow_match! {
         "abcde" => 1u32,
     };
     let result = flow_match! {
@@ -102,7 +102,7 @@ fn test_flow() {
 
 #[test]
 fn test_flow_merge() {
-    let whatever = flow_match!{
+    let whatever = flow_match! {
         "abcde" => 1u32,
     };
     let result = flow! {

@@ -529,10 +529,7 @@ pub async fn new_set_forwarding_pipeline_config_request(
     })
 }
 
-pub fn new_master_update_request(
-    device_id: u64,
-    option: (u64, u64),
-) -> StreamMessageRequest {
+pub fn new_master_update_request(device_id: u64, option: (u64, u64)) -> StreamMessageRequest {
     StreamMessageRequest {
         update: Some(stream_message_request::Update::Arbitration(
             MasterArbitrationUpdate {

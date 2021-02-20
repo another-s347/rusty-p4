@@ -1,5 +1,9 @@
-use std::{any::{Any, TypeId}, collections::HashMap, sync::Arc};
 use crate::util::publisher::Handler;
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    sync::Arc,
+};
 
 use super::App;
 use super::Dependencies;
@@ -7,9 +11,13 @@ use futures::future::BoxFuture;
 
 /// The trait defines how should we store many apps.
 pub trait AppStore {
-    fn store<T>(&mut self, object: T) -> Arc<T> where T: App + Clone + 'static;
+    fn store<T>(&mut self, object: T) -> Arc<T>
+    where
+        T: App + Clone + 'static;
 
-    fn get<T>(&self) -> Option<T> where T: App + Clone + 'static;
+    fn get<T>(&self) -> Option<T>
+    where
+        T: App + Clone + 'static;
 
     // fn store_handler<T, E>(&mut self, app: T) where T: Handler<E>,E:'static;
 
@@ -17,7 +25,9 @@ pub trait AppStore {
 }
 
 pub fn install<S, T>(store: &mut S, option: T::Option) -> Option<Arc<T>>
-where T:App + Clone, S: AppStore
+where
+    T: App + Clone,
+    S: AppStore,
 {
     let dependencies: T::Dependency = T::Dependency::get(store)?;
     let app = T::init(dependencies, store, option);
@@ -32,8 +42,11 @@ pub struct DefaultAppStore {
     // pub join_handle: Vec<BoxFuture<'static, ()>>
 }
 
-impl AppStore for  DefaultAppStore {
-    fn store<T>(&mut self, object: T) -> Arc<T> where T: App + Clone + 'static {
+impl AppStore for DefaultAppStore {
+    fn store<T>(&mut self, object: T) -> Arc<T>
+    where
+        T: App + Clone + 'static,
+    {
         let b = Arc::new(object);
         let ret = b.clone();
 
@@ -42,10 +55,13 @@ impl AppStore for  DefaultAppStore {
         ret
     }
 
-    fn get<T>(&self) -> Option<T> where T: App + 'static {
-        T::from_inner(self.map.get(&TypeId::of::<T::Container>()).map(|x|{
+    fn get<T>(&self) -> Option<T>
+    where
+        T: App + 'static,
+    {
+        T::from_inner(self.map.get(&TypeId::of::<T::Container>()).map(|x| {
             let ret: Arc<T::Container> = x.clone().downcast().unwrap();
-            let ret:T::Container = ret.as_ref().clone();
+            let ret: T::Container = ret.as_ref().clone();
             ret
         }))
     }

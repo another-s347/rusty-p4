@@ -3,15 +3,14 @@ use bytes::BufMut;
 use nom::bytes::complete::take;
 
 #[derive(Debug)]
-pub struct Ipv4<'a, P>
-{
+pub struct Ipv4<'a, P> {
     version: u8,
     ihl: u8,
     dscp: u8,
     ecn: u8,
     total_len: u16,
     identification: u16,
-    flags:u8,
+    flags: u8,
     frag_offset: u16,
     ttl: u8,
     protocol: u8,
@@ -32,8 +31,8 @@ pub struct Ipv4<'a, P>
 //    println!("{:#?}", header);
 //}
 impl<'a, P> Packet<'a> for Ipv4<'a, P>
-    where
-        P: Packet<'a>
+where
+    P: Packet<'a>,
 {
     type Payload = P;
 
@@ -76,18 +75,19 @@ impl<'a, P> Packet<'a> for Ipv4<'a, P>
             hdr_checksum,
             src: src_ip,
             dst: dst_ip,
-            payload
+            payload,
         })
     }
 
     fn write_self_to_buf<T: BufMut>(&self, buf: &mut T) {
-        let version_ihl = (self.version<<4) + (self.ihl & 0b00001111);
+        let version_ihl = (self.version << 4) + (self.ihl & 0b00001111);
         buf.put_u8(version_ihl);
         let dscp_ecn = (self.dscp << 2) + (self.ecn & 0b00000011);
         buf.put_u8(dscp_ecn);
         buf.put_u16(self.total_len);
         buf.put_u16(self.identification);
-        let flags_fragmentoffset = ((self.flags as u16) << 13) + (self.frag_offset & 0b0001_1111_1111_1111);
+        let flags_fragmentoffset =
+            ((self.flags as u16) << 13) + (self.frag_offset & 0b0001_1111_1111_1111);
         buf.put_u16(flags_fragmentoffset);
         buf.put_u8(self.ttl);
         buf.put_u8(self.protocol);

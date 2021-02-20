@@ -1,24 +1,24 @@
 //use crate::app::sync_app::AsyncWrap;
-use std::{any::Any, collections::HashMap, marker::PhantomData, pin::Pin};
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::{any::Any, collections::HashMap, marker::PhantomData, pin::Pin};
 
-use bytes::Bytes;
-use dashmap::DashMap;
-use futures::{StreamExt, future::BoxFuture, stream::BoxStream};
-use serde::{Serialize, de::DeserializeOwned, Deserialize};
-use async_trait::async_trait;
-use tokio_stream::wrappers::ReceiverStream;
-use crate::util::BoxService;
-use tower::Service as towerService;
 use crate::app::options;
 use crate::error::Result;
+use crate::util::BoxService;
+use async_trait::async_trait;
+use bytes::Bytes;
+use dashmap::DashMap;
+use futures::{future::BoxFuture, stream::BoxStream, StreamExt};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio_stream::wrappers::ReceiverStream;
+use tower::Service as towerService;
 
 pub mod dummy;
-pub mod server;
 pub mod request;
+pub mod server;
 mod tower_service;
 
 pub use request::*;
@@ -46,34 +46,42 @@ pub trait Service {
 
 #[derive(Clone)]
 pub struct ServiceBus {
-    services: Arc<DashMap<&'static str, BoxService<Request<DefaultRequest>, Option<usize>, crate::error::MyError>>>,
+    services: Arc<
+        DashMap<
+            &'static str,
+            BoxService<Request<DefaultRequest>, Option<usize>, crate::error::MyError>,
+        >,
+    >,
 }
 
 impl ServiceBus {
     pub fn new() -> ServiceBus {
         let services = Arc::new(DashMap::new());
-        ServiceBus {
-            services,
-        }
+        ServiceBus { services }
     }
 
     pub fn install_service<T>(&self, service: T)
-    where T: Service + Send + Sync + 'static, T::Request: Sync
+    where
+        T: Service + Send + Sync + 'static,
+        T::Request: Sync,
     {
         if self.services.contains_key(T::NAME) {
             todo!()
         }
-        let wrapper = _TowerServiceWrap {
-            inner: service
-        };
+        let wrapper = _TowerServiceWrap { inner: service };
         let b = BoxService::new(_TowerService_DecodeRequest {
             inner: wrapper,
-            pha: PhantomData
+            pha: PhantomData,
         });
         self.services.insert(T::NAME, b);
     }
 
-    pub async fn send<E: Server>(&self, target: &str, request: DefaultRequest, option: RequestOption) -> Result<impl futures::stream::Stream<Item=E::EncodeTarget>> {
+    pub async fn send<E: Server>(
+        &self,
+        target: &str,
+        request: DefaultRequest,
+        option: RequestOption,
+    ) -> Result<impl futures::stream::Stream<Item = E::EncodeTarget>> {
         if let Some(mut s) = self.services.get_mut(target) {
             let mut service = (&mut *s);
             let (s, r) = tokio::sync::mpsc::channel(option.queue_size_hint);
@@ -82,19 +90,16 @@ impl ServiceBus {
                 target: target.to_owned(),
                 inner: request,
                 channel: s,
-                option
+                option,
             };
             let response: Option<usize> = service.call(request).await?;
-            let s = ReceiverStream::new(r).map(|x|{
-                E::encode(x)
-            });
+            let s = ReceiverStream::new(r).map(|x| E::encode(x));
             return Ok(crate::util::SizeHintStream {
                 inner: s,
-                size_hint: response
-            })
-        }
-        else {
-            return Err(crate::error::ServiceError::ServiceNotFound(target.to_owned()).into())
+                size_hint: response,
+            });
+        } else {
+            return Err(crate::error::ServiceError::ServiceNotFound(target.to_owned()).into());
         }
     }
 }

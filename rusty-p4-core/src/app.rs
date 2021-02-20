@@ -12,16 +12,22 @@ use crate::util::flow::*;
 use crate::util::value::EXACT;
 use crate::util::value::{encode, LPM};
 use bytes::{Bytes, BytesMut};
-use futures::{FutureExt, future::{BoxFuture, Future}};
+use futures::{
+    future::{BoxFuture, Future},
+    FutureExt,
+};
 use log::{debug, error, info, trace, warn};
-use std::any::{TypeId, Any};
+use std::any::{Any, TypeId};
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
-use std::{collections::HashMap, sync::{Arc, Mutex, MutexGuard}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, MutexGuard},
+};
 // use crate::core::context::Context;
-use tuple_list::TupleList;
 use tuple_list::tuple_list_type;
+use tuple_list::TupleList;
 
 // pub mod common;
 // pub mod graph;
@@ -35,8 +41,8 @@ pub mod options;
 pub mod store;
 // pub mod default;
 
-/// App is the core concept to build a controller, which is for custom logic and function. 
-/// It can have dependency and option (also called configuration). 
+/// App is the core concept to build a controller, which is for custom logic and function.
+/// It can have dependency and option (also called configuration).
 /// Using dependency app can get instance of other apps when initializing.
 /// So a app is required to be `clone + Send + Sync`, as it might be held by multiple apps and accessed from different threads.
 #[async_trait]
@@ -45,7 +51,7 @@ pub trait App: Sync + Send + 'static + Sized {
     /// If you create a container type (`Option<T>`), use this field to specify the target type (`T`).
     /// For regular app, this field should be `Self`.
     type Container: App + Clone;
-    /// Use this field to specify your dependency. 
+    /// Use this field to specify your dependency.
     /// It should be a variadic tuple, but variadic tuple is not supported currently.
     /// So now, rusty-p4 use crate `tuple_list` to define dependencies.
     /// Use `()` for no dependency.
@@ -55,8 +61,10 @@ pub trait App: Sync + Send + 'static + Sized {
     const Name: &'static str;
 
     /// This is where app get their dependencies, option then initialize, returns a new instance of app.
-    /// Container type should not be `install`ed directly, so this method should not be called for container type. 
-    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore;
+    /// Container type should not be `install`ed directly, so this method should not be called for container type.
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+    where
+        S: store::AppStore;
 
     /// For container type, use this method to convert from target type to container type (`T -> Option<T>`).
     /// For regular type, simplely return will do.
@@ -67,14 +75,20 @@ pub trait App: Sync + Send + 'static + Sized {
 }
 
 #[async_trait]
-impl<T> App for Option<T> where T: App + Clone {
+impl<T> App for Option<T>
+where
+    T: App + Clone,
+{
     type Container = T;
     type Dependency = T::Dependency;
 
     type Option = T::Option;
     const Name: &'static str = "Option";
 
-    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore  {
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+    where
+        S: store::AppStore,
+    {
         todo!()
     }
 
@@ -87,24 +101,28 @@ impl<T> App for Option<T> where T: App + Clone {
             s.run().await;
         };
     }
-
-
 }
 
 #[async_trait]
-impl<T> App for Arc<T> where T: App + Clone {
+impl<T> App for Arc<T>
+where
+    T: App + Clone,
+{
     type Container = T;
     type Dependency = T::Dependency;
 
     type Option = T::Option;
     const Name: &'static str = "Arc";
 
-    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: store::AppStore  {
+    fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+    where
+        S: store::AppStore,
+    {
         todo!()
     }
 
     fn from_inner(app: Option<Self::Container>) -> Option<Self> {
-        app.map(|x|Arc::new(x))
+        app.map(|x| Arc::new(x))
     }
 
     async fn run(&self) {
@@ -112,31 +130,38 @@ impl<T> App for Arc<T> where T: App + Clone {
     }
 }
 
-pub trait Dependencies:Sized {
-    fn get<S>(store: &mut S) -> Option<Self> where S: store::AppStore;
+pub trait Dependencies: Sized {
+    fn get<S>(store: &mut S) -> Option<Self>
+    where
+        S: store::AppStore;
 }
 
-impl<Head, Tail> Dependencies for (Head, Tail) where
+impl<Head, Tail> Dependencies for (Head, Tail)
+where
     Head: App + Clone,
     Tail: Dependencies + TupleList + Clone,
 {
-    fn get<S>(store: &mut S) -> Option<Self> 
-    where S: store::AppStore 
+    fn get<S>(store: &mut S) -> Option<Self>
+    where
+        S: store::AppStore,
     {
-        let a:Head = if let Some(a) = store.get::<Head>() {
+        let a: Head = if let Some(a) = store.get::<Head>() {
             a
         } else {
-            return None
+            return None;
         };
 
-        let b:Tail = Tail::get(store)?;
+        let b: Tail = Tail::get(store)?;
 
-        return Some((a,b));
+        return Some((a, b));
     }
 }
 
 impl Dependencies for () {
-    fn get<S>(store: &mut S) -> Option<Self> where S: store::AppStore {
+    fn get<S>(store: &mut S) -> Option<Self>
+    where
+        S: store::AppStore,
+    {
         Some(())
     }
 }
@@ -223,7 +248,10 @@ mod test {
 
     use tuple_list::tuple_list_type;
 
-    use super::{App, store::{DefaultAppStore, install}};
+    use super::{
+        store::{install, DefaultAppStore},
+        App,
+    };
 
     #[derive(Clone)]
     struct TestAppA;
@@ -238,7 +266,10 @@ mod test {
 
         const Name: &'static str = "TestAppA";
 
-        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
+        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+        where
+            S: super::store::AppStore,
+        {
             TestAppA
         }
 
@@ -253,7 +284,7 @@ mod test {
 
     #[derive(Clone)]
     struct TestAppB {
-        test_app_a: TestAppA
+        test_app_a: TestAppA,
     }
 
     #[async_trait::async_trait]
@@ -266,12 +297,13 @@ mod test {
 
         const Name: &'static str = "TestAppB";
 
-        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
+        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+        where
+            S: super::store::AppStore,
+        {
             let tuple_list::tuple_list!(app_a) = dependencies;
 
-            TestAppB {
-                test_app_a: app_a
-            }
+            TestAppB { test_app_a: app_a }
         }
 
         fn from_inner(app: Option<Self::Container>) -> Option<Self> {
@@ -285,7 +317,7 @@ mod test {
 
     #[derive(Clone)]
     struct TestAppC {
-        test_app_a: Option<TestAppA>
+        test_app_a: Option<TestAppA>,
     }
 
     #[async_trait::async_trait]
@@ -298,14 +330,15 @@ mod test {
 
         const Name: &'static str = "TestAppC";
 
-        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self where S: super::store::AppStore {
+        fn init<S>(dependencies: Self::Dependency, store: &mut S, option: Self::Option) -> Self
+        where
+            S: super::store::AppStore,
+        {
             let tuple_list::tuple_list!(app_a) = dependencies;
 
             println!("have test_app_a:{}", app_a.is_some());
 
-            TestAppC {
-                test_app_a: app_a
-            }
+            TestAppC { test_app_a: app_a }
         }
 
         fn from_inner(app: Option<Self::Container>) -> Option<Self> {
@@ -326,14 +359,14 @@ mod test {
     #[test]
     fn install_app() {
         let mut app_store = DefaultAppStore::default();
-        let app_a:Arc<TestAppA> = install(&mut app_store, ()).unwrap();
+        let app_a: Arc<TestAppA> = install(&mut app_store, ()).unwrap();
     }
 
     #[test]
     fn install_app_dep() {
         let mut app_store = DefaultAppStore::default();
-        let app_a:Arc<TestAppA> = install(&mut app_store, ()).unwrap();
-        let app_b:Arc<TestAppB> = install(&mut app_store, ()).unwrap();
+        let app_a: Arc<TestAppA> = install(&mut app_store, ()).unwrap();
+        let app_b: Arc<TestAppB> = install(&mut app_store, ()).unwrap();
     }
 
     #[test]
@@ -345,15 +378,15 @@ mod test {
     #[test]
     fn install_app_optional() {
         let mut app_store = DefaultAppStore::default();
-        let app_a:Arc<TestAppA> = install(&mut app_store, ()).unwrap();
-        let app_c:Arc<TestAppC> = install(&mut app_store, ()).unwrap();
+        let app_a: Arc<TestAppA> = install(&mut app_store, ()).unwrap();
+        let app_c: Arc<TestAppC> = install(&mut app_store, ()).unwrap();
         assert_eq!(app_c.have_app_a(), true);
     }
 
     #[test]
     fn install_app_optional_failed() {
         let mut app_store = DefaultAppStore::default();
-        let app_c:Arc<TestAppC> = install(&mut app_store, ()).unwrap();
+        let app_c: Arc<TestAppC> = install(&mut app_store, ()).unwrap();
         assert_eq!(app_c.have_app_a(), false);
     }
 }
