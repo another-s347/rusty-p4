@@ -15,6 +15,10 @@ pub mod value;
 pub use smallvec::smallvec;
 pub use smallvec::SmallVec;
 
+pub use ::async_trait::async_trait;
+pub use ::tuple_list::tuple_list;
+pub use ::tuple_list::tuple_list_type;
+
 pub fn hash<T>(obj: T) -> u64
 where
     T: Hash,

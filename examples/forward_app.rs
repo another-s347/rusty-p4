@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use p4rt::{
     bmv2::{Bmv2ConnectionOption, Bmv2Event, Bmv2MasterUpdateOption},
     pipeconf::DefaultPipeconf,
@@ -8,11 +7,12 @@ use rusty_p4::event::PacketReceived;
 use rusty_p4::flow;
 use rusty_p4::p4rt;
 use rusty_p4::representation::ConnectPoint;
+use rusty_p4::util::async_trait;
 use rusty_p4::util::publisher::Handler;
+use rusty_p4::util::{tuple_list, tuple_list_type};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio;
-use tuple_list::{tuple_list, tuple_list_type};
 
 #[derive(Clone)]
 pub struct Forward {
@@ -96,7 +96,7 @@ impl Handler<Bmv2Event> for Forward {
                     .insert_flow(flow! {
                         pipe: "MyIngress",
                         table: "acl" {
-                            "hdr.ethernet.etherType" => rusty_p4::packet::arp::ETHERNET_TYPE_ARP,
+                            "hdr.ethernet.etherType" => 0x806 /*ARP*/,
                         },
                         action: "send_to_cpu" {},
                         priority: 1

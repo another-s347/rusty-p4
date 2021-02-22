@@ -11,13 +11,7 @@ rusty-p4 = { path=".." }
 tokio = { version="1.2", features = ["full"] }
 flexi_logger = "0.17"
 log = "0.4"
-bytes = "1.0"
-async-trait = "0.1.13"
-ipip = { git="https://github.com/another-s347/ipip.git", features = ["serialize"] }
-tuple_list = "0.1.2"
-tower = "0.4.5"
 futures = "0.3"
-smallvec = "1.6"
 
 [[example]]
 name = "bmv2_conn"
